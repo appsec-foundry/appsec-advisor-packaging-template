@@ -1,0 +1,100 @@
+#!/usr/bin/python3
+"""Configurable `git` stub for testing fetch-upstream.sh offline.
+
+Behavior is driven by env vars so each scenario can simulate a different
+upstream state without any network:
+
+  GITSTUB_IS_CHECKOUT=1   `rev-parse --git-dir` succeeds (DEST is a checkout)
+  GITSTUB_HAS_ORIGIN=1    `remote get-url origin` succeeds
+  GITSTUB_TAGS="v0.3.0 v0.4.0"   tags that exist upstream
+  GITSTUB_HEADS="main dev"       branches that exist upstream
+"""
+import os
+import sys
+
+argv = sys.argv[1:]
+# Strip leading `-C <dir>`.
+if argv[:1] == ["-C"]:
+    argv = argv[2:]
+sub = argv[0] if argv else ""
+rest = argv[1:]
+
+TAGS = os.environ.get("GITSTUB_TAGS", "").split()
+HEADS = os.environ.get("GITSTUB_HEADS", "").split()
+SHA = "abc1234"
+
+
+def out(s=""):
+    if s:
+        sys.stdout.write(s + "\n")
+
+
+def has(flag):
+    return flag in rest
+
+
+def last():
+    return rest[-1] if rest else ""
+
+
+if sub == "rev-parse":
+    if "--git-dir" in rest:
+        sys.exit(0 if os.environ.get("GITSTUB_IS_CHECKOUT") == "1" else 1)
+    if "--short" in rest:
+        out(SHA)
+        sys.exit(0)
+    sys.exit(0)
+
+if sub == "clone":
+    # Last positional is the destination; create it so later checks find a dir.
+    dest = rest[-1]
+    src = os.environ.get("GITSTUB_CLONE_SRC")
+    if src:
+        import shutil
+        shutil.copytree(src, dest, dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns(".git", "build", "dist",
+                                                       "upstream", "tests"))
+    else:
+        os.makedirs(dest, exist_ok=True)
+    sys.exit(0)
+
+if sub == "remote":
+    if rest[:1] == ["get-url"]:
+        if os.environ.get("GITSTUB_HAS_ORIGIN") == "1":
+            out("https://github.com/matthiasrohr/appsec-advisor.git")
+            sys.exit(0)
+        sys.stderr.write("error: No such remote 'origin'\n")
+        sys.exit(2)
+    # set-url / add
+    sys.exit(0)
+
+if sub == "ls-remote":
+    arg = last()
+    if has("--exit-code"):
+        if has("--tags"):
+            ref = arg.split("refs/tags/")[-1]
+            sys.exit(0 if ref in TAGS else 2)
+        if has("--heads"):
+            ref = arg.split("refs/heads/")[-1]
+            sys.exit(0 if ref in HEADS else 2)
+        sys.exit(2)
+    if has("--tags") and arg.startswith("refs/tags/"):
+        ref = arg.split("refs/tags/")[-1]
+        if ref in TAGS:
+            out(f"{SHA}\trefs/tags/{ref}")
+        sys.exit(0)
+    if has("--heads") and arg.startswith("refs/heads/"):
+        ref = arg.split("refs/heads/")[-1]
+        if ref in HEADS:
+            out(f"{SHA}\trefs/heads/{ref}")
+        sys.exit(0)
+    if has("--tags"):  # listing form: ls-remote --tags --refs origin 'v[0-9]*'
+        for t in TAGS:
+            out(f"{SHA}\trefs/tags/{t}")
+        sys.exit(0)
+    sys.exit(0)
+
+if sub in ("fetch", "checkout"):
+    sys.exit(0)
+
+sys.exit(0)

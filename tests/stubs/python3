@@ -1,0 +1,35 @@
+#!/usr/bin/python3
+"""`python3` stub for testing package-local.sh.
+
+NOTE: shebang must be the REAL interpreter, not `/usr/bin/env python3` — this
+stub is first on PATH as `python3`, so an env-based shebang would re-resolve to
+this same file and loop forever.
+
+Intercepts the upstream packaging/smoke scripts so no real upstream is needed.
+  PYSTUB_FAIL=package   -> package_internal_plugin.py exits non-zero
+  PYSTUB_FAIL=smoke     -> smoke_test_package.py exits non-zero
+Anything else is delegated to the real python3 so normal use is unaffected.
+"""
+import os
+import sys
+
+args = sys.argv[1:]
+script = args[0] if args else ""
+fail = os.environ.get("PYSTUB_FAIL", "")
+
+if script.endswith("package_internal_plugin.py"):
+    # Create the expected build output dir so a following smoke step has a target.
+    name = None
+    for i, a in enumerate(args):
+        if a == "--name" and i + 1 < len(args):
+            name = args[i + 1]
+    if name:
+        os.makedirs(os.path.join("build", name), exist_ok=True)
+    sys.exit(3 if fail == "package" else 0)
+
+if script.endswith("smoke_test_package.py"):
+    sys.exit(4 if fail == "smoke" else 0)
+
+# Delegate everything else to the real interpreter.
+real = "/usr/bin/python3"
+os.execv(real, [real, *args])

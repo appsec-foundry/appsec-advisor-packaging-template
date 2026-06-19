@@ -11,7 +11,10 @@ else
 FETCH_TARGET :=
 endif
 
-.PHONY: fetch-upstream validate package package-archive smoke ci-github ci-gitlab clean distclean rebuild
+.PHONY: fetch-upstream validate package package-archive smoke ci-github ci-gitlab clean distclean rebuild test
+
+test:
+	bash tests/run.sh
 
 fetch-upstream:
 	APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" scripts/fetch-upstream.sh
