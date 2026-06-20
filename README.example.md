@@ -1,5 +1,8 @@
 # acme-appsec — Acme Corp's Security Plugin for Claude Code
 
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-5A67D8.svg)](https://docs.claude.com/en/docs/claude-code)
+[![Based on appsec-advisor](https://img.shields.io/badge/based%20on-appsec--advisor-orange.svg)](https://github.com/matthiasrohr/appsec-advisor)
+
 `acme-appsec` brings Acme Corp's security standards into Claude Code. It runs
 threat models and security audits right where you work — already tuned to our
 requirements, cost limits, and review process. Maintained by the Acme AppSec Team.

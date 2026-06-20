@@ -182,6 +182,7 @@ assert_rc "init: clone fallback" 0 "$?"
 echo ""
 echo "functional checks: $PASS passed, $FAIL failed"
 python3 "$HERE/lib/coverage.py" --trace "$COV" --threshold "$THRESHOLD" \
+  --lcov "$ROOT/coverage.lcov" --source-root "$ROOT" \
   "$FETCH" "$PKG" "$INIT"
 covrc=$?
 

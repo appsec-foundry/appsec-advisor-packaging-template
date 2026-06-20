@@ -1,5 +1,10 @@
 # appsec-advisor — Org Packaging Template
 
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-5A67D8.svg)](https://docs.claude.com/en/docs/claude-code)
+[![codecov](https://codecov.io/gh/matthiasrohr/appsec-advisor-packaging-template/graph/badge.svg)](https://codecov.io/gh/matthiasrohr/appsec-advisor-packaging-template)
+[![Upstream](https://img.shields.io/badge/upstream-appsec--advisor-orange.svg)](https://github.com/matthiasrohr/appsec-advisor)
+
 Template repo for building an internal [`appsec-advisor`](https://github.com/matthiasrohr/appsec-advisor) Claude Code plugin with your own org-specific defaults, requirements catalog, and cost guardrails.
 
 ## Quick Start

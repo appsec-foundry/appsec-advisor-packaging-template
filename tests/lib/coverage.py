@@ -16,6 +16,7 @@ CLI:  python3 coverage.py --trace FILE --threshold 90 SCRIPT [SCRIPT ...]
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 from pathlib import Path
@@ -100,14 +101,22 @@ def executed_by_name(trace_text: str) -> dict[str, set[int]]:
     return hits
 
 
-def report(trace_text: str, targets: list[str], threshold: float) -> bool:
+def analyze(trace_text: str, targets: list[str]) -> list[tuple[str, set[int], set[int]]]:
+    """Return (target, coverable_lines, hit_lines) for each target script."""
     hits = executed_by_name(trace_text)
+    results = []
+    for target in targets:
+        coverable = coverable_lines(target)
+        hit = hits.get(Path(target).name, set()) & coverable
+        results.append((target, coverable, hit))
+    return results
+
+
+def print_report(results: list[tuple[str, set[int], set[int]]], threshold: float) -> bool:
     print("\n=== bash line coverage ===")
     total_cov = total_hit = 0
-    for target in targets:
+    for target, coverable, hit in results:
         name = Path(target).name
-        coverable = coverable_lines(target)
-        hit = hits.get(name, set()) & coverable
         missed = sorted(coverable - hit)
         total_cov += len(coverable)
         total_hit += len(hit)
@@ -123,14 +132,33 @@ def report(trace_text: str, targets: list[str], threshold: float) -> bool:
     return ok
 
 
+def write_lcov(results, lcov_path: str, source_root: str) -> None:
+    """Emit an lcov tracefile (Codecov-ingestible) with SF paths relative to root."""
+    out = []
+    for target, coverable, hit in results:
+        out.append("TN:")
+        out.append(f"SF:{os.path.relpath(target, source_root)}")
+        for ln in sorted(coverable):
+            out.append(f"DA:{ln},{1 if ln in hit else 0}")
+        out.append(f"LF:{len(coverable)}")
+        out.append(f"LH:{len(hit)}")
+        out.append("end_of_record")
+    Path(lcov_path).write_text("\n".join(out) + "\n")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--trace", required=True)
     ap.add_argument("--threshold", type=float, default=90.0)
+    ap.add_argument("--lcov", help="write an lcov tracefile to this path")
+    ap.add_argument("--source-root", default=".", help="root for relative SF paths in lcov")
     ap.add_argument("targets", nargs="+")
     args = ap.parse_args()
     trace_text = Path(args.trace).read_text(errors="replace")
-    ok = report(trace_text, args.targets, args.threshold)
+    results = analyze(trace_text, args.targets)
+    ok = print_report(results, args.threshold)
+    if args.lcov:
+        write_lcov(results, args.lcov, args.source_root)
     sys.exit(0 if ok else 1)
 
 
