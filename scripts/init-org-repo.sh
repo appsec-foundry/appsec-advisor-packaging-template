@@ -184,38 +184,11 @@ sed \
 
 # ── Render README.md ──────────────────────────────────────────────────────────
 
-cat > "${TARGET_DIR}/README.md" <<EOF
-# ${PLUGIN_NAME} — ${ORG_NAME} AppSec Plugin for Claude Code
-
-This is the internal Claude Code security plugin for ${ORG_NAME}, maintained by ${OWNER}.
-It runs automated threat models and security audits directly in your IDE, with ${ORG_NAME}
-security standards and requirements already baked in.
-
-## Getting Started
-
-Load the plugin in any repo:
-
-\`\`\`bash
-claude --plugin-dir /path/to/build/${PLUGIN_NAME}
-\`\`\`
-
-## Commands
-
-| Command | Description |
-|---|---|
-| \`/${PLUGIN_NAME}:create-threat-model\` | Full threat model for your project, checked against ${ORG_NAME} security requirements |
-| \`/${PLUGIN_NAME}:audit-security-requirements\` | Audit the codebase against tagged ${ORG_NAME} requirements (e.g. \`[SEC-AUTH-001]\`) |
-| \`/${PLUGIN_NAME}:verify-requirements\` | Check your recent changes against ${ORG_NAME} security requirements |
-| \`/${PLUGIN_NAME}:threat-model-health\` | Quick health check — is the threat model current and complete? |
-| \`/${PLUGIN_NAME}:status\` | Show plugin version, available features, and last run info |
-| \`/${PLUGIN_NAME}:check-permissions --update\` | Verify and fix Claude Code permission setup (run once per repo) |
-| \`/${PLUGIN_NAME}:fix-run-issues\` | Fix errors from a previous run |
-| \`/${PLUGIN_NAME}:clean-run-state\` | Remove stale run state (use when a run got stuck) |
-
-## Reference
-
-- [appsec-advisor](https://github.com/matthiasrohr/appsec-advisor) — upstream plugin
-EOF
+sed \
+  -e "s/acme-appsec/${E_PLUGIN}/g" \
+  -e "s/Acme Corp/${E_ORG_NAME}/g" \
+  -e "s/Acme AppSec Team/${E_OWNER}/g" \
+  "${TEMPLATE_BASE}/README.example.md" > "${TARGET_DIR}/README.md"
 
 # ── Render package-local.sh with correct org name ─────────────────────────────
 
