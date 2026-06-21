@@ -114,7 +114,7 @@ Run `make ci-github` or `make ci-gitlab` to install the CI pipeline (see Quick S
 | `INTERNAL_NAME` | `acme-appsec` | Plugin name and Claude Code command namespace |
 | `VERSION` | derived from git tag or commit SHA | Version of the produced package |
 
-## Reference
+## Reference 
 
 - [github.com/matthiasrohr/appsec-advisor](https://github.com/matthiasrohr/appsec-advisor) — upstream plugin
 - [docs/internal-plugin-packaging.md](https://github.com/matthiasrohr/appsec-advisor/blob/main/docs/internal-plugin-packaging.md) — full packaging runbook
