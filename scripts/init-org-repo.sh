@@ -82,16 +82,23 @@ fi
 
 # ── Create repo ───────────────────────────────────────────────────────────────
 
+REINIT=false
 if [ -e "${TARGET_DIR}" ]; then
   echo ""
-  echo "Warning: '${TARGET_DIR}' already exists. Files will be written into it."
-  read -r -p "Continue? [y/N]: " confirm
+  echo "Warning: '${TARGET_DIR}' already exists."
+  echo "  Infrastructure files (Makefile, scripts/, ci-templates/, .gitignore)"
+  echo "  will be updated. User-editable files (org-profile/, README.md, AGENTS.md)"
+  echo "  will be kept if they already exist."
+  read -r -p "Re-initialize? [y/N]: " confirm
   case "${confirm}" in
-    [yY]*) ;;
+    [yY]*) REINIT=true ;;
     *) echo "Aborted."; exit 1 ;;
   esac
   echo ""
 fi
+
+# Returns 0 (skip write) when re-initializing and the file already exists.
+keep_if_reinit() { [ "${REINIT}" = true ] && [ -f "$1" ] && { echo "  kept: $1"; return 0; }; return 1; }
 
 mkdir -p \
   "${TARGET_DIR}/org-profile/context" \
@@ -109,12 +116,14 @@ cp "${TEMPLATE_BASE}/ci-templates/gitlab-ci.yml" \
    "${TARGET_DIR}/ci-templates/gitlab-ci.yml"
 
 cp "${TEMPLATE_BASE}/.gitignore" "${TARGET_DIR}/.gitignore"
-cp "${TEMPLATE_BASE}/org-profile/package-policy.yaml" \
-   "${TARGET_DIR}/org-profile/package-policy.yaml"
+keep_if_reinit "${TARGET_DIR}/org-profile/package-policy.yaml" || \
+  cp "${TEMPLATE_BASE}/org-profile/package-policy.yaml" \
+     "${TARGET_DIR}/org-profile/package-policy.yaml"
 
 if [ "${DEMO_CONTENT}" = true ]; then
-  cp "${TEMPLATE_BASE}/org-profile/requirements-example.yaml" \
-     "${TARGET_DIR}/org-profile/requirements.yaml"
+  keep_if_reinit "${TARGET_DIR}/org-profile/requirements.yaml" || \
+    cp "${TEMPLATE_BASE}/org-profile/requirements-example.yaml" \
+       "${TARGET_DIR}/org-profile/requirements.yaml"
 fi
 
 # ── Render Makefile ───────────────────────────────────────────────────────────
@@ -131,31 +140,33 @@ E_ORG_NAME=$(sed_escape "${ORG_NAME}")
 E_OWNER=$(sed_escape "${OWNER}")
 E_LABEL=$(sed_escape "${ORG_NAME} AppSec Requirements")
 
-if [ "${DEMO_CONTENT}" = true ]; then
-  sed \
-    -e "s/id: acme/id: ${E_ORG_ID}/" \
-    -e "s/name: Acme Corp/name: ${E_ORG_NAME}/" \
-    -e "s/profile_version: \"2026.06.1\"/profile_version: \"${TODAY}\"/" \
-    -e "s/owner: Acme AppSec Team/owner: ${E_OWNER}/" \
-    -e "s|requirements_yaml_url: \"https://security.example.internal/appsec-requirements.yaml\"|requirements_yaml_url: \"org-profile/requirements.yaml\"|" \
-    -e "s|human_source_url: \"https://security.example.internal/appsec/requirements\"|human_source_url: \"# TODO: add URL to hosted requirements catalog\"|" \
-    -e "s/label: \"Acme Corp AppSec Requirements\"/label: \"${E_LABEL}\"/" \
-    "${TEMPLATE_BASE}/org-profile/org-profile.yaml" > "${TARGET_DIR}/org-profile/org-profile.yaml"
-else
-  sed \
-    -e "s/id: acme/id: ${E_ORG_ID}/" \
-    -e "s/name: Acme Corp/name: ${E_ORG_NAME}/" \
-    -e "s/profile_version: \"2026.06.1\"/profile_version: \"${TODAY}\"/" \
-    -e "s/owner: Acme AppSec Team/owner: ${E_OWNER}/" \
-    -e "/requirements_yaml_url:/d" \
-    -e "/human_source_url:/d" \
-    -e "/label: \"Acme Corp AppSec Requirements\"/d" \
-    "${TEMPLATE_BASE}/org-profile/org-profile.yaml" > "${TARGET_DIR}/org-profile/org-profile.yaml"
+if ! keep_if_reinit "${TARGET_DIR}/org-profile/org-profile.yaml"; then
+  if [ "${DEMO_CONTENT}" = true ]; then
+    sed \
+      -e "s/id: acme/id: ${E_ORG_ID}/" \
+      -e "s/name: Acme Corp/name: ${E_ORG_NAME}/" \
+      -e "s/profile_version: \"2026.06.1\"/profile_version: \"${TODAY}\"/" \
+      -e "s/owner: Acme AppSec Team/owner: ${E_OWNER}/" \
+      -e "s|requirements_yaml_url: \"https://security.example.internal/appsec-requirements.yaml\"|requirements_yaml_url: \"org-profile/requirements.yaml\"|" \
+      -e "s|human_source_url: \"https://security.example.internal/appsec/requirements\"|human_source_url: \"# TODO: add URL to hosted requirements catalog\"|" \
+      -e "s/label: \"Acme Corp AppSec Requirements\"/label: \"${E_LABEL}\"/" \
+      "${TEMPLATE_BASE}/org-profile/org-profile.yaml" > "${TARGET_DIR}/org-profile/org-profile.yaml"
+  else
+    sed \
+      -e "s/id: acme/id: ${E_ORG_ID}/" \
+      -e "s/name: Acme Corp/name: ${E_ORG_NAME}/" \
+      -e "s/profile_version: \"2026.06.1\"/profile_version: \"${TODAY}\"/" \
+      -e "s/owner: Acme AppSec Team/owner: ${E_OWNER}/" \
+      -e "/requirements_yaml_url:/d" \
+      -e "/human_source_url:/d" \
+      -e "/label: \"Acme Corp AppSec Requirements\"/d" \
+      "${TEMPLATE_BASE}/org-profile/org-profile.yaml" > "${TARGET_DIR}/org-profile/org-profile.yaml"
+  fi
 fi
 
 # ── Render organization.md ────────────────────────────────────────────────────
 
-cat > "${TARGET_DIR}/org-profile/context/organization.md" <<EOF
+keep_if_reinit "${TARGET_DIR}/org-profile/context/organization.md" || cat > "${TARGET_DIR}/org-profile/context/organization.md" <<EOF
 # ${ORG_NAME} — Organization Context
 
 Replace this stub with a short, factual description of your organization owned
@@ -168,7 +179,7 @@ EOF
 
 # ── Render actors stub ────────────────────────────────────────────────────────
 
-cat > "${TARGET_DIR}/org-profile/actors/custom-actors.yaml" <<EOF
+keep_if_reinit "${TARGET_DIR}/org-profile/actors/custom-actors.yaml" || cat > "${TARGET_DIR}/org-profile/actors/custom-actors.yaml" <<EOF
 # Custom threat actors for ${ORG_NAME}.
 # Add, edit, or delete entries as needed.
 # Schema reference: https://github.com/matthiasrohr/appsec-advisor/blob/main/docs/org-profiles.md
@@ -177,14 +188,14 @@ EOF
 
 # ── Render AGENTS.md ──────────────────────────────────────────────────────────
 
-sed \
+keep_if_reinit "${TARGET_DIR}/AGENTS.md" || sed \
   -e "s/acme-appsec/${E_PLUGIN}/g" \
   -e "s/Acme Corp/${E_ORG_NAME}/g" \
   "${TEMPLATE_BASE}/AGENTS.md" > "${TARGET_DIR}/AGENTS.md"
 
 # ── Render README.md ──────────────────────────────────────────────────────────
 
-sed \
+keep_if_reinit "${TARGET_DIR}/README.md" || sed \
   -e "s/acme-appsec/${E_PLUGIN}/g" \
   -e "s/Acme Corp/${E_ORG_NAME}/g" \
   -e "s/Acme AppSec Team/${E_OWNER}/g" \
@@ -209,9 +220,19 @@ sed -i \
 # ── Init git repo ─────────────────────────────────────────────────────────────
 
 cd "${TARGET_DIR}"
-git init -q
+if [ "${REINIT}" = false ]; then
+  git init -q
+fi
 git add .
-git commit -q -m "init: ${PLUGIN_NAME} packaging repo for ${ORG_NAME}"
+if git diff --cached --quiet; then
+  echo "(no changes to commit)"
+else
+  if [ "${REINIT}" = true ]; then
+    git commit -q -m "reinit: update infrastructure files for ${PLUGIN_NAME}"
+  else
+    git commit -q -m "init: ${PLUGIN_NAME} packaging repo for ${ORG_NAME}"
+  fi
+fi
 
 echo ""
 echo "Done. Your packaging repo is ready at: ${TARGET_DIR}"
