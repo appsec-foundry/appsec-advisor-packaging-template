@@ -1,4 +1,5 @@
 stages:
+  - check
   - package
 
 variables:
@@ -16,8 +17,31 @@ default:
     - apt-get update -qq && apt-get install -y -qq --no-install-recommends git
     - pip install --quiet pyyaml jsonschema packaging
 
+# shellcheck the build glue. Non-blocking until the scripts are verified
+# clean — drop allow_failure to make lint findings fail the pipeline.
+lint:
+  stage: check
+  allow_failure: true
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends shellcheck
+  script:
+    - shellcheck scripts/*.sh tests/run.sh
+  rules:
+    - if: $CI_PIPELINE_SOURCE != "schedule"
+
+# Read-only: fails (exit 1) when a newer upstream v* release exists than the
+# pinned APPSEC_ADVISOR_REF. Run it on a scheduled pipeline to flag pin bumps.
+upstream-check:
+  stage: check
+  script:
+    - scripts/upstream-check.sh
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
 package:
   stage: package
+  rules:
+    - if: $CI_PIPELINE_SOURCE != "schedule"
   script:
     - scripts/fetch-upstream.sh
     - >

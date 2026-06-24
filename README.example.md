@@ -86,6 +86,21 @@ To pin a specific version (recommended, so builds stay reproducible):
 APPSEC_ADVISOR_REF=v0.4.0 make rebuild
 ```
 
+To follow a branch tip instead of a release (e.g. an upstream dev branch), set
+`APPSEC_ADVISOR_REF` to the branch name — it is re-pulled to its tip on each build:
+
+```bash
+APPSEC_ADVISOR_REF=develop make rebuild
+```
+
+**Check for upstream drift** without building (read-only). Exits non-zero when a
+newer release exists, or — on a branch ref — when the branch tip moved past your
+last build:
+
+```bash
+make upstream-check
+```
+
 **Update the requirements.** Edit the catalog that `requirements_yaml_url`
 points to, then rebuild — no plugin changes needed.
 

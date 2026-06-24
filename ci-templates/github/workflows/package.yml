@@ -5,6 +5,9 @@ on:
   push:
     tags:
       - "v*"
+  schedule:
+    # Weekly upstream drift check (Mondays 06:00 UTC). Read-only — does not build.
+    - cron: "0 6 * * 1"
 
 permissions:
   contents: read
@@ -18,7 +21,30 @@ env:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
 jobs:
+  # shellcheck the build glue. Non-blocking until the scripts are verified
+  # clean — drop continue-on-error to make lint findings fail the pipeline.
+  lint:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest  # shellcheck + make are preinstalled
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint shell scripts
+        run: make lint
+
+  # Read-only: fails (exit 1) when a newer upstream v* release exists than the
+  # pinned APPSEC_ADVISOR_REF, so the weekly run flags when to bump the pin.
+  upstream-check:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout packaging repo
+        uses: actions/checkout@v4
+      - name: Check upstream for drift
+        run: scripts/upstream-check.sh
+
   package:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout packaging repo

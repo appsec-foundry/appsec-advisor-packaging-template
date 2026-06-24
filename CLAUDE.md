@@ -13,6 +13,9 @@ Crucially, the scripts that do the real packaging work (`package_internal_plugin
 `make package` runs: `fetch-upstream.sh` (clone/checkout upstream at `APPSEC_ADVISOR_REF`) → upstream `package_internal_plugin.py` (overlay `org-profile/` onto upstream, applying `package-policy.yaml` allowlist) → upstream `smoke_test_package.py` → output to `build/<INTERNAL_NAME>/`.
 
 ```bash
+make               # (or `make help`) list all targets with descriptions
+make lint          # shellcheck scripts/ + tests/run.sh (skips gracefully if shellcheck absent)
+make upstream-check # read-only drift check: reports if the build ref moved (new commit) or a newer v* release exists. Exit 0=current, 1=drift, 2=error. Does not touch upstream/
 make validate      # validate org-profile.yaml against upstream schema only
 make package       # fetch + build + smoke test → build/<name>/
 make rebuild       # clean (removes upstream/ build/ dist/) then package
@@ -26,6 +29,19 @@ claude --plugin-dir build/<INTERNAL_NAME>
 ```
 
 Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstream repo or fork), `APPSEC_ADVISOR_REF` (`latest` resolves to newest `v*` tag; pin for reproducible builds), `APPSEC_ADVISOR_SOURCE` (use an existing local checkout, skips fetch), `INTERNAL_NAME`, `VERSION`.
+
+### Tracking upstream: release vs branch
+
+`APPSEC_ADVISOR_REF` is the single knob for "what do I build from". It accepts a `v*` tag, the literal `latest`, **or any branch name** — `fetch-upstream.sh` checks tags and heads, and a branch ref is re-fetched to its current tip on every run (a `--depth 1` detached checkout = effectively a pull).
+
+```bash
+make package                              # latest release (REF=latest default → newest v* tag)
+APPSEC_ADVISOR_REF=v0.4.0 make package    # pin a specific release (reproducible builds)
+APPSEC_ADVISOR_REF=develop make package   # follow a branch tip (e.g. upstream dev branch)
+APPSEC_ADVISOR_REF=main    make package   # follow the default branch
+```
+
+`make upstream-check` adapts to the mode: with `REF=latest` it flags a newer release tag; with a branch ref it flags when the branch tip has moved past your local checkout.
 
 ## Editable surface
 

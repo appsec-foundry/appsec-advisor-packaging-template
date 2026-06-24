@@ -26,11 +26,27 @@ Dieses Repo ist ein **Beispiel-Repository**, das zeigt, wie Organisationen das C
 ## Typische Aufgaben
 
 ```bash
+make                                  # (oder `make help`) listet alle Targets mit Beschreibung
+make lint                             # shellcheck über scripts/ + tests/run.sh (übersprungen, wenn shellcheck fehlt)
+make upstream-check                   # Read-only Drift-Check: meldet, ob der Build-Ref auf einen neuen Commit gewandert ist oder ein neueres v*-Release existiert (Exit 0=aktuell, 1=Drift, 2=Fehler)
 make package                          # Upstream holen + Package bauen + Smoke-Test
 APPSEC_ADVISOR_REF=v0.4.0-beta make package   # Konkretes Release pinnen
 make validate                         # Nur org-profile.yaml validieren
 ARCHIVE=1 VERSION=0.4.0-example make package-archive  # .tgz + .sha256 erzeugen
 ```
+
+### Upstream verfolgen: Release vs. Branch
+
+`APPSEC_ADVISOR_REF` ist der eine Knopf für „woraus wird gebaut". Akzeptiert ein `v*`-Tag, das Literal `latest` **oder einen Branch-Namen** — `fetch-upstream.sh` prüft Tags und Heads, und ein Branch-Ref wird bei jedem Lauf auf seinen aktuellen Tip nachgezogen (`--depth 1` detached checkout = effektiv ein Pull).
+
+```bash
+make package                              # Neuestes Release (Default REF=latest → höchstes v*-Tag)
+APPSEC_ADVISOR_REF=v0.4.0 make package    # Konkretes Release pinnen (reproduzierbar)
+APPSEC_ADVISOR_REF=develop make package   # Branch-Tip verfolgen (z.B. Upstream-Dev-Branch)
+APPSEC_ADVISOR_REF=main    make package   # Default-Branch verfolgen
+```
+
+`make upstream-check` passt sich dem Modus an: bei `REF=latest` meldet es ein neueres Release-Tag; bei einem Branch-Ref meldet es, wenn der Branch-Tip über deinen lokalen Checkout hinausgewandert ist.
 
 ## Plugin lokal testen
 

@@ -8,6 +8,8 @@ upstream state without any network:
   GITSTUB_HAS_ORIGIN=1    `remote get-url origin` succeeds
   GITSTUB_TAGS="v0.3.0 v0.4.0"   tags that exist upstream
   GITSTUB_HEADS="main dev"       branches that exist upstream
+  GITSTUB_LOCAL_SHA=abc1234      `rev-parse HEAD` of the local checkout
+  GITSTUB_REMOTE_SHA=abc1234     sha for a bare `ls-remote <url> <ref>`
 """
 import os
 import sys
@@ -43,6 +45,8 @@ if sub == "rev-parse":
     if "--short" in rest:
         out(SHA)
         sys.exit(0)
+    # plain `rev-parse HEAD` -> local checkout commit
+    out(os.environ.get("GITSTUB_LOCAL_SHA", SHA))
     sys.exit(0)
 
 if sub == "clone":
@@ -92,6 +96,13 @@ if sub == "ls-remote":
         for t in TAGS:
             out(f"{SHA}\trefs/tags/{t}")
         sys.exit(0)
+    # bare ref form: ls-remote <url> <ref>
+    bare = arg.rsplit("/", 1)[-1]
+    remote_sha = os.environ.get("GITSTUB_REMOTE_SHA", SHA)
+    if bare in TAGS:
+        out(f"{remote_sha}\trefs/tags/{bare}")
+    elif bare in HEADS:
+        out(f"{remote_sha}\trefs/heads/{bare}")
     sys.exit(0)
 
 if sub in ("fetch", "checkout"):

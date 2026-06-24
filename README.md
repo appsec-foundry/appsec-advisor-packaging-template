@@ -93,8 +93,14 @@ make rebuild
 # Remove all generated directories
 make clean
 
+# Read-only drift check (newer release, or branch tip moved past local build)
+make upstream-check
+
 # Pin a specific upstream release
 APPSEC_ADVISOR_REF=v0.4.0-beta make package
+
+# Follow a branch tip instead of a release (re-pulled to its tip on each build)
+APPSEC_ADVISOR_REF=develop make package
 
 # Build a distributable archive (.tgz + .sha256)
 ARCHIVE=1 VERSION=1.0.0 make package-archive

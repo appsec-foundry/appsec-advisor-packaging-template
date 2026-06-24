@@ -23,6 +23,7 @@ export PS4='@@COV:${BASH_SOURCE}:${LINENO}@@ '
 FETCH="$ROOT/scripts/fetch-upstream.sh"
 PKG="$ROOT/scripts/package-local.sh"
 INIT="$ROOT/scripts/init-org-repo.sh"
+CHECK="$ROOT/scripts/upstream-check.sh"
 
 COV="$(mktemp)"
 WORKROOT="$(mktemp -d)"
@@ -178,12 +179,43 @@ printf '\nTest Org\n\n\n\n%s\ny\n' "$tgt" | \
   >/dev/null 2>>"$COV"
 assert_rc "init: clone fallback" 0 "$?"
 
+# ── upstream-check.sh ────────────────────────────────────────────────────────
+echo "--- upstream-check.sh ---"
+# check_run <name> <expect-rc> <predest 0|1> [VAR=val ...]
+# Local checkout sha is abc1234 (GITSTUB_LOCAL_SHA); a bare ls-remote returns
+# GITSTUB_REMOTE_SHA (default abc1234) — so same sha == in sync.
+check_run() {
+  local name="$1" exp="$2" predest="$3"
+  shift 3
+  local d
+  d="$(newdir)"
+  [ "$predest" = 1 ] && mkdir -p "$d/dest"
+  (cd "$d" && env "$@" APPSEC_ADVISOR_DEST="$d/dest" timeout 15 bash -x "$CHECK") \
+    >/dev/null 2>>"$COV"
+  assert_rc "$name" "$exp" "$?"
+}
+check_run "check: latest in sync" 0 1 \
+  APPSEC_ADVISOR_REF=latest GITSTUB_TAGS="v0.3.0 v0.4.0" GITSTUB_IS_CHECKOUT=1
+check_run "check: pinned tag in sync" 0 1 \
+  APPSEC_ADVISOR_REF=v0.4.0 GITSTUB_TAGS="v0.3.0 v0.4.0" GITSTUB_IS_CHECKOUT=1
+check_run "check: commit drift" 1 1 \
+  APPSEC_ADVISOR_REF=latest GITSTUB_TAGS="v0.4.0" GITSTUB_IS_CHECKOUT=1 GITSTUB_REMOTE_SHA=def5678
+check_run "check: latest, no checkout -> nothing to do" 0 0 \
+  APPSEC_ADVISOR_REF=latest GITSTUB_TAGS="v0.4.0"
+check_run "check: newer release available" 1 1 \
+  APPSEC_ADVISOR_REF=v0.3.0 GITSTUB_TAGS="v0.3.0 v0.4.0" GITSTUB_IS_CHECKOUT=1
+check_run "check: pinned behind latest, no checkout (CI)" 1 0 \
+  APPSEC_ADVISOR_REF=v0.3.0 GITSTUB_TAGS="v0.3.0 v0.4.0"
+check_run "check: latest no tags -> error" 2 0 APPSEC_ADVISOR_REF=latest
+check_run "check: pinned ref not found -> error" 2 0 \
+  APPSEC_ADVISOR_REF=v9.9.9 GITSTUB_TAGS="v0.4.0"
+
 # ── report ───────────────────────────────────────────────────────────────────
 echo ""
 echo "functional checks: $PASS passed, $FAIL failed"
 python3 "$HERE/lib/coverage.py" --trace "$COV" --threshold "$THRESHOLD" \
   --lcov "$ROOT/coverage.lcov" --source-root "$ROOT" \
-  "$FETCH" "$PKG" "$INIT"
+  "$FETCH" "$PKG" "$INIT" "$CHECK"
 covrc=$?
 
 if [ "$FAIL" -eq 0 ] && [ "$covrc" -eq 0 ]; then exit 0; else exit 1; fi
