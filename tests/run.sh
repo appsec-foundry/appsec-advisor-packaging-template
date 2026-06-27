@@ -52,7 +52,7 @@ fetch_run() {
   d="$(newdir)"
   [ "$predest" = 1 ] && mkdir -p "$d/dest"
   (cd "$d" && env "$@" APPSEC_ADVISOR_DEST="$d/dest" timeout 15 bash -x "$FETCH") \
-    >/dev/null 2>>"$COV"
+    </dev/null >/dev/null 2>>"$COV"
   assert_rc "$name" "$exp" "$?"
 }
 # fetch_tty <name> <expect-rc> <predest> <answers> [VAR=val ...]
