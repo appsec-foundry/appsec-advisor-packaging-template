@@ -22,10 +22,6 @@ ask() {
   fi
 }
 
-slug() {
-  echo "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/-\+/-/g' | sed 's/^-//;s/-$//'
-}
-
 initials() {
   echo "$1" | tr '[:upper:]' '[:lower:]' | tr -s '+&/., -' ' ' | sed 's/^ //;s/ $//' | awk '{for(i=1;i<=NF;i++) printf substr($i,1,1)}'
 }
@@ -157,7 +153,7 @@ if ! keep_if_reinit "${TARGET_DIR}/org-profile/org-profile.yaml"; then
       -e "s/name: Acme Corp/name: ${E_ORG_NAME}/" \
       -e "s/profile_version: \"2026.06.1\"/profile_version: \"${TODAY}\"/" \
       -e "s/owner: Acme AppSec Team/owner: ${E_OWNER}/" \
-      -e "/requirements_yaml_url:/d" \
+      -e "s|requirements_yaml_url: \"https://security.example.internal/appsec-requirements.yaml\"|requirements_yaml_url: \"# TODO: add URL to hosted requirements catalog\"|" \
       -e "/human_source_url:/d" \
       -e "/label: \"Acme Corp AppSec Requirements\"/d" \
       "${TEMPLATE_BASE}/org-profile/org-profile.yaml" > "${TARGET_DIR}/org-profile/org-profile.yaml"
@@ -247,5 +243,7 @@ echo "  2. Edit org-profile/org-profile.yaml — set requirements_yaml_url to yo
 fi
 echo "  3. Edit org-profile/context/organization.md — describe your org for analyses"
 echo "  4. Run: make package"
-echo "  5. Load the plugin: claude --plugin-dir build/${PLUGIN_NAME}"
+echo "  5. Load the plugin from any project you want to analyze:"
+echo "       cd /path/to/your/project"
+echo "       claude --plugin-dir $(pwd)/build/${PLUGIN_NAME}"
 echo "  6. Set up CI: make ci-github  or  make ci-gitlab"

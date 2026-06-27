@@ -22,8 +22,11 @@ _latest_tag() {
     tail -n 1
 }
 
-_remote_sha() { # _remote_sha <ref>
-  git ls-remote "${URL}" "$1" | awk 'NR==1 {print $1}'
+_remote_sha() { # _remote_sha <ref> -> commit sha (peels annotated tags)
+  # ls-remote appends a `<sha> refs/tags/<t>^{}` line for annotated tags; the
+  # last line is the commit the local checkout resolves to. NR==1 would be the
+  # tag-object sha and produce false commit drift.
+  git ls-remote "${URL}" "$1" | awk 'END {print $1}'
 }
 
 LATEST_TAG="$(_latest_tag)"

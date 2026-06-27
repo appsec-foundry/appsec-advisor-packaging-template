@@ -23,10 +23,14 @@ This creates the ready-to-use plugin in `build/acme-appsec/`.
 
 ### In Claude Code (interactive)
 
-Load the plugin once, then run a command from the chat:
+`claude` analyzes the directory you launch it in; `--plugin-dir` just adds the
+plugin on top. To audit your own project, `cd` into it and point `--plugin-dir`
+at the **absolute** path of the build output (a relative `build/...` only works
+from the packaging repo):
 
 ```bash
-claude --plugin-dir build/acme-appsec
+cd /path/to/your/project
+claude --plugin-dir /abs/path/to/<your-packaging-repo>/build/acme-appsec
 ```
 
 | Command | What it does |
@@ -41,12 +45,14 @@ claude --plugin-dir build/acme-appsec
 
 For CI or scripted runs, drive the same commands without opening the chat:
 
+Run these from your project directory, with the same absolute `--plugin-dir` path:
+
 ```bash
 # Run a threat model unattended and exit
-claude --plugin-dir build/acme-appsec -p "/acme-appsec:create-threat-model"
+claude --plugin-dir /abs/path/to/<your-packaging-repo>/build/acme-appsec -p "/acme-appsec:create-threat-model"
 
 # Audit the code against Acme Corp's security requirements
-claude --plugin-dir build/acme-appsec -p "/acme-appsec:audit-security-requirements"
+claude --plugin-dir /abs/path/to/<your-packaging-repo>/build/acme-appsec -p "/acme-appsec:audit-security-requirements"
 ```
 
 Results are written as YAML and SARIF (plus a PDF for release reviews), so they

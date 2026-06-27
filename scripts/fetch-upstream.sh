@@ -30,9 +30,12 @@ else
 fi
 
 _ask_yn() {
+  # Non-interactive (no TTY, e.g. CI) always declines — builds must pin a ref.
+  # Interactively, the fallback (use latest / use trunk) is the only path forward
+  # when the requested ref is missing, so default to yes on an empty answer.
   [ -t 0 ] || return 1
-  read -r -p "$1 [y/N] " _answer || return 1
-  case "${_answer}" in [yY]*) return 0 ;; *) return 1 ;; esac
+  read -r -p "$1 [Y/n] " _answer || return 1
+  case "${_answer}" in [nN]*) return 1 ;; *) return 0 ;; esac
 }
 
 _use_trunk() {
