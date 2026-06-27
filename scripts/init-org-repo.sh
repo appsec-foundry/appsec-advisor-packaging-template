@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Creates a fresh org packaging repo for appsec-advisor.
-# Usage: bash <(curl -fsSL https://raw.githubusercontent.com/matthiasrohr/appsec-advisor-org-packaging-example/main/scripts/init-org-repo.sh)
+# Usage: bash <(curl -fsSL https://raw.githubusercontent.com/matthiasrohr/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh)
 # Or locally: scripts/init-org-repo.sh
 set -euo pipefail
 
@@ -75,7 +75,7 @@ if [ ! -f "${TEMPLATE_BASE}/Makefile" ]; then
   trap 'rm -rf "${TMPDIR_CLONE}"' EXIT
   echo "==> Cloning template from GitHub …"
   git clone --depth 1 \
-    "https://github.com/matthiasrohr/appsec-advisor-org-packaging-example.git" \
+    "https://github.com/matthiasrohr/appsec-advisor-packaging-template.git" \
     "${TMPDIR_CLONE}"
   TEMPLATE_BASE="${TMPDIR_CLONE}"
 fi
