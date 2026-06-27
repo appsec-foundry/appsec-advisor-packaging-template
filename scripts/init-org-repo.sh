@@ -50,8 +50,8 @@ ORG_NAME=$(ask "Organization name (e.g. Acme Corp)")
 ORG_ID=$(initials "${ORG_NAME}")
 ORG_ID=$(ask "Organization id (short lowercase abbreviation, e.g. 'acme', 'hl' — used in plugin name)" "${ORG_ID}")
 PLUGIN_NAME=$(ask "Plugin name (Claude Code command prefix)" "${ORG_ID}-appsec")
-ORG_ABBREV=$(initials "${ORG_NAME}" | tr '[:lower:]' '[:upper:]')
-OWNER=$(ask "Team owner (e.g. AppSec Team)" "${ORG_ABBREV} AppSec Team")
+OWNER_PREFIX=$(echo "${ORG_NAME}" | awk '{print $1}')
+OWNER=$(ask "Team owner (e.g. AppSec Team)" "${OWNER_PREFIX} AppSec Team")
 TARGET_DIR=$(ask "Target directory" "./${ORG_ID}-appsec-advisor")
 
 read -r -p "Include demo content (example requirements + filled org profile)? [y/N]: " _demo_reply
