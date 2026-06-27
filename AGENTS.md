@@ -28,6 +28,9 @@ Dieses Repo ist ein **Beispiel-Repository**, das zeigt, wie Organisationen das C
 ```bash
 make                                  # (oder `make help`) listet alle Targets mit Beschreibung
 make lint                             # shellcheck über scripts/ + tests/run.sh (übersprungen, wenn shellcheck fehlt)
+make test                             # Shell-Test-Suite + Coverage-Gate (übersprungen, wenn tests/ fehlt, z.B. in scaffolded Repos)
+make check                            # Offline-Gate: lint + test (kein Netzwerk, kein Upstream-Fetch)
+make release-check                    # Release-Boundary-Gate: check + upstream-check (advisory) + validate + package (baut ein sauberes Plugin gegen Upstream)
 make upstream-check                   # Read-only Drift-Check: meldet, ob der Build-Ref auf einen neuen Commit gewandert ist oder ein neueres v*-Release existiert (Exit 0=aktuell, 1=Drift, 2=Fehler)
 make package                          # Upstream holen + Package bauen + Smoke-Test
 APPSEC_ADVISOR_REF=v0.4.0-beta make package   # Konkretes Release pinnen

@@ -13,20 +13,32 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint fetch-upstream upstream-check validate package package-archive smoke ci-github ci-gitlab clean distclean rebuild test
+.PHONY: help lint check release-check fetch-upstream upstream-check validate package package-archive smoke ci-github ci-gitlab clean distclean rebuild test
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-test: ## Run the shell-script test suite + coverage gate
-	bash tests/run.sh
+test: ## Run the shell-script test suite + coverage gate (skipped if tests/ is absent)
+	@if [ -f tests/run.sh ]; then \
+		bash tests/run.sh; \
+	else \
+		echo "no tests/ in this repo — skipping"; \
+	fi
 
 lint: ## shellcheck the shell scripts (skipped if shellcheck is absent)
 	@if command -v shellcheck >/dev/null 2>&1; then \
-		shellcheck scripts/*.sh tests/run.sh; \
+		shellcheck scripts/*.sh $$([ -f tests/run.sh ] && echo tests/run.sh); \
 	else \
 		echo "shellcheck not installed — skipping (see https://github.com/koalaman/shellcheck#installing)"; \
 	fi
+
+check: lint test ## Offline gate: lint + test (no network, no upstream fetch)
+
+release-check: ## Release-boundary gate: check + validate + build a clean plugin against upstream
+	@$(MAKE) --no-print-directory check
+	@$(MAKE) --no-print-directory upstream-check || echo "  ^ upstream drift (advisory) — not blocking release-check"
+	@$(MAKE) --no-print-directory validate
+	@$(MAKE) --no-print-directory package
 
 upstream-check: ## Read-only drift check vs upstream (exit 1 if a newer release exists)
 	APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" scripts/upstream-check.sh
