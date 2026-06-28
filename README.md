@@ -16,7 +16,7 @@ Template repo for building an internal [`appsec-advisor`](https://github.com/mat
 Run the init script — it asks for your org name and plugin name, then creates a ready-to-use git repo with all placeholders already replaced:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/matthiasrohr/appsec-advisor-org-packaging-template/main/scripts/init-org-repo.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/matthiasrohr/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh)
 ```
 
 Alternatively, click **Use this template** on GitHub and replace `Acme Corp` / `acme-appsec` manually.
@@ -63,7 +63,7 @@ claude --plugin-dir build/your-plugin-name
 /your-plugin-name:create-threat-model
 ```
 
-That's it. For CI, tagging a release triggers the pipeline set up in step 3 automatically.
+For CI, tagging a release triggers the pipeline from step 3 automatically.
 
 ## Customization
 

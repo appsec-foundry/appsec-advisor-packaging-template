@@ -4,8 +4,8 @@
 [![Based on appsec-advisor](https://img.shields.io/badge/based%20on-appsec--advisor-orange.svg)](https://github.com/matthiasrohr/appsec-advisor)
 
 `acme-appsec` brings Acme Corp's security standards into Claude Code. It runs
-threat models and security audits right where you work — already tuned to our
-requirements, cost limits, and review process. Maintained by the Acme AppSec Team.
+threat models and security audits tuned to our requirements, cost limits, and
+review process. Maintained by the Acme AppSec Team.
 
 This repository builds the plugin from the open-source
 [appsec-advisor](https://github.com/matthiasrohr/appsec-advisor) project and
@@ -17,16 +17,15 @@ layers Acme Corp's own configuration on top.
 make package
 ```
 
-This creates the ready-to-use plugin in `build/acme-appsec/`.
+This creates the plugin in `build/acme-appsec/`.
 
 ## Use the plugin
 
 ### In Claude Code (interactive)
 
-`claude` analyzes the directory you launch it in; `--plugin-dir` just adds the
-plugin on top. To audit your own project, `cd` into it and point `--plugin-dir`
-at the **absolute** path of the build output (a relative `build/...` only works
-from the packaging repo):
+`claude` analyzes whatever directory you launch it in. To audit your own
+project, `cd` into it and point `--plugin-dir` at the **absolute** path of the
+build output:
 
 ```bash
 cd /path/to/your/project
@@ -43,9 +42,8 @@ claude --plugin-dir /abs/path/to/<your-packaging-repo>/build/acme-appsec
 
 ### From the command line (headless)
 
-For CI or scripted runs, drive the same commands without opening the chat:
-
-Run these from your project directory, with the same absolute `--plugin-dir` path:
+For CI or scripted runs, add `-p` to run the same commands non-interactively —
+from your project directory, with the same absolute `--plugin-dir` path:
 
 ```bash
 # Run a threat model unattended and exit

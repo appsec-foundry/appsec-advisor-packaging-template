@@ -1,5 +1,5 @@
 # Example security requirements catalog for appsec-advisor.
-# Replace these demo entries with your organisation's real AppSec standards.
+# Replace these demo entries with your organization's real AppSec standards.
 # Schema reference: https://github.com/matthiasrohr/appsec-advisor/blob/main/docs/requirements.md
 #
 # To host this file centrally, upload it to an accessible URL and set
@@ -40,7 +40,7 @@ requirements:
       permission. Default-deny; allow-list explicitly.
 
   - id: SEC-AUTHZ-002
-    title: "Broken object-level authorisation (BOLA) checks required"
+    title: "Broken object-level authorization (BOLA) checks required"
     category: authorization
     severity: critical
     description: >
@@ -50,7 +50,7 @@ requirements:
       - "OWASP API Security Top 10: API1"
 
   - id: SEC-INPUT-001
-    title: "Parameterised queries required for all database access"
+    title: "Parameterized queries required for all database access"
     category: injection
     severity: critical
     description: >
@@ -87,7 +87,7 @@ requirements:
     category: logging
     severity: medium
     description: >
-      Authentication attempts, authorisation failures, and data-modification
+      Authentication attempts, authorization failures, and data-modification
       events must be logged with timestamps and forwarded to the SIEM within
       60 seconds.
 
