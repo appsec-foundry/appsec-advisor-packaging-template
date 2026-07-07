@@ -74,9 +74,32 @@ Beyond the quick start, these files are yours to edit:
 | `org-profile/org-profile.yaml` | Presets, cost guardrails, requirements source, output formats |
 | `org-profile/context/organization.md` | Short org context injected into analyses (max 50 KB) |
 | `org-profile/actors/*.yaml` | Custom threat actors for threat models — edit or delete |
-| `org-profile/package-policy.yaml` | Allowlist of which upstream skills and hooks to include |
+| `org-profile/package-policy.yaml` | Allowlist of which skills and hooks to include |
+| `org-skills/<skill-id>/SKILL.md` | Optional organization-owned skills shipped next to upstream skills |
 
 `build/`, `dist/`, and `upstream/` are all generated — do not commit them.
+
+### Add your own skills
+
+Keep upstream as the source of truth, and put organization-owned skills under
+`org-skills/`:
+
+```text
+org-skills/
+└── acme-architecture-review/
+    └── SKILL.md
+```
+
+`make package` copies those skills into a temporary upstream source tree before
+the upstream packager runs. The checkout in `upstream/` is left untouched.
+
+Two rules keep this predictable:
+
+- Do not reuse an upstream skill name. The build fails if a local skill would
+  overwrite `upstream/appsec-advisor/skills/<same-name>`.
+- If `org-profile/package-policy.yaml` uses `plugin_surface.skills.include`,
+  add the local skill name there as well. The allowlist covers both upstream and
+  organization skills.
 
 ## Build Reference
 

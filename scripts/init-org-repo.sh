@@ -99,6 +99,7 @@ keep_if_reinit() { [ "${REINIT}" = true ] && [ -f "$1" ] && { echo "  kept: $1";
 mkdir -p \
   "${TARGET_DIR}/org-profile/context" \
   "${TARGET_DIR}/org-profile/actors" \
+  "${TARGET_DIR}/org-skills" \
   "${TARGET_DIR}/scripts" \
   "${TARGET_DIR}/ci-templates/github/workflows"
 
@@ -112,6 +113,11 @@ cp "${TEMPLATE_BASE}/ci-templates/gitlab-ci.yml" \
    "${TARGET_DIR}/ci-templates/gitlab-ci.yml"
 
 cp "${TEMPLATE_BASE}/.gitignore" "${TARGET_DIR}/.gitignore"
+if [ -f "${TEMPLATE_BASE}/org-skills/README.md" ]; then
+  keep_if_reinit "${TARGET_DIR}/org-skills/README.md" || \
+    cp "${TEMPLATE_BASE}/org-skills/README.md" \
+       "${TARGET_DIR}/org-skills/README.md"
+fi
 keep_if_reinit "${TARGET_DIR}/org-profile/package-policy.yaml" || \
   cp "${TEMPLATE_BASE}/org-profile/package-policy.yaml" \
      "${TARGET_DIR}/org-profile/package-policy.yaml"

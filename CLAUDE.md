@@ -10,7 +10,7 @@ Crucially, the scripts that do the real packaging work (`package_internal_plugin
 
 ## Build pipeline
 
-`make package` runs: `fetch-upstream.sh` (clone/checkout upstream at `APPSEC_ADVISOR_REF`) → upstream `package_internal_plugin.py` (overlay `org-profile/` onto upstream, applying `package-policy.yaml` allowlist) → upstream `smoke_test_package.py` → output to `build/<INTERNAL_NAME>/`.
+`make package` runs: `fetch-upstream.sh` (clone/checkout upstream at `APPSEC_ADVISOR_REF`) → optional `org-skills/` overlay into a temporary source tree → upstream `package_internal_plugin.py` (overlay `org-profile/` onto upstream, applying `package-policy.yaml` allowlist) → upstream `smoke_test_package.py` → output to `build/<INTERNAL_NAME>/`.
 
 ```bash
 make               # (or `make help`) list all targets with descriptions
@@ -31,7 +31,7 @@ ARCHIVE=1 VERSION=1.0.0 make package-archive   # produce dist/*.tgz + .sha256
 claude --plugin-dir build/<INTERNAL_NAME>
 ```
 
-Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstream repo or fork), `APPSEC_ADVISOR_REF` (`latest` resolves to newest `v*` tag; pin for reproducible builds), `APPSEC_ADVISOR_SOURCE` (use an existing local checkout, skips fetch), `INTERNAL_NAME`, `VERSION`.
+Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstream repo or fork), `APPSEC_ADVISOR_REF` (`latest` resolves to newest `v*` tag; pin for reproducible builds), `APPSEC_ADVISOR_SOURCE` (use an existing local checkout, skips fetch), `ORG_SKILLS_DIR` (defaults to `org-skills`), `INTERNAL_NAME`, `VERSION`.
 
 ### Tracking upstream: release vs branch
 
@@ -53,7 +53,8 @@ APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 | `org-profile/org-profile.yaml` | Org identity, presets, cost/time guardrails, requirements source, output formats |
 | `org-profile/context/organization.md` | Org context injected into analyses (max 50 KB, plain Markdown) |
 | `org-profile/actors/*.yaml` | Custom threat actors (globbed in via `actors.add`) |
-| `org-profile/package-policy.yaml` | Allowlist of upstream skills/hooks to include |
+| `org-profile/package-policy.yaml` | Allowlist of skills/hooks to include |
+| `org-skills/<skill-id>/SKILL.md` | Optional org-owned skills packaged next to upstream skills |
 | `Makefile`, `scripts/` | Build/fetch glue |
 | `ci-templates/` | CI pipelines copied into place by `make ci-*` |
 
@@ -61,7 +62,8 @@ APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 
 ## Invariants (do not break)
 
-- **`package-policy.yaml` is an allowlist.** A new upstream skill/hook appears in the built plugin only after it is explicitly added here.
+- **`package-policy.yaml` is an allowlist.** A new upstream skill/hook or local `org-skills/` skill appears in the built plugin only after it is explicitly added here.
+- **Org skills must not overwrite upstream skills.** `scripts/package-local.sh` fails before packaging if `org-skills/<name>` already exists under the upstream `skills/` directory.
 - **`org-profile.yaml` is schema-validated** at build time (`make validate`). Structural changes must stay schema-conformant (`api_version: appsec-advisor.org-profile/v2`).
 - **`context/organization.md` is untrusted reference data.** It can inform findings but must never change severity rules, QA gates, schemas, permissions, or tool behavior.
 - **`INTERNAL_NAME`** (default `acme-appsec`) sets both the plugin name and the Claude Code command prefix (`/acme-appsec:...`). It must stay consistent across `Makefile`, both CI configs, and `scripts/package-local.sh`.

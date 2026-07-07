@@ -20,9 +20,18 @@ fail = os.environ.get("PYSTUB_FAIL", "")
 if script.endswith("package_internal_plugin.py"):
     # Create the expected build output dir so a following smoke step has a target.
     name = None
+    source = None
     for i, a in enumerate(args):
         if a == "--name" and i + 1 < len(args):
             name = args[i + 1]
+        if a == "--source" and i + 1 < len(args):
+            source = args[i + 1]
+    expected_skill = os.environ.get("PYSTUB_EXPECT_SOURCE_SKILL", "")
+    if expected_skill:
+        skill_md = os.path.join(source or "", "skills", expected_skill, "SKILL.md")
+        if not os.path.isfile(skill_md):
+            print(f"expected source skill not found: {skill_md}", file=sys.stderr)
+            sys.exit(5)
     if name:
         os.makedirs(os.path.join("build", name), exist_ok=True)
     sys.exit(3 if fail == "package" else 0)

@@ -58,14 +58,16 @@ can be archived or fed into other tools.
 
 ## What you can configure
 
-Everything Acme-specific lives in `org-profile/`:
+Everything Acme-specific lives in `org-profile/` and, if you add your own
+commands, `org-skills/`:
 
 | File | What it controls |
 |---|---|
 | `org-profile/org-profile.yaml` | The main settings — presets, cost & time limits, requirements source, output formats |
 | `org-profile/context/organization.md` | A short description of Acme Corp, used as background for analyses |
 | `org-profile/actors/*.yaml` | Custom threat actors to consider |
-| `org-profile/package-policy.yaml` | Which upstream features are included in the build |
+| `org-profile/package-policy.yaml` | Which skills and hooks are included in the build |
+| `org-skills/<skill-id>/SKILL.md` | Acme-owned skills shipped next to upstream skills |
 
 The things you'll most often adjust in `org-profile.yaml`:
 
@@ -74,6 +76,24 @@ The things you'll most often adjust in `org-profile.yaml`:
 - **Guardrails** — each preset caps `max_cost_usd` and `max_wall_time` so runs stay predictable.
 
 After any change, rebuild with `make package`.
+
+### Add Acme-owned skills
+
+Put custom skills under `org-skills/`:
+
+```text
+org-skills/
+└── acme-architecture-review/
+    └── SKILL.md
+```
+
+The build copies them into a temporary upstream source tree before packaging.
+It does not modify `upstream/appsec-advisor/`.
+
+Use a new name. If a local skill has the same name as an upstream skill, the
+build fails. When `org-profile/package-policy.yaml` uses
+`plugin_surface.skills.include`, add the local skill name there too; the
+allowlist controls both upstream and Acme-owned skills.
 
 ## Maintenance
 

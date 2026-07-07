@@ -71,22 +71,11 @@ jobs:
             echo "version=0.4.0-internal.${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Fetch upstream appsec-advisor
-        run: scripts/fetch-upstream.sh
-
-      - name: Package plugin
-        run: |
-          python3 upstream/appsec-advisor/scripts/package_internal_plugin.py \
-            --source upstream/appsec-advisor \
-            --org-profile org-profile \
-            --name "${INTERNAL_NAME}" \
-            --version "${{ steps.ver.outputs.version }}" \
-            --description "Internal packaged build of appsec-advisor with Acme Corp defaults."
-
-      - name: Smoke-test package
-        run: |
-          python3 upstream/appsec-advisor/scripts/smoke_test_package.py \
-            "build/${INTERNAL_NAME}" --name "${INTERNAL_NAME}"
+      - name: Package and smoke-test plugin
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          ARCHIVE: "1"
+        run: scripts/package-local.sh
 
       - name: Upload package
         uses: actions/upload-artifact@v4

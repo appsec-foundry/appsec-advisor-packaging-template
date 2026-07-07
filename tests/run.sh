@@ -36,7 +36,7 @@ fail() { FAIL=$((FAIL + 1)); printf '  FAIL  %s  (%s)\n' "$1" "$2"; }
 assert_rc() { if [ "$2" = "$3" ]; then pass "$1"; else fail "$1" "rc=$3 want $2"; fi; }
 newdir() { mktemp -d "$WORKROOT/d.XXXXXX"; }
 mkfake() { # a minimal appsec-advisor checkout
-  mkdir -p "$1/scripts"
+  mkdir -p "$1/scripts" "$1/skills"
   local f
   for f in package_internal_plugin smoke_test_package validate_org_profile; do
     printf '# stub\n' >"$1/scripts/$f.py"
@@ -126,6 +126,38 @@ mkfake "$d/src"
 rc=$?
 if [ "$rc" != 0 ]; then pass "package: smoke failure propagates"; else fail "package: smoke failure propagates" "rc=0"; fi
 
+d="$(newdir)"
+mkfake "$d/src"
+mkdir -p "$d/org-skills/acme-review"
+printf '%s\n' 'description: Acme review helper.' >"$d/org-skills/acme-review/SKILL.md"
+(cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" PYSTUB_EXPECT_SOURCE_SKILL=acme-review \
+  INTERNAL_NAME=acme-appsec timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
+assert_rc "package: org skill overlay reaches packager" 0 "$?"
+
+d="$(newdir)"
+mkfake "$d/src"
+mkdir -p "$d/src/skills/acme-review" "$d/org-skills/acme-review"
+printf '%s\n' 'description: Upstream skill.' >"$d/src/skills/acme-review/SKILL.md"
+printf '%s\n' 'description: Local skill.' >"$d/org-skills/acme-review/SKILL.md"
+(cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" INTERNAL_NAME=acme-appsec \
+  timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
+assert_rc "package: org skill cannot overwrite upstream" 2 "$?"
+
+d="$(newdir)"
+mkfake "$d/src"
+mkdir -p "$d/org-skills/acme-empty"
+(cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" INTERNAL_NAME=acme-appsec \
+  timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
+assert_rc "package: org skill requires SKILL.md" 2 "$?"
+
+d="$(newdir)"
+mkfake "$d/src"
+mkdir -p "$d/org-skills/BadName"
+printf '%s\n' 'description: Bad name.' >"$d/org-skills/BadName/SKILL.md"
+(cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" INTERNAL_NAME=acme-appsec \
+  timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
+assert_rc "package: org skill name validation" 2 "$?"
+
 # ── init-org-repo.sh ─────────────────────────────────────────────────────────
 echo "--- init-org-repo.sh ---"
 # answers order: org-name, org-id(default), plugin(default), owner(default),
@@ -137,7 +169,7 @@ tgt="$d/out"
 printf '\nTest Org\n\n\n\n%s\ny\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
 rc=$?
-if [ "$rc" = 0 ] && [ -f "$tgt/org-profile/requirements.yaml" ]; then
+if [ "$rc" = 0 ] && [ -f "$tgt/org-profile/requirements.yaml" ] && [ -f "$tgt/org-skills/README.md" ]; then
   pass "init: demo=yes"
 else fail "init: demo=yes" "rc=$rc"; fi
 
