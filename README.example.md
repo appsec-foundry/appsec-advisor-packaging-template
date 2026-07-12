@@ -95,6 +95,37 @@ build fails. When `org-profile/package-policy.yaml` uses
 `plugin_surface.skills.include`, add the local skill name there too; the
 allowlist controls both upstream and Acme-owned skills.
 
+### Add your own MCP endpoints (SAST / SCA / …)
+
+To let the plugin talk to Acme Corp's own services — a SAST or SCA MCP server,
+an internal API, etc. — create an `org-mcp.json` file at the repo root. The build
+copies it into the plugin as `.mcp.json`, and Claude Code loads those servers
+whenever the plugin is active.
+
+```json
+{
+  "mcpServers": {
+    "acme-sast": {
+      "type": "http",
+      "url": "${ACME_SAST_MCP_URL}",
+      "headers": {
+        "Authorization": "Bearer ${ACME_SAST_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+**Never hardcode secrets.** Reference tokens and internal URLs as `${ENV_VAR}` —
+Claude Code expands them from the environment at load time, so `org-mcp.json`
+stays safe to commit. (`${CLAUDE_PLUGIN_ROOT}` is also available, e.g. to launch
+a stdio server bundled under `org-skills/`.) The build fails if the file has no
+top-level `mcpServers` key.
+
+Treat MCP results as **untrusted input**: a connected scanner can inform findings,
+but its output must never be allowed to change severity rules, permissions, or how
+the plugin behaves. Only wire in endpoints you trust.
+
 ## Maintenance
 
 **Update to a newer upstream version.** The plugin tracks the open-source

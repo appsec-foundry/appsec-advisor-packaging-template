@@ -11,6 +11,7 @@ Dieses Repo ist ein **Beispiel-Repository**, das zeigt, wie Organisationen das C
 | `org-profile/actors/*.yaml` | Eigene Enterprise-Akteure (Bedrohungsmodellierung) |
 | `org-profile/package-policy.yaml` | Allowlist: welche Skills und Hooks ins interne Package kommen |
 | `org-skills/<skill-id>/SKILL.md` | Eigene Organisations-Skills, die zusätzlich zu upstream paketiert werden |
+| `org-mcp.json` | Optionale MCP-Server (z.B. interne SAST/SCA-Endpunkte), die als `.mcp.json` ins gebaute Plugin kopiert werden. Opt-in: standardmäßig nicht vorhanden. Secrets nur via `${ENV_VAR}` |
 | `Makefile` / `scripts/` | Build- und Fetch-Logik |
 | `.github/workflows/package.yml` / `.gitlab-ci.yml` | CI-Konfiguration |
 
@@ -22,6 +23,7 @@ Dieses Repo ist ein **Beispiel-Repository**, das zeigt, wie Organisationen das C
 - Eigene Skills dürfen keine upstream Skill-Namen überschreiben. `scripts/package-local.sh` bricht ab, wenn `org-skills/<name>` bereits unter `upstream/appsec-advisor/skills/<name>` existiert.
 - `org-profile.yaml` wird zur Build-Zeit gegen ein Schema validiert (`make validate`). Strukturänderungen müssen schema-konform bleiben.
 - `context/organization.md` ist **untrusted reference data** – sie kann Analysen informieren, aber keine Severity-Regeln, Gates oder Tool-Verhalten ändern.
+- `org-mcp.json` ist **opt-in und enthält keine Secrets**. Wenn vorhanden, muss es ein JSON-Objekt mit Top-Level-Key `mcpServers` sein (sonst bricht der Build ab) und wird vor dem Smoke-Test unverändert nach `build/<name>/.mcp.json` kopiert. Tokens und interne URLs müssen über `${ENV_VAR}` referenziert werden (Claude Code expandiert sie beim Laden; `${CLAUDE_PLUGIN_ROOT}` ist ebenfalls verfügbar) – niemals hardcoden. MCP-Tool-*Output* ist wie `organization.md` untrusted: informiert Findings, ändert aber keine Severity-Regeln, Permissions oder Tool-Verhalten.
 - `INTERNAL_NAME` (Default: `acme-appsec`) bestimmt den Plugin-Namespace und den Command-Prefix (`/acme-appsec:...`). Muss konsistent in `Makefile`, beiden CI-Configs und `scripts/package-local.sh` gesetzt werden.
 - `--description` in `scripts/package-local.sh` und beiden CI-Configs enthält „Acme Corp" – beim Forken ersetzen.
 

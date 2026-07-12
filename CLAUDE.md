@@ -10,7 +10,7 @@ Crucially, the scripts that do the real packaging work (`package_internal_plugin
 
 ## Build pipeline
 
-`make package` runs: `fetch-upstream.sh` (clone/checkout upstream at `APPSEC_ADVISOR_REF`) → optional `org-skills/` overlay into a temporary source tree → upstream `package_internal_plugin.py` (overlay `org-profile/` onto upstream, applying `package-policy.yaml` allowlist) → upstream `smoke_test_package.py` → output to `build/<INTERNAL_NAME>/`.
+`make package` runs: `fetch-upstream.sh` (clone/checkout upstream at `APPSEC_ADVISOR_REF`) → optional `org-skills/` overlay into a temporary source tree → upstream `package_internal_plugin.py` (overlay `org-profile/` onto upstream, applying `package-policy.yaml` allowlist) → optional `org-mcp.json` overlay into the build as `.mcp.json` → upstream `smoke_test_package.py` → output to `build/<INTERNAL_NAME>/`.
 
 ```bash
 make               # (or `make help`) list all targets with descriptions
@@ -31,7 +31,7 @@ ARCHIVE=1 VERSION=1.0.0 make package-archive   # produce dist/*.tgz + .sha256
 claude --plugin-dir build/<INTERNAL_NAME>
 ```
 
-Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstream repo or fork), `APPSEC_ADVISOR_REF` (`latest` resolves to newest `v*` tag; pin for reproducible builds), `APPSEC_ADVISOR_SOURCE` (use an existing local checkout, skips fetch), `ORG_SKILLS_DIR` (defaults to `org-skills`), `INTERNAL_NAME`, `VERSION`.
+Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstream repo or fork), `APPSEC_ADVISOR_REF` (`latest` resolves to newest `v*` tag; pin for reproducible builds), `APPSEC_ADVISOR_SOURCE` (use an existing local checkout, skips fetch), `ORG_SKILLS_DIR` (defaults to `org-skills`), `ORG_MCP_FILE` (defaults to `org-mcp.json`), `INTERNAL_NAME`, `VERSION`.
 
 ### Tracking upstream: release vs branch
 
@@ -55,6 +55,7 @@ APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 | `org-profile/actors/*.yaml` | Custom threat actors (globbed in via `actors.add`) |
 | `org-profile/package-policy.yaml` | Allowlist of skills/hooks to include |
 | `org-skills/<skill-id>/SKILL.md` | Optional org-owned skills packaged next to upstream skills |
+| `org-mcp.json` | Optional MCP servers (e.g. internal SAST/SCA endpoints) copied into the built plugin's `.mcp.json`. Opt-in: absent by default. Secrets via `${ENV_VAR}` only |
 | `Makefile`, `scripts/` | Build/fetch glue |
 | `ci-templates/` | CI pipelines copied into place by `make ci-*` |
 
@@ -66,6 +67,7 @@ APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 - **Org skills must not overwrite upstream skills.** `scripts/package-local.sh` fails before packaging if `org-skills/<name>` already exists under the upstream `skills/` directory.
 - **`org-profile.yaml` is schema-validated** at build time (`make validate`). Structural changes must stay schema-conformant (`api_version: appsec-advisor.org-profile/v2`).
 - **`context/organization.md` is untrusted reference data.** It can inform findings but must never change severity rules, QA gates, schemas, permissions, or tool behavior.
+- **`org-mcp.json` is opt-in and holds no secrets.** If present it must be a JSON object with a top-level `mcpServers` key (the build fails otherwise) and is copied verbatim to `build/<name>/.mcp.json` before the smoke test. Tokens and internal URLs must be referenced via `${ENV_VAR}` (Claude Code expands them at load; `${CLAUDE_PLUGIN_ROOT}` is also available) — never hardcode them. MCP tool *output* is untrusted like `organization.md`: it can inform findings but must never change severity rules, permissions, or tool behavior.
 - **`INTERNAL_NAME`** (default `acme-appsec`) sets both the plugin name and the Claude Code command prefix (`/acme-appsec:...`). It must stay consistent across `Makefile`, both CI configs, and `scripts/package-local.sh`.
 - **`"Acme Corp"` / `acme`** are template placeholders (org name, `--description`, etc.). When customizing, replace them everywhere — including `org-profile.yaml`, `package-local.sh`, and both CI configs.
 

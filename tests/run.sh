@@ -158,6 +158,23 @@ printf '%s\n' 'description: Bad name.' >"$d/org-skills/BadName/SKILL.md"
   timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
 assert_rc "package: org skill name validation" 2 "$?"
 
+d="$(newdir)"
+mkfake "$d/src"
+printf '%s\n' '{"mcpServers":{"acme-sast":{"type":"http","url":"${SAST_MCP_URL}"}}}' >"$d/org-mcp.json"
+(cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" INTERNAL_NAME=acme-appsec \
+  timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && [ -f "$d/build/acme-appsec/.mcp.json" ]; then
+  pass "package: org MCP overlay reaches build"
+else fail "package: org MCP overlay reaches build" "rc=$rc"; fi
+
+d="$(newdir)"
+mkfake "$d/src"
+printf '%s\n' '{"servers":{}}' >"$d/org-mcp.json"
+(cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" INTERNAL_NAME=acme-appsec \
+  timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
+assert_rc "package: org MCP requires mcpServers key" 2 "$?"
+
 # ── init-org-repo.sh ─────────────────────────────────────────────────────────
 echo "--- init-org-repo.sh ---"
 # answers order: org-name, org-id(default), plugin(default), owner(default),
