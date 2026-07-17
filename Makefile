@@ -3,7 +3,7 @@ APPSEC_ADVISOR_REF ?= latest
 APPSEC_ADVISOR_DEST ?= upstream/appsec-advisor
 APPSEC_ADVISOR_SOURCE ?= $(APPSEC_ADVISOR_DEST)
 INTERNAL_NAME ?= acme-appsec
-VERSION ?= 0.4.0-local
+VERSION ?= 0.5.0-local
 
 ifeq ($(APPSEC_ADVISOR_SOURCE),$(APPSEC_ADVISOR_DEST))
 FETCH_TARGET := fetch-upstream

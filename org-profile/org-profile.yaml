@@ -12,10 +12,16 @@ organization:
   owner: Acme AppSec Team
 
 compatibility:
-  core: ">=0.4 <0.6"
+  core: ">=0.5 <0.6"
 
 policy:
   disable_opus: true
+  # Hosts the tool may fetch from (requirements catalog, related-repo models).
+  # When set, every remote fetch is restricted to these hosts on top of the
+  # always-on SSRF guard. Keep the internal catalog host reachable.
+  url_allowlist:
+    - security.example.internal
+    - raw.githubusercontent.com
 
 default_preset: ci-standard
 
@@ -39,9 +45,32 @@ llm_context:
       purpose: organization_background
       max_bytes: 50000
 
+# Prompt-time security coaching: org-defined steering topics injected as
+# advisory context (never model instructions). Each topic is triggers ->
+# guidance + requirement IDs. See docs/security-coach-skill.md upstream.
+security_coach:
+  enabled_by_default: true
+  max_requirements_per_topic: 3
+  topics:
+    payments:
+      triggers: [payment, payout, refund, settlement]
+      guidance: Payment flows must post to the ledger idempotently and require dual approval on refunds.
+      requirements: [ACME-PAY-IDEMPOTENT, ACME-PAY-DUAL-APPROVAL]
+
 actors:
   inherit_defaults: true
   add: actors/*.yaml
+
+# Org-declared Claude Code hooks bundled into the packaged plugin's hooks.json.
+# The script lives under org-profile/hooks/ and is referenced via
+# ${CLAUDE_PLUGIN_ROOT}. Org hooks run at Claude Code's event layer only; they
+# never reach the analysis pipeline. Each hook id must also be allowlisted in
+# package-policy.yaml (plugin_surface.hooks) to be included in the build.
+hooks:
+  block-risky-bash:
+    event: PreToolUse
+    matcher: Bash
+    command: python3 ${CLAUDE_PLUGIN_ROOT}/org-profile/hooks/guard.py
 
 presets:
   ci-standard:
@@ -51,6 +80,12 @@ presets:
       sarif: true
     requirements:
       enabled: true
+      # Default CI gate for the requirements skills. CLI flags
+      # (--gate / --gate-on / --priority-floor) override these.
+      gate:
+        mode: enforce
+        gate_on: fail
+        priority_floor: MUST
     context:
       document_ids:
         - organization
@@ -64,6 +99,9 @@ presets:
       max_cost_usd: 20
       max_resumes: 2
       tracing: true
+      # Headless/CI severity gate: non-zero exit when a run adds threats at or
+      # above this severity. The --fail-on CLI flag overrides it.
+      fail_on: high
 
   release-review:
     base_mode: thorough

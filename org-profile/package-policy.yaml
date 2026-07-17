@@ -20,3 +20,6 @@ plugin_surface:
   hooks:
     include:
       - agent-logger
+      # Org-declared hooks from org-profile.yaml (hooks:) must be listed here to
+      # be included in the build — this is an allowlist.
+      - block-risky-bash

@@ -63,9 +63,10 @@ commands, `org-skills/`:
 
 | File | What it controls |
 |---|---|
-| `org-profile/org-profile.yaml` | The main settings — presets, cost & time limits, requirements source, output formats |
+| `org-profile/org-profile.yaml` | The main settings — presets, cost & time limits, requirements source, output formats, CI gates, security coaching, org hooks |
 | `org-profile/context/organization.md` | A short description of Acme Corp, used as background for analyses |
 | `org-profile/actors/*.yaml` | Custom threat actors to consider |
+| `org-profile/hooks/*.py` | Scripts for Acme-owned Claude Code hooks declared in the profile |
 | `org-profile/package-policy.yaml` | Which skills and hooks are included in the build |
 | `org-skills/<skill-id>/SKILL.md` | Acme-owned skills shipped next to upstream skills |
 
@@ -74,6 +75,8 @@ The things you'll most often adjust in `org-profile.yaml`:
 - **Requirements catalog** — point `requirements_yaml_url` at Acme Corp's security requirements.
 - **Presets** — `ci-standard` for everyday runs, `release-review` for thorough release checks. Pick the default with `default_preset`.
 - **Guardrails** — each preset caps `max_cost_usd` and `max_wall_time` so runs stay predictable.
+- **CI gates** — `requirements.gate` and `guardrails.fail_on` (per preset) make CI runs fail on unmet requirements or high-severity findings.
+- **Security coaching & hooks** — `security_coach` topics and `policy.url_allowlist` are org-wide; `hooks:` bundles Acme-owned Claude Code hooks. See upstream [`docs/org-profiles.md`](https://github.com/matthiasrohr/appsec-advisor/blob/main/docs/org-profiles.md).
 
 After any change, rebuild with `make package`.
 

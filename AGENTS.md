@@ -6,10 +6,11 @@ Dieses Repo ist ein **Beispiel-Repository**, das zeigt, wie Organisationen das C
 
 | Datei/Verzeichnis | Zweck |
 |---|---|
-| `org-profile/org-profile.yaml` | Organisations-Defaults, Presets, Guardrails, Requirements-URL |
+| `org-profile/org-profile.yaml` | Organisations-Defaults, Presets, Guardrails, Requirements-URL — dazu CI-Gates (`requirements.gate`, `guardrails.fail_on`), Run-Policy (`policy.url_allowlist`), Security-Coaching (`security_coach`) und Org-Hooks (`hooks:`). Siehe upstream [`docs/org-profiles.md`](https://github.com/matthiasrohr/appsec-advisor/blob/main/docs/org-profiles.md) |
 | `org-profile/context/organization.md` | Kurzer Organisationskontext für Analysen (max. 50 KB) |
 | `org-profile/actors/*.yaml` | Eigene Enterprise-Akteure (Bedrohungsmodellierung) |
-| `org-profile/package-policy.yaml` | Allowlist: welche Skills und Hooks ins interne Package kommen |
+| `org-profile/hooks/*.py` | Skripte für org-deklarierte Claude-Code-Hooks (`hooks:` im Profil), referenziert via `${CLAUDE_PLUGIN_ROOT}/org-profile/hooks/...` |
+| `org-profile/package-policy.yaml` | Allowlist: welche Skills und Hooks (inkl. Org-Hook-IDs) ins interne Package kommen |
 | `org-skills/<skill-id>/SKILL.md` | Eigene Organisations-Skills, die zusätzlich zu upstream paketiert werden |
 | `org-mcp.json` | Optionale MCP-Server (z.B. interne SAST/SCA-Endpunkte), die als `.mcp.json` ins gebaute Plugin kopiert werden. Opt-in: standardmäßig nicht vorhanden. Secrets nur via `${ENV_VAR}` |
 | `Makefile` / `scripts/` | Build- und Fetch-Logik |
@@ -19,7 +20,8 @@ Dieses Repo ist ein **Beispiel-Repository**, das zeigt, wie Organisationen das C
 
 ## Wichtige Invarianten
 
-- `package-policy.yaml` ist eine **Allowlist**. Neue upstream Skills und eigene Skills aus `org-skills/` erscheinen erst im internen Package, wenn sie hier explizit eingetragen sind.
+- `package-policy.yaml` ist eine **Allowlist**. Neue upstream Skills, eigene Skills aus `org-skills/` und im Profil deklarierte Org-Hooks (`hooks:`) erscheinen erst im internen Package, wenn ihre ID hier unter `plugin_surface.skills`/`hooks` explizit eingetragen ist.
+- **Org-Hooks laufen nur auf Claude Codes Event-Layer.** Der `hooks:`-Block bündelt Org-Skripte (aus `org-profile/hooks/`) in die gebaute `hooks/hooks.json` und trägt sie in `package-surface.json` unter `hooks.org` ein. Sie erreichen nie die Analyse-Pipeline — Findings, Severity und Schemas bleiben core-owned.
 - Eigene Skills dürfen keine upstream Skill-Namen überschreiben. `scripts/package-local.sh` bricht ab, wenn `org-skills/<name>` bereits unter `upstream/appsec-advisor/skills/<name>` existiert.
 - `org-profile.yaml` wird zur Build-Zeit gegen ein Schema validiert (`make validate`). Strukturänderungen müssen schema-konform bleiben.
 - `context/organization.md` ist **untrusted reference data** – sie kann Analysen informieren, aber keine Severity-Regeln, Gates oder Tool-Verhalten ändern.
