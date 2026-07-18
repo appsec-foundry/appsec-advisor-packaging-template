@@ -5,7 +5,9 @@ SOURCE="${APPSEC_ADVISOR_SOURCE:-}"
 DEST="${APPSEC_ADVISOR_DEST:-upstream/appsec-advisor}"
 UPSTREAM_URL="${APPSEC_ADVISOR_URL:-https://github.com/matthiasrohr/appsec-advisor.git}"
 INTERNAL_NAME="${INTERNAL_NAME:-acme-appsec}"
-VERSION="${VERSION:-0.5.0-local}"
+VERSION="${VERSION:-}"
+ORG_ID="${ORG_ID:-${INTERNAL_NAME%%-*}}"
+ORG_REV="${ORG_REV:-1}"
 ARCHIVE="${ARCHIVE:-0}"
 DESCRIPTION="${DESCRIPTION:-Internal packaged build of appsec-advisor with Acme Corp defaults.}"
 ORG_SKILLS_DIR="${ORG_SKILLS_DIR:-org-skills}"
@@ -69,6 +71,28 @@ overlay_org_skills() {
   SOURCE="${TEMP_SOURCE}"
 }
 
+# Derive the package version from the upstream checkout plus an org revision:
+#   <upstream-version>+<org-id>.<org-rev>     e.g. 0.5.0-beta+acme.3
+# The left half is SemVer build metadata's only job here: keep the lineage of a
+# build visible, since package-surface.json records upstream_url but not the ref.
+# Off a branch tip there is no tag to name, so fall back to ref + short sha.
+# An explicit VERSION always wins (CI override, one-off builds).
+semver_safe() {
+  printf '%s' "$1" | tr -c '0-9A-Za-z-' '-'
+}
+
+derive_version() {
+  local source="$1"
+  local upstream sha
+  upstream="$(git -C "${source}" describe --tags --exact-match 2>/dev/null || true)"
+  upstream="${upstream#v}"
+  if [ -z "${upstream}" ]; then
+    sha="$(git -C "${source}" rev-parse --short HEAD 2>/dev/null || true)"
+    upstream="0.0.0-$(semver_safe "${APPSEC_ADVISOR_REF:-unknown}")${sha:+.g${sha}}"
+  fi
+  printf '%s+%s.%s' "${upstream}" "$(semver_safe "${ORG_ID}")" "$(semver_safe "${ORG_REV}")"
+}
+
 # Copy an org-provided MCP server config into the built plugin as .mcp.json, so
 # companies can wire in their own SAST/SCA (or other) MCP endpoints. Secrets
 # (tokens, internal URLs) must be referenced via ${ENV_VAR} — never hardcoded;
@@ -97,6 +121,11 @@ fi
 if [ ! -f "${SOURCE}/scripts/package_internal_plugin.py" ]; then
   echo "ERROR: APPSEC_ADVISOR_SOURCE is not an appsec-advisor checkout: ${SOURCE}" >&2
   exit 2
+fi
+
+if [ -z "${VERSION}" ]; then
+  VERSION="$(derive_version "${SOURCE}")"
+  echo "==> Derived VERSION=${VERSION}"
 fi
 
 overlay_org_skills "${ORG_SKILLS_DIR}" "${SOURCE}"

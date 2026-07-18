@@ -25,13 +25,25 @@ make rebuild       # clean (removes upstream/ build/ dist/) then package
 make clean         # remove generated dirs
 make ci-github     # install .github/workflows/package.yml
 make ci-gitlab     # install .gitlab-ci.yml
-ARCHIVE=1 VERSION=1.0.0 make package-archive   # produce dist/*.tgz + .sha256
+ARCHIVE=1 ORG_REV=3 make package-archive       # produce dist/*.tgz + .sha256
 
 # Test the built plugin in Claude Code:
 claude --plugin-dir build/<INTERNAL_NAME>
 ```
 
-Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstream repo or fork), `APPSEC_ADVISOR_REF` (defaults to the pinned `v0.5.0-beta`; `latest` resolves to the newest `v*` tag instead), `APPSEC_ADVISOR_SOURCE` (use an existing local checkout, skips fetch), `ORG_SKILLS_DIR` (defaults to `org-skills`), `ORG_MCP_FILE` (defaults to `org-mcp.json`), `INTERNAL_NAME`, `VERSION`.
+Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstream repo or fork), `APPSEC_ADVISOR_REF` (defaults to the pinned `v0.5.0-beta`; `latest` resolves to the newest `v*` tag instead), `APPSEC_ADVISOR_SOURCE` (use an existing local checkout, skips fetch), `ORG_SKILLS_DIR` (defaults to `org-skills`), `ORG_MCP_FILE` (defaults to `org-mcp.json`), `INTERNAL_NAME`, `ORG_ID`, `ORG_REV`, `VERSION`.
+
+### Package versioning
+
+`package-local.sh` derives the version from upstream lineage plus an org revision counter — `VERSION` is only an override:
+
+```
+<upstream-version>+<org-id>.<org-rev>     e.g. 0.5.0-beta+acme.3
+```
+
+Left half: the upstream checkout's tag (`git describe --tags --exact-match`, `v` stripped). Off a branch tip there is no tag to name, so it falls back to `0.0.0-<ref>.g<shortsha>`. Right half is SemVer build metadata: `ORG_ID` (defaults to the first segment of `INTERNAL_NAME`) and `ORG_REV` (defaults to `1`).
+
+Bump rule: increment `ORG_REV` for org-only changes (`org-profile/`, `org-skills/`, `org-mcp.json`, `package-policy.yaml`); when `APPSEC_ADVISOR_REF` moves, the left half changes and `ORG_REV` restarts at 1. Both CI templates set `ORG_REV` to the repo tag on tag pipelines, else the commit sha, and glob `dist/<name>-*.tgz` for artifacts rather than reconstructing the version string.
 
 ### Tracking upstream: release vs branch
 

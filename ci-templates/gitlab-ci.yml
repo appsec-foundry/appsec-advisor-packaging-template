@@ -7,7 +7,8 @@ variables:
   APPSEC_ADVISOR_URL: "https://github.com/matthiasrohr/appsec-advisor.git"
   # Pin to a concrete release tag for reproducible builds. Override via CI/CD variables.
   APPSEC_ADVISOR_REF: "v0.5.0-beta"
-  VERSION: "0.5.0-internal.${CI_COMMIT_SHORT_SHA}"
+  # The package version is derived by package-local.sh as <upstream>+<org-id>.<org-rev>
+  # (ORG_REV is set per-pipeline below). Set a VERSION CI/CD variable to override it.
   PYTHONDONTWRITEBYTECODE: "1"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
@@ -43,10 +44,13 @@ package:
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
   script:
+    # Org revision: the repo tag on tag pipelines (v1.2.0 -> 1.2.0), else the commit.
+    - export ORG_REV="${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}"
+    - export ORG_REV="${ORG_REV#v}"
     - ARCHIVE=1 scripts/package-local.sh
   artifacts:
-    name: "${INTERNAL_NAME}-${VERSION}"
+    name: "${INTERNAL_NAME}-${CI_COMMIT_SHORT_SHA}"
     paths:
-      - "dist/${INTERNAL_NAME}-${VERSION}.tgz"
-      - "dist/${INTERNAL_NAME}-${VERSION}.tgz.sha256"
+      - "dist/${INTERNAL_NAME}-*.tgz"
+      - "dist/${INTERNAL_NAME}-*.tgz.sha256"
     expire_in: 30 days

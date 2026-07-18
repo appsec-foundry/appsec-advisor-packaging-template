@@ -41,8 +41,20 @@ make upstream-check                   # Read-only Drift-Check: meldet, ob der Bu
 make package                          # Upstream holen + Package bauen + Smoke-Test
 APPSEC_ADVISOR_REF=v0.5.0-beta make package   # Konkretes Release pinnen
 make validate                         # Nur org-profile.yaml validieren
-ARCHIVE=1 VERSION=0.5.0-example make package-archive  # .tgz + .sha256 erzeugen
+ARCHIVE=1 ORG_REV=3 make package-archive  # .tgz + .sha256 erzeugen
 ```
+
+### Versionierung des Packages
+
+Die Version wird von `package-local.sh` aus der Upstream-Herkunft plus einem Org-Revisionszähler abgeleitet:
+
+```
+<upstream-version>+<org-id>.<org-rev>     z.B. 0.5.0-beta+acme.3
+```
+
+Linke Hälfte: der Tag des Upstream-Checkouts (`git describe --tags --exact-match`, `v` gestrippt). Steht der Build auf einem Branch-Tip statt auf einem Tag, gibt es keinen Tag zu benennen → Fallback `0.0.0-<ref>.g<shortsha>`. Rechte Hälfte ist SemVer-Build-Metadata: `ORG_ID` (Default: erstes Segment von `INTERNAL_NAME`) und `ORG_REV` (Default `1`).
+
+Bump-Regel: `ORG_REV` hochzählen, wenn sich nur Org-Inhalte ändern (`org-profile/`, `org-skills/`, `org-mcp.json`, `package-policy.yaml`); wandert `APPSEC_ADVISOR_REF`, ändert sich die linke Hälfte und `ORG_REV` startet wieder bei 1. In CI setzt die Pipeline `ORG_REV` auf den Repo-Tag (Tag-Pipeline) bzw. die Commit-SHA. Ein explizit gesetztes `VERSION` überschreibt den ganzen String.
 
 ### Upstream verfolgen: Release vs. Branch
 
@@ -74,4 +86,5 @@ claude --plugin-dir build/acme-appsec
 | `APPSEC_ADVISOR_URL` | upstream GitHub | Upstream-Repo oder interner Fork |
 | `APPSEC_ADVISOR_REF` | `v0.5.0-beta` | Tag, Branch oder `latest` |
 | `INTERNAL_NAME` | `acme-appsec` | Plugin-Name und Command-Namespace |
-| `VERSION` | CI-spezifisch | Version des erzeugten Packages |
+| `ORG_REV` | Repo-Tag bzw. Commit-SHA | Org-Revision in der abgeleiteten Version |
+| `VERSION` | abgeleitet | Überschreibt die abgeleitete Version komplett |
