@@ -35,6 +35,9 @@ claude --plugin-dir /abs/path/to/<your-packaging-repo>/build/acme-appsec
 | Command | What it does |
 |---|---|
 | `/acme-appsec:create-threat-model` | Build a full threat model for your project |
+| `/acme-appsec:ask-threat-model` | Ask anything about the threat model — read-only Q&A |
+| `/acme-appsec:review-threat-model` | Triage findings: browse, fix, accept, or plan remediation |
+| `/acme-appsec:show-threat-model` | Print the summary block: findings, backlog, coverage |
 | `/acme-appsec:audit-security-requirements` | Check the codebase against Acme Corp requirements |
 | `/acme-appsec:verify-requirements` | Check your recent changes against the requirements |
 | `/acme-appsec:threat-model-health` | Quick check: is the threat model still current? |

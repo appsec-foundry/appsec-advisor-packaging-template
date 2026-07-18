@@ -8,6 +8,9 @@ plugin_surface:
   skills:
     include:
       - create-threat-model
+      - ask-threat-model
+      - review-threat-model
+      - show-threat-model
       - audit-security-requirements
       - verify-requirements
       - status
