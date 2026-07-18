@@ -9,3 +9,10 @@ __pycache__/
 *.py[cod]
 
 .DS_Store
+.idea/
+.vscode/
+
+# Claude Code loads a root .mcp.json directly — it may hold tokens. Org-owned
+# MCP servers belong in the committed org-mcp.json, which the build copies to
+# build/<name>/.mcp.json.
+.mcp.json
