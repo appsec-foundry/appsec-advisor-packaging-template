@@ -31,14 +31,15 @@ ARCHIVE=1 VERSION=1.0.0 make package-archive   # produce dist/*.tgz + .sha256
 claude --plugin-dir build/<INTERNAL_NAME>
 ```
 
-Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstream repo or fork), `APPSEC_ADVISOR_REF` (`latest` resolves to newest `v*` tag; pin for reproducible builds), `APPSEC_ADVISOR_SOURCE` (use an existing local checkout, skips fetch), `ORG_SKILLS_DIR` (defaults to `org-skills`), `ORG_MCP_FILE` (defaults to `org-mcp.json`), `INTERNAL_NAME`, `VERSION`.
+Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstream repo or fork), `APPSEC_ADVISOR_REF` (defaults to the pinned `v0.5.0-beta`; `latest` resolves to the newest `v*` tag instead), `APPSEC_ADVISOR_SOURCE` (use an existing local checkout, skips fetch), `ORG_SKILLS_DIR` (defaults to `org-skills`), `ORG_MCP_FILE` (defaults to `org-mcp.json`), `INTERNAL_NAME`, `VERSION`.
 
 ### Tracking upstream: release vs branch
 
 `APPSEC_ADVISOR_REF` is the single knob for "what do I build from". It accepts a `v*` tag, the literal `latest`, **or any branch name** — `fetch-upstream.sh` checks tags and heads, and a branch ref is re-fetched to its current tip on every run (a `--depth 1` detached checkout = effectively a pull).
 
 ```bash
-make package                              # latest release (REF=latest default → newest v* tag)
+make package                              # the pinned release (REF default, currently v0.5.0-beta)
+APPSEC_ADVISOR_REF=latest make package    # follow the newest v* tag instead
 APPSEC_ADVISOR_REF=v0.5.0-beta make package # pin a specific release (reproducible builds)
 APPSEC_ADVISOR_REF=develop make package   # follow a branch tip (e.g. upstream dev branch)
 APPSEC_ADVISOR_REF=main    make package   # follow the default branch

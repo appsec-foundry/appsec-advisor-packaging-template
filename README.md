@@ -142,7 +142,7 @@ Run `make ci-github` or `make ci-gitlab` to install the CI pipeline (see Quick S
 | Variable | Default | Description |
 |---|---|---|
 | `APPSEC_ADVISOR_URL` | upstream GitHub | Upstream repo or internal fork |
-| `APPSEC_ADVISOR_REF` | `latest` | Release tag, branch, or commit — pin for reproducible builds |
+| `APPSEC_ADVISOR_REF` | `v0.5.0-beta` | Release tag, branch, or `latest` — pinned so builds are reproducible |
 | `INTERNAL_NAME` | `acme-appsec` | Plugin name and Claude Code command namespace |
 | `VERSION` | derived from git tag or commit SHA | Version of the produced package |
 

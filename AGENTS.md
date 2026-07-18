@@ -49,7 +49,8 @@ ARCHIVE=1 VERSION=0.5.0-example make package-archive  # .tgz + .sha256 erzeugen
 `APPSEC_ADVISOR_REF` ist der eine Knopf für „woraus wird gebaut". Akzeptiert ein `v*`-Tag, das Literal `latest` **oder einen Branch-Namen** — `fetch-upstream.sh` prüft Tags und Heads, und ein Branch-Ref wird bei jedem Lauf auf seinen aktuellen Tip nachgezogen (`--depth 1` detached checkout = effektiv ein Pull).
 
 ```bash
-make package                              # Neuestes Release (Default REF=latest → höchstes v*-Tag)
+make package                              # Das gepinnte Release (Default REF, aktuell v0.5.0-beta)
+APPSEC_ADVISOR_REF=latest make package    # Stattdessen dem höchsten v*-Tag folgen
 APPSEC_ADVISOR_REF=v0.5.0-beta make package # Konkretes Release pinnen (reproduzierbar)
 APPSEC_ADVISOR_REF=develop make package   # Branch-Tip verfolgen (z.B. Upstream-Dev-Branch)
 APPSEC_ADVISOR_REF=main    make package   # Default-Branch verfolgen
@@ -71,6 +72,6 @@ claude --plugin-dir build/acme-appsec
 | Variable | Default | Bedeutung |
 |---|---|---|
 | `APPSEC_ADVISOR_URL` | upstream GitHub | Upstream-Repo oder interner Fork |
-| `APPSEC_ADVISOR_REF` | `latest` | Tag, Branch oder Commit |
+| `APPSEC_ADVISOR_REF` | `v0.5.0-beta` | Tag, Branch oder `latest` |
 | `INTERNAL_NAME` | `acme-appsec` | Plugin-Name und Command-Namespace |
 | `VERSION` | CI-spezifisch | Version des erzeugten Packages |
