@@ -39,9 +39,9 @@ make check                            # Offline-Gate: lint + test (kein Netzwerk
 make release-check                    # Release-Boundary-Gate: check + upstream-check (advisory) + validate + package (baut ein sauberes Plugin gegen Upstream)
 make upstream-check                   # Read-only Drift-Check: meldet, ob der Build-Ref auf einen neuen Commit gewandert ist oder ein neueres v*-Release existiert (Exit 0=aktuell, 1=Drift, 2=Fehler)
 make package                          # Upstream holen + Package bauen + Smoke-Test
-APPSEC_ADVISOR_REF=v0.4.0-beta make package   # Konkretes Release pinnen
+APPSEC_ADVISOR_REF=v0.5.0-beta make package   # Konkretes Release pinnen
 make validate                         # Nur org-profile.yaml validieren
-ARCHIVE=1 VERSION=0.4.0-example make package-archive  # .tgz + .sha256 erzeugen
+ARCHIVE=1 VERSION=0.5.0-example make package-archive  # .tgz + .sha256 erzeugen
 ```
 
 ### Upstream verfolgen: Release vs. Branch
@@ -50,7 +50,7 @@ ARCHIVE=1 VERSION=0.4.0-example make package-archive  # .tgz + .sha256 erzeugen
 
 ```bash
 make package                              # Neuestes Release (Default REF=latest → höchstes v*-Tag)
-APPSEC_ADVISOR_REF=v0.4.0 make package    # Konkretes Release pinnen (reproduzierbar)
+APPSEC_ADVISOR_REF=v0.5.0-beta make package # Konkretes Release pinnen (reproduzierbar)
 APPSEC_ADVISOR_REF=develop make package   # Branch-Tip verfolgen (z.B. Upstream-Dev-Branch)
 APPSEC_ADVISOR_REF=main    make package   # Default-Branch verfolgen
 ```

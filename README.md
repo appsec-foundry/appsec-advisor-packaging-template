@@ -121,7 +121,7 @@ make clean
 make upstream-check
 
 # Pin a specific upstream release
-APPSEC_ADVISOR_REF=v0.4.0-beta make package
+APPSEC_ADVISOR_REF=v0.5.0-beta make package
 
 # Follow a branch tip instead of a release (re-pulled to its tip on each build)
 APPSEC_ADVISOR_REF=develop make package

@@ -39,7 +39,7 @@ Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstre
 
 ```bash
 make package                              # latest release (REF=latest default → newest v* tag)
-APPSEC_ADVISOR_REF=v0.4.0 make package    # pin a specific release (reproducible builds)
+APPSEC_ADVISOR_REF=v0.5.0-beta make package # pin a specific release (reproducible builds)
 APPSEC_ADVISOR_REF=develop make package   # follow a branch tip (e.g. upstream dev branch)
 APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 ```

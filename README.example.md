@@ -141,7 +141,7 @@ make rebuild
 To pin a specific version (recommended, so builds stay reproducible):
 
 ```bash
-APPSEC_ADVISOR_REF=v0.4.0 make rebuild
+APPSEC_ADVISOR_REF=v0.5.0-beta make rebuild
 ```
 
 To follow a branch tip instead of a release (e.g. an upstream dev branch), set

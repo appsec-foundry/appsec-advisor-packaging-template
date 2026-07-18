@@ -6,7 +6,7 @@ variables:
   INTERNAL_NAME: "acme-appsec"
   APPSEC_ADVISOR_URL: "https://github.com/matthiasrohr/appsec-advisor.git"
   # Pin to a concrete release tag for reproducible builds. Override via CI/CD variables.
-  APPSEC_ADVISOR_REF: "v0.5.0"
+  APPSEC_ADVISOR_REF: "v0.5.0-beta"
   VERSION: "0.5.0-internal.${CI_COMMIT_SHORT_SHA}"
   PYTHONDONTWRITEBYTECODE: "1"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
