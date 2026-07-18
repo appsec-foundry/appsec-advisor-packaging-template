@@ -7,6 +7,8 @@
 
 Template repo for building an internal [`appsec-advisor`](https://github.com/matthiasrohr/appsec-advisor) Claude Code plugin with your own org-specific defaults, requirements catalog, and cost guardrails.
 
+> **Compatible with appsec-advisor `v0.5.0-beta`.** Verified against that release: the org profile validates against the 0.5 schema (including `hooks:`, `security_coach`, `policy.url_allowlist` and the CI gates), and the 0.5 threat-model skills — `ask-`, `review-`, `show-` and `update-threat-model` — are packaged. CI pins `v0.5.0-beta`; override with `APPSEC_ADVISOR_REF`.
+
 ## Quick Start
 
 **Prerequisites:** `git`, `python3` (3.10+), `make`
