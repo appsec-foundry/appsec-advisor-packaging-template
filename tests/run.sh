@@ -199,6 +199,22 @@ if [ "$rc" = 0 ] && [ ! -f "$tgt/org-profile/requirements.yaml" ]; then
   pass "init: demo=no"
 else fail "init: demo=no" "rc=$rc"; fi
 
+# The scaffold must be self-contained: a file that the Makefile, the profile or
+# the CI templates reference but init never copies only fails much later, at
+# 'make package' / 'make upstream-check' time in the user's repo.
+missing=""
+for f in scripts/fetch-upstream.sh scripts/upstream-check.sh scripts/package-local.sh \
+         org-profile/package-policy.yaml org-profile/org-profile.yaml Makefile; do
+  [ -f "$tgt/$f" ] || missing="$missing $f"
+done
+# every hook script declared in the rendered profile has to exist too
+for h in $(sed -n 's|.*org-profile/hooks/\([A-Za-z0-9_.-]*\).*|\1|p' \
+             "$tgt/org-profile/org-profile.yaml" 2>/dev/null); do
+  [ -f "$tgt/org-profile/hooks/$h" ] || missing="$missing org-profile/hooks/$h"
+done
+if [ -z "$missing" ]; then pass "init: scaffold is self-contained"
+else fail "init: scaffold is self-contained" "missing:$missing"; fi
+
 d="$(newdir)"
 tgt="$d/out"
 mkdir -p "$tgt"

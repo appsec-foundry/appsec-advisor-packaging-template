@@ -99,6 +99,7 @@ keep_if_reinit() { [ "${REINIT}" = true ] && [ -f "$1" ] && { echo "  kept: $1";
 mkdir -p \
   "${TARGET_DIR}/org-profile/context" \
   "${TARGET_DIR}/org-profile/actors" \
+  "${TARGET_DIR}/org-profile/hooks" \
   "${TARGET_DIR}/org-skills" \
   "${TARGET_DIR}/scripts" \
   "${TARGET_DIR}/ci-templates/github/workflows"
@@ -106,6 +107,8 @@ mkdir -p \
 # Copy fetch script verbatim; package-local.sh is rendered below with org substitutions
 cp "${TEMPLATE_BASE}/scripts/fetch-upstream.sh" "${TARGET_DIR}/scripts/fetch-upstream.sh"
 chmod +x "${TARGET_DIR}/scripts/fetch-upstream.sh"
+cp "${TEMPLATE_BASE}/scripts/upstream-check.sh" "${TARGET_DIR}/scripts/upstream-check.sh"
+chmod +x "${TARGET_DIR}/scripts/upstream-check.sh"
 
 cp "${TEMPLATE_BASE}/ci-templates/github/workflows/package.yml" \
    "${TARGET_DIR}/ci-templates/github/workflows/package.yml"
@@ -118,6 +121,14 @@ if [ -f "${TEMPLATE_BASE}/org-skills/README.md" ]; then
     cp "${TEMPLATE_BASE}/org-skills/README.md" \
        "${TARGET_DIR}/org-skills/README.md"
 fi
+# The rendered org-profile.yaml declares the block-risky-bash hook and
+# package-policy.yaml allowlists it, so the script must ship with the scaffold.
+keep_if_reinit "${TARGET_DIR}/org-profile/hooks/guard.py" || {
+  cp "${TEMPLATE_BASE}/org-profile/hooks/guard.py" \
+     "${TARGET_DIR}/org-profile/hooks/guard.py"
+  chmod +x "${TARGET_DIR}/org-profile/hooks/guard.py"
+}
+
 keep_if_reinit "${TARGET_DIR}/org-profile/package-policy.yaml" || \
   cp "${TEMPLATE_BASE}/org-profile/package-policy.yaml" \
      "${TARGET_DIR}/org-profile/package-policy.yaml"
