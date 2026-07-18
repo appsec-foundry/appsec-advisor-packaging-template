@@ -25,7 +25,7 @@ lint:
   before_script:
     - apt-get update -qq && apt-get install -y -qq --no-install-recommends shellcheck
   script:
-    - shellcheck scripts/*.sh tests/run.sh
+    - shellcheck scripts/*.sh $([ -f tests/run.sh ] && echo tests/run.sh)
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
 
