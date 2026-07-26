@@ -46,8 +46,28 @@ claude --plugin-dir /abs/path/to/<your-packaging-repo>/build/acme-appsec
 
 ### From the command line (headless)
 
-For CI or scripted runs, add `-p` to run the same commands non-interactively —
-from your project directory, with the same absolute `--plugin-dir` path:
+For CI or scripted runs, use the `run-headless.sh` wrapper that ships **inside
+the build**. It handles authentication, cost and duration caps, SARIF output,
+and CI exit codes — and it already targets the `acme-appsec` command namespace,
+so no flags change from the upstream project:
+
+```bash
+# Minimal incremental scan with cost/time caps, writing SARIF
+build/acme-appsec/scripts/run-headless.sh \
+  --repo /path/to/your/project \
+  --incremental \
+  --max-duration 1800 \
+  --max-budget 5 \
+  --sarif
+```
+
+The wrapper locates its own plugin directory, so no `--plugin-dir` is needed.
+See the upstream [headless-mode guide](https://github.com/matthiasrohr/appsec-advisor/blob/main/docs/headless-mode.md)
+for the full flag reference, CI templates (GitHub/GitLab/Jenkins), and
+pull-request gating.
+
+Alternatively, for a one-off command, add `-p` to `claude` directly — from your
+project directory, with the same absolute `--plugin-dir` path:
 
 ```bash
 # Run a threat model unattended and exit
@@ -145,7 +165,7 @@ make rebuild
 To pin a specific version (recommended, so builds stay reproducible):
 
 ```bash
-APPSEC_ADVISOR_REF=v0.5.0-beta make rebuild
+APPSEC_ADVISOR_REF=v0.5.1-beta make rebuild
 ```
 
 To follow a branch tip instead of a release (e.g. an upstream dev branch), set

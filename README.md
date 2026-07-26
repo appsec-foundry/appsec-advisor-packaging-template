@@ -7,7 +7,7 @@
 
 Template repo for building an internal [`appsec-advisor`](https://github.com/matthiasrohr/appsec-advisor) Claude Code plugin with your own org-specific defaults, requirements catalog, and cost guardrails.
 
-> **Compatible with appsec-advisor `v0.5.0-beta`.** Verified against that release: the org profile validates against the 0.5 schema (including `hooks:`, `security_coach`, `policy.url_allowlist` and the CI gates), and the 0.5 threat-model skills — `ask-`, `review-`, `show-` and `update-threat-model` — are packaged. CI pins `v0.5.0-beta`; override with `APPSEC_ADVISOR_REF`.
+> **Compatible with appsec-advisor `v0.5.1-beta`.** Verified against that release: the org profile validates against the 0.5 schema (including `hooks:`, `security_coach`, `policy.url_allowlist` and the CI gates), and the 0.5 threat-model skills — `ask-`, `review-`, `show-` and `update-threat-model` — are packaged. CI pins `v0.5.1-beta`; override with `APPSEC_ADVISOR_REF`.
 
 ## Quick Start
 
@@ -123,7 +123,7 @@ make clean
 make upstream-check
 
 # Pin a specific upstream release
-APPSEC_ADVISOR_REF=v0.5.0-beta make package
+APPSEC_ADVISOR_REF=v0.5.1-beta make package
 
 # Follow a branch tip instead of a release (re-pulled to its tip on each build)
 APPSEC_ADVISOR_REF=develop make package
@@ -142,7 +142,7 @@ Run `make ci-github` or `make ci-gitlab` to install the CI pipeline (see Quick S
 | Variable | Default | Description |
 |---|---|---|
 | `APPSEC_ADVISOR_URL` | upstream GitHub | Upstream repo or internal fork |
-| `APPSEC_ADVISOR_REF` | `v0.5.0-beta` | Release tag, branch, or `latest` — pinned so builds are reproducible |
+| `APPSEC_ADVISOR_REF` | `v0.5.1-beta` | Release tag, branch, or `latest` — pinned so builds are reproducible |
 | `INTERNAL_NAME` | `acme-appsec` | Plugin name and Claude Code command namespace |
 | `VERSION` | derived from git tag or commit SHA | Version of the produced package |
 

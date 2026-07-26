@@ -39,7 +39,7 @@ make check                            # Offline-Gate: lint + test (kein Netzwerk
 make release-check                    # Release-Boundary-Gate: check + upstream-check (advisory) + validate + package (baut ein sauberes Plugin gegen Upstream)
 make upstream-check                   # Read-only Drift-Check: meldet, ob der Build-Ref auf einen neuen Commit gewandert ist oder ein neueres v*-Release existiert (Exit 0=aktuell, 1=Drift, 2=Fehler)
 make package                          # Upstream holen + Package bauen + Smoke-Test
-APPSEC_ADVISOR_REF=v0.5.0-beta make package   # Konkretes Release pinnen
+APPSEC_ADVISOR_REF=v0.5.1-beta make package   # Konkretes Release pinnen
 make validate                         # Nur org-profile.yaml validieren
 ARCHIVE=1 ORG_REV=3 make package-archive  # .tgz + .sha256 erzeugen
 ```
@@ -49,7 +49,7 @@ ARCHIVE=1 ORG_REV=3 make package-archive  # .tgz + .sha256 erzeugen
 Die Version wird von `package-local.sh` aus der Upstream-Herkunft plus einem Org-Revisionszähler abgeleitet:
 
 ```
-<upstream-version>+<org-id>.<org-rev>     z.B. 0.5.0-beta+acme.3
+<upstream-version>+<org-id>.<org-rev>     z.B. 0.5.1-beta+acme.3
 ```
 
 Linke Hälfte: der Tag des Upstream-Checkouts (`git describe --tags --exact-match`, `v` gestrippt). Steht der Build auf einem Branch-Tip statt auf einem Tag, gibt es keinen Tag zu benennen → Fallback `0.0.0-<ref>.g<shortsha>`. Rechte Hälfte ist SemVer-Build-Metadata: `ORG_ID` (Default: erstes Segment von `INTERNAL_NAME`) und `ORG_REV` (Default `1`).
@@ -61,9 +61,9 @@ Bump-Regel: `ORG_REV` hochzählen, wenn sich nur Org-Inhalte ändern (`org-profi
 `APPSEC_ADVISOR_REF` ist der eine Knopf für „woraus wird gebaut". Akzeptiert ein `v*`-Tag, das Literal `latest` **oder einen Branch-Namen** — `fetch-upstream.sh` prüft Tags und Heads, und ein Branch-Ref wird bei jedem Lauf auf seinen aktuellen Tip nachgezogen (`--depth 1` detached checkout = effektiv ein Pull).
 
 ```bash
-make package                              # Das gepinnte Release (Default REF, aktuell v0.5.0-beta)
+make package                              # Das gepinnte Release (Default REF, aktuell v0.5.1-beta)
 APPSEC_ADVISOR_REF=latest make package    # Stattdessen dem höchsten v*-Tag folgen
-APPSEC_ADVISOR_REF=v0.5.0-beta make package # Konkretes Release pinnen (reproduzierbar)
+APPSEC_ADVISOR_REF=v0.5.1-beta make package # Konkretes Release pinnen (reproduzierbar)
 APPSEC_ADVISOR_REF=develop make package   # Branch-Tip verfolgen (z.B. Upstream-Dev-Branch)
 APPSEC_ADVISOR_REF=main    make package   # Default-Branch verfolgen
 ```
@@ -84,7 +84,7 @@ claude --plugin-dir build/acme-appsec
 | Variable | Default | Bedeutung |
 |---|---|---|
 | `APPSEC_ADVISOR_URL` | upstream GitHub | Upstream-Repo oder interner Fork |
-| `APPSEC_ADVISOR_REF` | `v0.5.0-beta` | Tag, Branch oder `latest` |
+| `APPSEC_ADVISOR_REF` | `v0.5.1-beta` | Tag, Branch oder `latest` |
 | `INTERNAL_NAME` | `acme-appsec` | Plugin-Name und Command-Namespace |
 | `ORG_REV` | Repo-Tag bzw. Commit-SHA | Org-Revision in der abgeleiteten Version |
 | `VERSION` | abgeleitet | Überschreibt die abgeleitete Version komplett |

@@ -1,11 +1,11 @@
 APPSEC_ADVISOR_URL ?= https://github.com/matthiasrohr/appsec-advisor.git
 # Pinned so local builds match CI. Use 'latest' to follow the newest v* tag.
-APPSEC_ADVISOR_REF ?= v0.5.0-beta
+APPSEC_ADVISOR_REF ?= v0.5.1-beta
 APPSEC_ADVISOR_DEST ?= upstream/appsec-advisor
 APPSEC_ADVISOR_SOURCE ?= $(APPSEC_ADVISOR_DEST)
 INTERNAL_NAME ?= acme-appsec
 # Version is derived by scripts/package-local.sh as <upstream>+<org-id>.<org-rev>
-# (e.g. 0.5.0-beta+acme.1). Bump ORG_REV for org-only changes (org-profile/,
+# (e.g. 0.5.1-beta+acme.1). Bump ORG_REV for org-only changes (org-profile/,
 # org-skills/, org-mcp.json, package-policy.yaml); it resets to 1 whenever
 # APPSEC_ADVISOR_REF moves. Set VERSION to override the whole string.
 ORG_REV ?= 1

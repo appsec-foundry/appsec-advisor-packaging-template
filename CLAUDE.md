@@ -31,14 +31,14 @@ ARCHIVE=1 ORG_REV=3 make package-archive       # produce dist/*.tgz + .sha256
 claude --plugin-dir build/<INTERNAL_NAME>
 ```
 
-Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstream repo or fork), `APPSEC_ADVISOR_REF` (defaults to the pinned `v0.5.0-beta`; `latest` resolves to the newest `v*` tag instead), `APPSEC_ADVISOR_SOURCE` (use an existing local checkout, skips fetch), `ORG_SKILLS_DIR` (defaults to `org-skills`), `ORG_MCP_FILE` (defaults to `org-mcp.json`), `INTERNAL_NAME`, `ORG_ID`, `ORG_REV`, `VERSION`.
+Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstream repo or fork), `APPSEC_ADVISOR_REF` (defaults to the pinned `v0.5.1-beta`; `latest` resolves to the newest `v*` tag instead), `APPSEC_ADVISOR_SOURCE` (use an existing local checkout, skips fetch), `ORG_SKILLS_DIR` (defaults to `org-skills`), `ORG_MCP_FILE` (defaults to `org-mcp.json`), `INTERNAL_NAME`, `ORG_ID`, `ORG_REV`, `VERSION`.
 
 ### Package versioning
 
 `package-local.sh` derives the version from upstream lineage plus an org revision counter — `VERSION` is only an override:
 
 ```
-<upstream-version>+<org-id>.<org-rev>     e.g. 0.5.0-beta+acme.3
+<upstream-version>+<org-id>.<org-rev>     e.g. 0.5.1-beta+acme.3
 ```
 
 Left half: the upstream checkout's tag (`git describe --tags --exact-match`, `v` stripped). Off a branch tip there is no tag to name, so it falls back to `0.0.0-<ref>.g<shortsha>`. Right half is SemVer build metadata: `ORG_ID` (defaults to the first segment of `INTERNAL_NAME`) and `ORG_REV` (defaults to `1`).
@@ -50,9 +50,9 @@ Bump rule: increment `ORG_REV` for org-only changes (`org-profile/`, `org-skills
 `APPSEC_ADVISOR_REF` is the single knob for "what do I build from". It accepts a `v*` tag, the literal `latest`, **or any branch name** — `fetch-upstream.sh` checks tags and heads, and a branch ref is re-fetched to its current tip on every run (a `--depth 1` detached checkout = effectively a pull).
 
 ```bash
-make package                              # the pinned release (REF default, currently v0.5.0-beta)
+make package                              # the pinned release (REF default, currently v0.5.1-beta)
 APPSEC_ADVISOR_REF=latest make package    # follow the newest v* tag instead
-APPSEC_ADVISOR_REF=v0.5.0-beta make package # pin a specific release (reproducible builds)
+APPSEC_ADVISOR_REF=v0.5.1-beta make package # pin a specific release (reproducible builds)
 APPSEC_ADVISOR_REF=develop make package   # follow a branch tip (e.g. upstream dev branch)
 APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 ```

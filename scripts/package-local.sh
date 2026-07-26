@@ -72,7 +72,7 @@ overlay_org_skills() {
 }
 
 # Derive the package version from the upstream checkout plus an org revision:
-#   <upstream-version>+<org-id>.<org-rev>     e.g. 0.5.0-beta+acme.3
+#   <upstream-version>+<org-id>.<org-rev>     e.g. 0.5.1-beta+acme.3
 # The left half is SemVer build metadata's only job here: keep the lineage of a
 # build visible, since package-surface.json records upstream_url but not the ref.
 # Off a branch tip there is no tag to name, so fall back to ref + short sha.
@@ -142,7 +142,7 @@ python3 "${SOURCE}/scripts/package_internal_plugin.py" \
   --version "${VERSION}" \
   --description "${DESCRIPTION}" \
   --upstream-url "${UPSTREAM_URL}" \
-  --readme README.md \
+  --readme "build/${INTERNAL_NAME}/README.md" \
   "${EXTRA_ARGS[@]}"
 
 overlay_org_mcp "${ORG_MCP_FILE}" "build/${INTERNAL_NAME}"
