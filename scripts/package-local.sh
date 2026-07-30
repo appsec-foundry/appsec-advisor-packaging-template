@@ -11,7 +11,6 @@ ORG_REV="${ORG_REV:-1}"
 ARCHIVE="${ARCHIVE:-0}"
 DESCRIPTION="${DESCRIPTION:-Internal packaged build of appsec-advisor with Acme Corp defaults.}"
 ORG_SKILLS_DIR="${ORG_SKILLS_DIR:-org-skills}"
-ORG_MCP_FILE="${ORG_MCP_FILE:-org-mcp.json}"
 TEMP_SOURCE=""
 
 cleanup() {
@@ -93,25 +92,11 @@ derive_version() {
   printf '%s+%s.%s' "${upstream}" "$(semver_safe "${ORG_ID}")" "$(semver_safe "${ORG_REV}")"
 }
 
-# Copy an org-provided MCP server config into the built plugin as .mcp.json, so
-# companies can wire in their own SAST/SCA (or other) MCP endpoints. Secrets
-# (tokens, internal URLs) must be referenced via ${ENV_VAR} — never hardcoded;
-# see README. The file is untrusted reference config: MCP tool *output* must not
-# change severity rules, permissions, or tool behavior.
-overlay_org_mcp() {
-  local mcp_file="$1"
-  local plugin_dir="$2"
-
-  if [ ! -f "${mcp_file}" ]; then
-    return 0
-  fi
-  if ! grep -q '"mcpServers"' "${mcp_file}"; then
-    echo "ERROR: ${mcp_file} must be a JSON object with a top-level \"mcpServers\" key" >&2
-    exit 2
-  fi
-  cp "${mcp_file}" "${plugin_dir}/.mcp.json"
-  echo "Overlaid org MCP config: ${mcp_file} -> ${plugin_dir}/.mcp.json"
-}
+# MCP servers are declared in org-profile.yaml under `mcp:` and written by the
+# upstream packager. This repo used to copy an `org-mcp.json` over the finished
+# build instead — which silently replaced whatever the profile produced,
+# including the server selection from package-policy.yaml. Declare them in the
+# profile; secrets belong in ${ENV_VAR}, never in the file.
 
 if [ -z "${SOURCE}" ]; then
   scripts/fetch-upstream.sh
@@ -144,8 +129,6 @@ python3 "${SOURCE}/scripts/package_internal_plugin.py" \
   --upstream-url "${UPSTREAM_URL}" \
   --readme "build/${INTERNAL_NAME}/README.md" \
   "${EXTRA_ARGS[@]}"
-
-overlay_org_mcp "${ORG_MCP_FILE}" "build/${INTERNAL_NAME}"
 
 python3 "${SOURCE}/scripts/smoke_test_package.py" \
   "build/${INTERNAL_NAME}" \

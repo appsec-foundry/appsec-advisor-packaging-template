@@ -78,7 +78,7 @@ Beyond the quick start, these files are yours to edit:
 | `org-profile/actors/*.yaml` | Custom threat actors for threat models — edit or delete |
 | `org-profile/package-policy.yaml` | Allowlist of which skills and hooks to include |
 | `org-skills/<skill-id>/SKILL.md` | Optional organization-owned skills shipped next to upstream skills |
-| `org-mcp.json` | Optional MCP servers (e.g. internal SAST/SCA endpoints) copied into the built plugin's `.mcp.json` — opt-in, secrets via `${ENV_VAR}` only |
+| `org-profile/org-profile.yaml` → `mcp:` | Optional MCP servers (e.g. internal SAST/SCA endpoints), written into the built plugin's `.mcp.json` — secrets via `${ENV_VAR}` only |
 
 `build/`, `dist/`, and `upstream/` are all generated — do not commit them.
 

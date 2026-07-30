@@ -158,22 +158,19 @@ printf '%s\n' 'description: Bad name.' >"$d/org-skills/BadName/SKILL.md"
   timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
 assert_rc "package: org skill name validation" 2 "$?"
 
+# MCP servers are declared in the profile's `mcp:` block and written by the
+# upstream packager. A leftover org-mcp.json from the previous mechanism must no
+# longer be copied over the finished build: it replaced whatever the profile
+# produced, including the server selection from package-policy.yaml.
 d="$(newdir)"
 mkfake "$d/src"
-printf '%s\n' '{"mcpServers":{"acme-sast":{"type":"http","url":"${SAST_MCP_URL}"}}}' >"$d/org-mcp.json"
+printf '%s\n' '{"mcpServers":{"stale":{"type":"http","url":"https://stale.example"}}}' >"$d/org-mcp.json"
 (cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" INTERNAL_NAME=acme-appsec \
   timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
 rc=$?
-if [ "$rc" = 0 ] && [ -f "$d/build/acme-appsec/.mcp.json" ]; then
-  pass "package: org MCP overlay reaches build"
-else fail "package: org MCP overlay reaches build" "rc=$rc"; fi
-
-d="$(newdir)"
-mkfake "$d/src"
-printf '%s\n' '{"servers":{}}' >"$d/org-mcp.json"
-(cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" INTERNAL_NAME=acme-appsec \
-  timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
-assert_rc "package: org MCP requires mcpServers key" 2 "$?"
+if [ "$rc" = 0 ] && ! grep -q stale "$d/build/acme-appsec/.mcp.json" 2>/dev/null; then
+  pass "package: a leftover org-mcp.json no longer overwrites the build"
+else fail "package: a leftover org-mcp.json no longer overwrites the build" "rc=$rc"; fi
 
 # ── init-org-repo.sh ─────────────────────────────────────────────────────────
 echo "--- init-org-repo.sh ---"

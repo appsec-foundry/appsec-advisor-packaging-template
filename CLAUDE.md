@@ -10,7 +10,7 @@ Crucially, the scripts that do the real packaging work (`package_internal_plugin
 
 ## Build pipeline
 
-`make package` runs: `fetch-upstream.sh` (clone/checkout upstream at `APPSEC_ADVISOR_REF`) → optional `org-skills/` overlay into a temporary source tree → upstream `package_internal_plugin.py` (overlay `org-profile/` onto upstream, applying `package-policy.yaml` allowlist) → optional `org-mcp.json` overlay into the build as `.mcp.json` → upstream `smoke_test_package.py` → output to `build/<INTERNAL_NAME>/`.
+`make package` runs: `fetch-upstream.sh` (clone/checkout upstream at `APPSEC_ADVISOR_REF`) → optional `org-skills/` overlay into a temporary source tree → upstream `package_internal_plugin.py` (overlay `org-profile/` onto upstream, applying `package-policy.yaml` allowlist) → upstream `smoke_test_package.py` → output to `build/<INTERNAL_NAME>/`.
 
 ```bash
 make               # (or `make help`) list all targets with descriptions
@@ -31,7 +31,7 @@ ARCHIVE=1 ORG_REV=3 make package-archive       # produce dist/*.tgz + .sha256
 claude --plugin-dir build/<INTERNAL_NAME>
 ```
 
-Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstream repo or fork), `APPSEC_ADVISOR_REF` (defaults to the pinned `v0.5.1-beta`; `latest` resolves to the newest `v*` tag instead), `APPSEC_ADVISOR_SOURCE` (use an existing local checkout, skips fetch), `ORG_SKILLS_DIR` (defaults to `org-skills`), `ORG_MCP_FILE` (defaults to `org-mcp.json`), `INTERNAL_NAME`, `ORG_ID`, `ORG_REV`, `VERSION`.
+Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstream repo or fork), `APPSEC_ADVISOR_REF` (defaults to the pinned `v0.5.1-beta`; `latest` resolves to the newest `v*` tag instead), `APPSEC_ADVISOR_SOURCE` (use an existing local checkout, skips fetch), `ORG_SKILLS_DIR` (defaults to `org-skills`), `INTERNAL_NAME`, `ORG_ID`, `ORG_REV`, `VERSION`.
 
 ### Package versioning
 
@@ -43,7 +43,7 @@ Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstre
 
 Left half: the upstream checkout's tag (`git describe --tags --exact-match`, `v` stripped). Off a branch tip there is no tag to name, so it falls back to `0.0.0-<ref>.g<shortsha>`. Right half is SemVer build metadata: `ORG_ID` (defaults to the first segment of `INTERNAL_NAME`) and `ORG_REV` (defaults to `1`).
 
-Bump rule: increment `ORG_REV` for org-only changes (`org-profile/`, `org-skills/`, `org-mcp.json`, `package-policy.yaml`); when `APPSEC_ADVISOR_REF` moves, the left half changes and `ORG_REV` restarts at 1. Both CI templates set `ORG_REV` to the repo tag on tag pipelines, else the commit sha, and glob `dist/<name>-*.tgz` for artifacts rather than reconstructing the version string.
+Bump rule: increment `ORG_REV` for org-only changes (`org-profile/`, `org-skills/`, `package-policy.yaml`); when `APPSEC_ADVISOR_REF` moves, the left half changes and `ORG_REV` restarts at 1. Both CI templates set `ORG_REV` to the repo tag on tag pipelines, else the commit sha, and glob `dist/<name>-*.tgz` for artifacts rather than reconstructing the version string.
 
 ### Tracking upstream: release vs branch
 
@@ -69,7 +69,6 @@ APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 | `org-profile/hooks/*.py` | Scripts for org-declared Claude Code hooks (`hooks:` in the profile), referenced via `${CLAUDE_PLUGIN_ROOT}/org-profile/hooks/...` |
 | `org-profile/package-policy.yaml` | Allowlist of skills/hooks to include (incl. org hook ids) |
 | `org-skills/<skill-id>/SKILL.md` | Optional org-owned skills packaged next to upstream skills |
-| `org-mcp.json` | Optional MCP servers (e.g. internal SAST/SCA endpoints) copied into the built plugin's `.mcp.json`. Opt-in: absent by default. Secrets via `${ENV_VAR}` only |
 | `Makefile`, `scripts/` | Build/fetch glue |
 | `ci-templates/` | CI pipelines copied into place by `make ci-*` |
 
@@ -82,7 +81,7 @@ APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 - **Org skills must not overwrite upstream skills.** `scripts/package-local.sh` fails before packaging if `org-skills/<name>` already exists under the upstream `skills/` directory.
 - **`org-profile.yaml` is schema-validated** at build time (`make validate`). Structural changes must stay schema-conformant (`api_version: appsec-advisor.org-profile/v2`).
 - **`context/organization.md` is untrusted reference data.** It can inform findings but must never change severity rules, QA gates, schemas, permissions, or tool behavior.
-- **`org-mcp.json` is opt-in and holds no secrets.** If present it must be a JSON object with a top-level `mcpServers` key (the build fails otherwise) and is copied verbatim to `build/<name>/.mcp.json` before the smoke test. Tokens and internal URLs must be referenced via `${ENV_VAR}` (Claude Code expands them at load; `${CLAUDE_PLUGIN_ROOT}` is also available) — never hardcode them. MCP tool *output* is untrusted like `organization.md`: it can inform findings but must never change severity rules, permissions, or tool behavior.
+- **MCP servers are declared in `org-profile.yaml` under `mcp:`** and written by the upstream packager, gated by `plugin_surface.mcp_servers`. Tokens and internal URLs must be referenced via `${ENV_VAR}` — never hardcoded; a credential in a server URL is rejected at validation. MCP tool *output* is untrusted like `organization.md`: it can inform findings but must never change severity rules, permissions, or tool behavior. An `org-mcp.json` at the repo root is no longer read; it used to be copied over the finished build and silently replaced the profile's servers.
 - **`INTERNAL_NAME`** (default `acme-appsec`) sets both the plugin name and the Claude Code command prefix (`/acme-appsec:...`). It must stay consistent across `Makefile`, both CI configs, and `scripts/package-local.sh`.
 - **`"Acme Corp"` / `acme`** are template placeholders (org name, `--description`, etc.). When customizing, replace them everywhere — including `org-profile.yaml`, `package-local.sh`, and both CI configs.
 

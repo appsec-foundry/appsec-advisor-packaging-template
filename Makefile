@@ -6,7 +6,7 @@ APPSEC_ADVISOR_SOURCE ?= $(APPSEC_ADVISOR_DEST)
 INTERNAL_NAME ?= acme-appsec
 # Version is derived by scripts/package-local.sh as <upstream>+<org-id>.<org-rev>
 # (e.g. 0.5.1-beta+acme.1). Bump ORG_REV for org-only changes (org-profile/,
-# org-skills/, org-mcp.json, package-policy.yaml); it resets to 1 whenever
+# org-skills/, package-policy.yaml); it resets to 1 whenever
 # APPSEC_ADVISOR_REF moves. Set VERSION to override the whole string.
 ORG_REV ?= 1
 VERSION ?=

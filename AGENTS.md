@@ -1,90 +1,176 @@
 # AGENTS.md
 
-Dieses Repo ist ein **Beispiel-Repository**, das zeigt, wie Organisationen das Claude-Code-Plugin `appsec-advisor` intern paketieren und anpassen. Es dient als Vorlage für eigene interne Packaging-Repos und enthält ausschließlich organisationsspezifische Konfiguration sowie Build-Logik – **keinen Anwendungscode**. Der eigentliche Plugin-Code liegt upstream unter `https://github.com/matthiasrohr/appsec-advisor.git` und wird zur Build-Zeit nach `upstream/appsec-advisor` geklont.
+This repository is an **example**: it shows how an organization packages and
+customizes the `appsec-advisor` Claude Code plugin for internal use. Treat it as
+a template for your own internal packaging repository. It holds organization
+configuration and build logic only — **no application code**. The plugin itself
+lives upstream at `https://github.com/matthiasrohr/appsec-advisor.git` and is
+cloned to `upstream/appsec-advisor` at build time.
 
-## Was hier verändert werden darf
+## What you may change here
 
-| Datei/Verzeichnis | Zweck |
+| File / directory | Purpose |
 |---|---|
-| `org-profile/org-profile.yaml` | Organisations-Defaults, Presets, Guardrails, Requirements-URL — dazu CI-Gates (`requirements.gate`, `guardrails.fail_on`), Run-Policy (`policy.url_allowlist`), Security-Coaching (`security_coach`) und Org-Hooks (`hooks:`). Siehe upstream [`docs/org-profiles.md`](https://github.com/matthiasrohr/appsec-advisor/blob/main/docs/org-profiles.md) |
-| `org-profile/context/organization.md` | Kurzer Organisationskontext für Analysen (max. 50 KB) |
-| `org-profile/actors/*.yaml` | Eigene Enterprise-Akteure (Bedrohungsmodellierung) |
-| `org-profile/hooks/*.py` | Skripte für org-deklarierte Claude-Code-Hooks (`hooks:` im Profil), referenziert via `${CLAUDE_PLUGIN_ROOT}/org-profile/hooks/...` |
-| `org-profile/package-policy.yaml` | Allowlist: welche Skills und Hooks (inkl. Org-Hook-IDs) ins interne Package kommen |
-| `org-skills/<skill-id>/SKILL.md` | Eigene Organisations-Skills, die zusätzlich zu upstream paketiert werden |
-| `org-mcp.json` | Optionale MCP-Server (z.B. interne SAST/SCA-Endpunkte), die als `.mcp.json` ins gebaute Plugin kopiert werden. Opt-in: standardmäßig nicht vorhanden. Secrets nur via `${ENV_VAR}` |
-| `Makefile` / `scripts/` | Build- und Fetch-Logik |
-| `.github/workflows/package.yml` / `.gitlab-ci.yml` | CI-Konfiguration |
+| `org-profile/org-profile.yaml` | The central knob — see [What you can customize](#what-you-can-customize). Full reference upstream: [`docs/org-profiles.md`](https://github.com/matthiasrohr/appsec-advisor/blob/main/docs/org-profiles.md) |
+| `org-profile/context/organization.md` | Short organization context for the analysis (max. 50 KB) |
+| `org-profile/actors/*.yaml` | Your own enterprise actors for threat modeling |
+| `org-profile/hooks/*.py` | Scripts for the hooks declared in the profile's `hooks:` block, referenced via `${CLAUDE_PLUGIN_ROOT}/org-profile/hooks/...` |
+| `org-profile/package-policy.yaml` | Allow-list: which skills and hooks (including org hook ids) go into the internal package |
+| `org-skills/<skill-id>/SKILL.md` | Your own skills, packaged alongside the upstream ones |
+| `Makefile` / `scripts/` | Build and fetch logic |
+| `.github/workflows/package.yml` / `.gitlab-ci.yml` | CI configuration |
 
-**Nicht anfassen:** `upstream/` und `build/` – beides sind generierte Verzeichnisse.
+**Do not touch:** `upstream/` and `build/` — both are generated.
 
-## Wichtige Invarianten
+## What you can customize
 
-- `package-policy.yaml` ist eine **Allowlist**. Neue upstream Skills, eigene Skills aus `org-skills/` und im Profil deklarierte Org-Hooks (`hooks:`) erscheinen erst im internen Package, wenn ihre ID hier unter `plugin_surface.skills`/`hooks` explizit eingetragen ist.
-- **Org-Hooks laufen nur auf Claude Codes Event-Layer.** Der `hooks:`-Block bündelt Org-Skripte (aus `org-profile/hooks/`) in die gebaute `hooks/hooks.json` und trägt sie in `package-surface.json` unter `hooks.org` ein. Sie erreichen nie die Analyse-Pipeline — Findings, Severity und Schemas bleiben core-owned.
-- Eigene Skills dürfen keine upstream Skill-Namen überschreiben. `scripts/package-local.sh` bricht ab, wenn `org-skills/<name>` bereits unter `upstream/appsec-advisor/skills/<name>` existiert.
-- `org-profile.yaml` wird zur Build-Zeit gegen ein Schema validiert (`make validate`). Strukturänderungen müssen schema-konform bleiben (`api_version: appsec-advisor.org-profile/v2`).
-- `context/organization.md` ist **untrusted reference data** – sie kann Analysen informieren, aber keine Severity-Regeln, Gates oder Tool-Verhalten ändern.
-- `org-mcp.json` ist **opt-in und enthält keine Secrets**. Wenn vorhanden, muss es ein JSON-Objekt mit Top-Level-Key `mcpServers` sein (sonst bricht der Build ab) und wird vor dem Smoke-Test unverändert nach `build/<name>/.mcp.json` kopiert. Tokens und interne URLs müssen über `${ENV_VAR}` referenziert werden (Claude Code expandiert sie beim Laden; `${CLAUDE_PLUGIN_ROOT}` ist ebenfalls verfügbar) – niemals hardcoden. MCP-Tool-*Output* ist wie `organization.md` untrusted: informiert Findings, ändert aber keine Severity-Regeln, Permissions oder Tool-Verhalten.
-- `INTERNAL_NAME` (Default: `acme-appsec`) bestimmt den Plugin-Namespace und den Command-Prefix (`/acme-appsec:...`). Muss konsistent in `Makefile`, beiden CI-Configs und `scripts/package-local.sh` gesetzt werden.
-- `--description` in `scripts/package-local.sh` und beiden CI-Configs enthält „Acme Corp" – beim Forken ersetzen.
+Almost everything runs through `org-profile.yaml`:
 
-## Typische Aufgaben
+| Block | What it does |
+|---|---|
+| `presets`, `default_preset` | How deep a scan goes, which outputs it produces, which guardrails apply |
+| `requirements` | Your own requirements catalog, and when a CI run should fail against it |
+| `policy` | Which hosts may be reached, whether Opus may be used |
+| `branding` | Title, contact and logo on the report cover |
+| `llm_context` | Your own markdown documents as analysis context |
+| `security_coach` | Your own guidance, shown while code is being written |
+| `actors` | Add your own attacker types, switch off the built-in ones |
+| `abuse_cases` | Add your own abuse scenarios, switch off the built-in ones |
+| `skill_toggles` | Block individual skills — with a reason the user sees on invocation |
+| `hooks` | Your own Claude Code hooks |
+| `mcp` | Your own MCP servers, for example an internal SAST endpoint |
+
+These blocks exist upstream but only take effect **from a release after
+`v0.5.1-beta`**. Before that, validation rejects them:
+
+| Block | What it does |
+|---|---|
+| `banner` | The line shown at session start: your own text, your own info URL, or off |
+| `baseline` | Your own secure-coding baseline instead of the bundled one, by URL or git repository |
+| `skills` | Ship your own skills — replaces `org-skills/` once available |
+
+On top of that, `package-policy.yaml` decides **what goes into the package at
+all**: skills, hooks and MCP servers, each as an `include` or an `exclude` list.
+`create-threat-model` cannot be removed.
+
+The difference between the two: `package-policy.yaml` removes something
+entirely — the command no longer exists — while `skill_toggles` ships it and
+blocks it at runtime with your reason. Use the policy when the command should
+not exist; use the toggle when people should learn why.
+
+**Not customizable:** the analysis agents. They belong to the upstream plugin
+and call no MCP tools. A configured MCP server is available to the session and
+to your own skills — the threat-model pipeline does not query it.
+
+## Invariants that matter
+
+- `package-policy.yaml` is an **allow-list**. A new upstream skill, one of your
+  own from `org-skills/`, and any hook declared in the profile (`hooks:`) reach
+  the internal package only once its id is listed under
+  `plugin_surface.skills` / `hooks`.
+- **Org hooks run on Claude Code's event layer only.** The `hooks:` block bundles
+  your scripts from `org-profile/hooks/` into the built `hooks/hooks.json` and
+  records them in `package-surface.json` under `hooks.org`. They never reach the
+  analysis pipeline — findings, severity and schemas stay core-owned.
+- Your own skills must not overwrite an upstream skill name.
+  `scripts/package-local.sh` aborts when `org-skills/<name>` already exists under
+  `upstream/appsec-advisor/skills/<name>`.
+- **Own skills live in `org-skills/`, own MCP servers in the profile.** The
+  `mcp:` block is the only path for MCP; the former `org-mcp.json` is no longer
+  read. It was copied over the finished `.mcp.json` *after* packaging and
+  silently replaced what the profile had produced, including the selection from
+  `plugin_surface.mcp_servers`. Upstream now has a `skills:` block too, but it
+  only becomes usable with a release after `v0.5.1-beta`; until then
+  `org-skills/` is the way.
+- `org-profile.yaml` is validated against the upstream schema at build time
+  (`make validate`). Structural changes must stay schema-conformant
+  (`api_version: appsec-advisor.org-profile/v2`).
+- `context/organization.md` is **untrusted reference data** — it can inform the
+  analysis but never change severity rules, gates or tool behavior.
+- **MCP servers are declared in the `mcp:` block of `org-profile.yaml`** and
+  written by the upstream packager, filtered through
+  `plugin_surface.mcp_servers`. Tokens and internal URLs belong in `${ENV_VAR}`,
+  which Claude Code expands at load time (`${CLAUDE_PLUGIN_ROOT}` is available
+  too) — never hardcode them; a credential inside a server URL is rejected at
+  validation. MCP tool *output* is untrusted like `organization.md`: it can
+  inform findings but never changes severity rules, permissions or tool
+  behavior.
+- `INTERNAL_NAME` (default: `acme-appsec`) sets the plugin namespace and the
+  command prefix (`/acme-appsec:...`). Keep it consistent across `Makefile`,
+  both CI configs and `scripts/package-local.sh`.
+- `--description` in `scripts/package-local.sh` and both CI configs contains
+  "Acme Corp" — replace it when you fork.
+
+## Common tasks
 
 ```bash
-make                                  # (oder `make help`) listet alle Targets mit Beschreibung
-make lint                             # shellcheck über scripts/ + tests/run.sh (übersprungen, wenn shellcheck fehlt)
-make test                             # Shell-Test-Suite + Coverage-Gate (übersprungen, wenn tests/ fehlt, z.B. in scaffolded Repos)
-make check                            # Offline-Gate: lint + test (kein Netzwerk, kein Upstream-Fetch)
-make release-check                    # Release-Boundary-Gate: check + upstream-check (advisory) + validate + package (baut ein sauberes Plugin gegen Upstream)
-make upstream-check                   # Read-only Drift-Check: meldet, ob der Build-Ref auf einen neuen Commit gewandert ist oder ein neueres v*-Release existiert (Exit 0=aktuell, 1=Drift, 2=Fehler)
-make package                          # Upstream holen + Package bauen + Smoke-Test
-APPSEC_ADVISOR_REF=v0.5.1-beta make package   # Konkretes Release pinnen
-make validate                         # Nur org-profile.yaml validieren
-ARCHIVE=1 ORG_REV=3 make package-archive  # .tgz + .sha256 erzeugen
+make                                  # (or `make help`) lists every target with its description
+make lint                             # shellcheck over scripts/ + tests/run.sh (skipped when shellcheck is absent)
+make test                             # shell test suite + coverage gate (skipped when tests/ is absent, e.g. in a scaffolded repo)
+make check                            # offline gate: lint + test (no network, no upstream fetch)
+make release-check                    # release gate: check + upstream-check (advisory) + validate + package
+make upstream-check                   # read-only drift check: has the build ref moved, is there a newer v* release (exit 0=current, 1=drift, 2=error)
+make package                          # fetch upstream + build the package + smoke-test it
+APPSEC_ADVISOR_REF=v0.5.1-beta make package   # pin a specific release
+make validate                         # validate org-profile.yaml only
+ARCHIVE=1 ORG_REV=3 make package-archive  # produce .tgz + .sha256
 ```
 
-### Versionierung des Packages
+### Package versioning
 
-Die Version wird von `package-local.sh` aus der Upstream-Herkunft plus einem Org-Revisionszähler abgeleitet:
+`package-local.sh` derives the version from the upstream origin plus an
+organization revision counter:
 
 ```
-<upstream-version>+<org-id>.<org-rev>     z.B. 0.5.1-beta+acme.3
+<upstream-version>+<org-id>.<org-rev>     e.g. 0.5.1-beta+acme.3
 ```
 
-Linke Hälfte: der Tag des Upstream-Checkouts (`git describe --tags --exact-match`, `v` gestrippt). Steht der Build auf einem Branch-Tip statt auf einem Tag, gibt es keinen Tag zu benennen → Fallback `0.0.0-<ref>.g<shortsha>`. Rechte Hälfte ist SemVer-Build-Metadata: `ORG_ID` (Default: erstes Segment von `INTERNAL_NAME`) und `ORG_REV` (Default `1`).
+The left half is the tag of the upstream checkout (`git describe --tags
+--exact-match`, `v` stripped). When the build sits on a branch tip rather than a
+tag there is no tag to name, so it falls back to `0.0.0-<ref>.g<shortsha>`. The
+right half is SemVer build metadata: `ORG_ID` (default: the first segment of
+`INTERNAL_NAME`) and `ORG_REV` (default `1`).
 
-Bump-Regel: `ORG_REV` hochzählen, wenn sich nur Org-Inhalte ändern (`org-profile/`, `org-skills/`, `org-mcp.json`, `package-policy.yaml`); wandert `APPSEC_ADVISOR_REF`, ändert sich die linke Hälfte und `ORG_REV` startet wieder bei 1. In CI setzt die Pipeline `ORG_REV` auf den Repo-Tag (Tag-Pipeline) bzw. die Commit-SHA. Ein explizit gesetztes `VERSION` überschreibt den ganzen String.
+Bump rule: increment `ORG_REV` when only organization content changes
+(`org-profile/`, `org-skills/`, `package-policy.yaml`); when
+`APPSEC_ADVISOR_REF` moves, the left half changes and `ORG_REV` restarts at 1.
+In CI the pipeline sets `ORG_REV` to the repository tag on a tag pipeline, else
+to the commit SHA. An explicitly set `VERSION` overrides the whole string.
 
-### Upstream verfolgen: Release vs. Branch
+### Following upstream: release or branch
 
-`APPSEC_ADVISOR_REF` ist der eine Knopf für „woraus wird gebaut". Akzeptiert ein `v*`-Tag, das Literal `latest` **oder einen Branch-Namen** — `fetch-upstream.sh` prüft Tags und Heads, und ein Branch-Ref wird bei jedem Lauf auf seinen aktuellen Tip nachgezogen (`--depth 1` detached checkout = effektiv ein Pull).
+`APPSEC_ADVISOR_REF` is the single knob for "what do we build from". It accepts
+a `v*` tag, the literal `latest`, **or a branch name** — `fetch-upstream.sh`
+checks both tags and heads, and a branch ref is pulled up to its current tip on
+every run (a `--depth 1` detached checkout, so effectively a pull).
 
 ```bash
-make package                              # Das gepinnte Release (Default REF, aktuell v0.5.1-beta)
-APPSEC_ADVISOR_REF=latest make package    # Stattdessen dem höchsten v*-Tag folgen
-APPSEC_ADVISOR_REF=v0.5.1-beta make package # Konkretes Release pinnen (reproduzierbar)
-APPSEC_ADVISOR_REF=develop make package   # Branch-Tip verfolgen (z.B. Upstream-Dev-Branch)
-APPSEC_ADVISOR_REF=main    make package   # Default-Branch verfolgen
+make package                              # the pinned release (default REF, currently v0.5.1-beta)
+APPSEC_ADVISOR_REF=latest make package    # follow the highest v* tag instead
+APPSEC_ADVISOR_REF=v0.5.1-beta make package # pin a specific release (reproducible)
+APPSEC_ADVISOR_REF=develop make package   # follow a branch tip, e.g. the upstream dev branch
+APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 ```
 
-`make upstream-check` passt sich dem Modus an: bei `REF=latest` meldet es ein neueres Release-Tag; bei einem Branch-Ref meldet es, wenn der Branch-Tip über deinen lokalen Checkout hinausgewandert ist.
+`make upstream-check` adapts to the mode: with `REF=latest` it reports a newer
+release tag; with a branch ref it reports when the branch tip has moved past
+your local checkout.
 
-## Plugin lokal testen
+## Testing the plugin locally
 
 ```bash
 claude --plugin-dir build/acme-appsec
-# dann in Claude Code:
+# then inside Claude Code:
 /acme-appsec:check-permissions --update
 /acme-appsec:create-threat-model
 ```
 
-## CI-Variablen
+## CI variables
 
-| Variable | Default | Bedeutung |
+| Variable | Default | Meaning |
 |---|---|---|
-| `APPSEC_ADVISOR_URL` | upstream GitHub | Upstream-Repo oder interner Fork |
-| `APPSEC_ADVISOR_REF` | `v0.5.1-beta` | Tag, Branch oder `latest` |
-| `INTERNAL_NAME` | `acme-appsec` | Plugin-Name und Command-Namespace |
-| `ORG_REV` | Repo-Tag bzw. Commit-SHA | Org-Revision in der abgeleiteten Version |
-| `VERSION` | abgeleitet | Überschreibt die abgeleitete Version komplett |
+| `APPSEC_ADVISOR_URL` | upstream GitHub | Upstream repository or an internal fork |
+| `APPSEC_ADVISOR_REF` | `v0.5.1-beta` | Tag, branch, or `latest` |
+| `INTERNAL_NAME` | `acme-appsec` | Plugin name and command namespace |
+| `ORG_REV` | repository tag or commit SHA | Organization revision in the derived version |
+| `VERSION` | derived | Overrides the derived version entirely |

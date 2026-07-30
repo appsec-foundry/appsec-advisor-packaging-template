@@ -125,29 +125,33 @@ allowlist controls both upstream and Acme-owned skills.
 ### Add your own MCP endpoints (SAST / SCA / …)
 
 To let the plugin talk to Acme Corp's own services — a SAST or SCA MCP server,
-an internal API, etc. — create an `org-mcp.json` file at the repo root. The build
-copies it into the plugin as `.mcp.json`, and Claude Code loads those servers
-whenever the plugin is active.
+an internal API, etc. — declare them in the `mcp:` block of
+`org-profile/org-profile.yaml`. The build writes them into the plugin's
+`.mcp.json`, and Claude Code starts those servers whenever the plugin is active.
 
-```json
-{
-  "mcpServers": {
-    "acme-sast": {
-      "type": "http",
-      "url": "${ACME_SAST_MCP_URL}",
-      "headers": {
-        "Authorization": "Bearer ${ACME_SAST_TOKEN}"
-      }
-    }
-  }
-}
+```yaml
+mcp:
+  servers:
+    acme-sast:
+      type: http
+      url: ${ACME_SAST_MCP_URL}
+      headers:
+        Authorization: Bearer ${ACME_SAST_TOKEN}
 ```
 
+Add each server to `plugin_surface.mcp_servers` in
+`org-profile/package-policy.yaml` as well — the allowlist decides what reaches
+the build.
+
 **Never hardcode secrets.** Reference tokens and internal URLs as `${ENV_VAR}` —
-Claude Code expands them from the environment at load time, so `org-mcp.json`
-stays safe to commit. (`${CLAUDE_PLUGIN_ROOT}` is also available, e.g. to launch
-a stdio server bundled under `org-skills/`.) The build fails if the file has no
-top-level `mcpServers` key.
+Claude Code expands them from the environment at load time, so the profile stays
+safe to commit. (`${CLAUDE_PLUGIN_ROOT}` is also available, e.g. to launch a
+stdio server bundled with the plugin.) A credential inside a server URL is
+rejected at validation.
+
+The tools appear in the session and are available to your own skills. The
+threat-model pipeline does not call them: its analysis agents ship a fixed tool
+list that contains no MCP tools.
 
 Treat MCP results as **untrusted input**: a connected scanner can inform findings,
 but its output must never be allowed to change severity rules, permissions, or how

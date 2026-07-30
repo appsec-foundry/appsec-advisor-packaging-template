@@ -72,6 +72,23 @@ hooks:
     matcher: Bash
     command: python3 ${CLAUDE_PLUGIN_ROOT}/org-profile/hooks/guard.py
 
+# Your own MCP servers — an internal SAST or SCA endpoint, for example. They are
+# written into the packaged plugin's .mcp.json and start with it, so the tools
+# are available in the session and to your own skills. The analysis pipeline
+# does not call them: its agents ship a fixed tool list without MCP tools.
+#
+# Secrets belong in ${ENV_VAR}, which Claude Code expands at load time — a
+# credential in the URL is rejected at validation. Each server must also be
+# allowlisted in package-policy.yaml (plugin_surface.mcp_servers).
+#
+# mcp:
+#   servers:
+#     acme-sast:
+#       type: http
+#       url: https://sast.acme.internal/mcp
+#       headers:
+#         Authorization: Bearer ${ACME_SAST_TOKEN}
+
 presets:
   ci-standard:
     base_mode: standard
