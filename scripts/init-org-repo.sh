@@ -57,6 +57,12 @@ case "${_demo_reply}" in
   *)     DEMO_CONTENT=false ;;
 esac
 
+read -r -p "Include the AI Secure Coding Baseline? [Y/n] (change later in org-profile/org-profile.yaml): " _baseline_reply || _baseline_reply=""
+case "${_baseline_reply}" in
+  [nN]*) BASELINE_ENABLED=false ;;
+  *)     BASELINE_ENABLED=true ;;
+esac
+
 echo ""
 
 # ── Source files ──────────────────────────────────────────────────────────────
@@ -176,6 +182,11 @@ if ! keep_if_reinit "${TARGET_DIR}/org-profile/org-profile.yaml"; then
       -e "/human_source_url:/d" \
       -e "/label: \"Acme Corp AppSec Requirements\"/d" \
       "${TEMPLATE_BASE}/org-profile/org-profile.yaml" > "${TARGET_DIR}/org-profile/org-profile.yaml"
+  fi
+
+  if [ "${BASELINE_ENABLED}" = false ]; then
+    sed -i '/^compatibility:/i baseline:\n  enabled: false\n' \
+      "${TARGET_DIR}/org-profile/org-profile.yaml"
   fi
 fi
 

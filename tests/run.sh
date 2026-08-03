@@ -180,16 +180,27 @@ echo "--- init-org-repo.sh ---"
 # demo=yes; leading empty answer exercises the "(required)" retry on org-name.
 d="$(newdir)"
 tgt="$d/out"
-printf '\nTest Org\n\n\n\n%s\ny\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
+printf '\nTest Org\n\n\n\n%s\ny\n\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
 rc=$?
 if [ "$rc" = 0 ] && [ -f "$tgt/org-profile/requirements.yaml" ] && [ -f "$tgt/org-skills/README.md" ]; then
   pass "init: demo=yes"
 else fail "init: demo=yes" "rc=$rc"; fi
 
+# Declining the default-on AI Secure Coding Baseline must persist an explicit
+# profile setting, while accepting it leaves the plugin's bundled default active.
 d="$(newdir)"
 tgt="$d/out"
-printf 'Test Org\n\n\n\n%s\nn\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
+printf 'Test Org\n\n\n\n%s\nn\nn\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
+  >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && grep -Fqx '  enabled: false' "$tgt/org-profile/org-profile.yaml"; then
+  pass "init: baseline=no"
+else fail "init: baseline=no" "rc=$rc"; fi
+
+d="$(newdir)"
+tgt="$d/out"
+printf 'Test Org\n\n\n\n%s\nn\n\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
 rc=$?
 if [ "$rc" = 0 ] && [ ! -f "$tgt/org-profile/requirements.yaml" ]; then
@@ -215,14 +226,14 @@ else fail "init: scaffold is self-contained" "missing:$missing"; fi
 d="$(newdir)"
 tgt="$d/out"
 mkdir -p "$tgt"
-printf 'Test Org\n\n\n\n%s\nn\ny\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
+printf 'Test Org\n\n\n\n%s\nn\n\ny\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
 assert_rc "init: existing dir, continue" 0 "$?"
 
 d="$(newdir)"
 tgt="$d/out"
 mkdir -p "$tgt"
-printf 'Test Org\n\n\n\n%s\nn\nn\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
+printf 'Test Org\n\n\n\n%s\nn\n\nn\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
 assert_rc "init: existing dir, abort" 1 "$?"
 
@@ -236,7 +247,7 @@ mkdir -p "$lonely"
 cp "$INIT" "$lonely/init-org-repo.sh"
 d="$(newdir)"
 tgt="$d/out"
-printf '\nTest Org\n\n\n\n%s\ny\n' "$tgt" | \
+printf '\nTest Org\n\n\n\n%s\ny\n\n' "$tgt" | \
   (cd "$d" && env GITSTUB_CLONE_SRC="$clean" timeout 20 bash -x "$lonely/init-org-repo.sh") \
   >/dev/null 2>>"$COV"
 assert_rc "init: clone fallback" 0 "$?"
