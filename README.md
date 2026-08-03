@@ -9,6 +9,9 @@ Template repo for building an internal [`appsec-advisor`](https://github.com/mat
 
 > **Development branch.** This branch follows `appsec-advisor`'s `dev` branch. `main` remains the release branch and pins the current upstream release (`v0.5.1-beta`).
 
+See [the developer documentation](docs/DEVELOPMENT.md) for the branch model
+and development workflow.
+
 ## Quick Start
 
 **Prerequisites:** `git`, `python3` (3.10+), `make`
