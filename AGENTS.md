@@ -144,9 +144,8 @@ a `v*` tag, the literal `latest`, **or a branch name** — `fetch-upstream.sh`
 checks both tags and heads, and a branch ref is pulled up to its current tip on
 every run (a `--depth 1` detached checkout, so effectively a pull).
 
-The packaging branches follow separate upstream lines: this `dev` branch uses
-`APPSEC_ADVISOR_REF=dev`; `main` pins the supported upstream release for
-reproducible release packages.
+The packaging branches follow separate upstream lines: `dev` uses
+`APPSEC_ADVISOR_REF=dev`; `main` uses `APPSEC_ADVISOR_REF=main`.
 
 ```bash
 make package                              # upstream dev (default on this branch)
@@ -174,7 +173,7 @@ claude --plugin-dir build/acme-appsec
 | Variable | Default | Meaning |
 |---|---|---|
 | `APPSEC_ADVISOR_URL` | upstream GitHub | Upstream repository or an internal fork |
-| `APPSEC_ADVISOR_REF` | `dev` | Upstream branch followed by this development branch |
+| `APPSEC_ADVISOR_REF` | branch-dependent | `dev` on `dev`, otherwise `main` |
 | `INTERNAL_NAME` | `acme-appsec` | Plugin name and command namespace |
 | `ORG_REV` | repository tag or commit SHA | Organization revision in the derived version |
 | `VERSION` | derived | Overrides the derived version entirely |

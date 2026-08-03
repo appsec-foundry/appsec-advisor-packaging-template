@@ -1,7 +1,15 @@
 APPSEC_ADVISOR_URL ?= https://github.com/matthiasrohr/appsec-advisor.git
-# Development branch: follow the corresponding upstream development branch.
-# main pins the current upstream release instead.
-APPSEC_ADVISOR_REF ?= dev
+# Keep packaging branches aligned with their corresponding upstream branch.
+# CI checkouts are detached, so prefer their branch environment variables.
+CURRENT_BRANCH := $(or $(CI_COMMIT_BRANCH),$(GITHUB_HEAD_REF),$(GITHUB_REF_NAME),$(shell git branch --show-current 2>/dev/null))
+APPSEC_ADVISOR_REF ?=
+ifeq ($(strip $(APPSEC_ADVISOR_REF)),)
+ifeq ($(CURRENT_BRANCH),dev)
+APPSEC_ADVISOR_REF := dev
+else
+APPSEC_ADVISOR_REF := main
+endif
+endif
 APPSEC_ADVISOR_DEST ?= upstream/appsec-advisor
 APPSEC_ADVISOR_SOURCE ?= $(APPSEC_ADVISOR_DEST)
 INTERNAL_NAME ?= acme-appsec

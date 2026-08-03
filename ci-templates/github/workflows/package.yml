@@ -15,9 +15,7 @@ permissions:
 env:
   INTERNAL_NAME: ${{ vars.INTERNAL_NAME || 'acme-appsec' }}
   APPSEC_ADVISOR_URL: ${{ vars.APPSEC_ADVISOR_URL || 'https://github.com/matthiasrohr/appsec-advisor.git' }}
-  # Development template: follow the upstream development branch. Set a
-  # repository variable to pin a release in a release-oriented fork.
-  APPSEC_ADVISOR_REF: ${{ vars.APPSEC_ADVISOR_REF || 'dev' }}
+  APPSEC_ADVISOR_REF: ${{ vars.APPSEC_ADVISOR_REF }}
   PYTHONDONTWRITEBYTECODE: "1"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
@@ -41,7 +39,7 @@ jobs:
       - name: Checkout packaging repo
         uses: actions/checkout@v4
       - name: Check upstream for drift
-        run: scripts/upstream-check.sh
+        run: make upstream-check
 
   package:
     if: github.event_name != 'schedule'
@@ -76,7 +74,7 @@ jobs:
           VERSION: ${{ vars.VERSION }}
           ORG_REV: ${{ steps.rev.outputs.org_rev }}
           ARCHIVE: "1"
-        run: scripts/package-local.sh
+        run: make package-archive
 
       - name: Upload package
         uses: actions/upload-artifact@v4

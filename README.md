@@ -7,7 +7,7 @@
 
 Template repo for building an internal [`appsec-advisor`](https://github.com/matthiasrohr/appsec-advisor) Claude Code plugin with your own org-specific defaults, requirements catalog, and cost guardrails.
 
-> **Development branch.** This branch follows `appsec-advisor`'s `dev` branch. `main` remains the release branch and pins the current upstream release (`v0.5.1-beta`).
+> **Development branch.** This branch follows `appsec-advisor`'s `dev` branch. The release branch `main` follows `appsec-advisor/main`.
 
 See [the developer documentation](docs/DEVELOPMENT.md) for the branch model
 and development workflow.
@@ -21,7 +21,7 @@ and development workflow.
 Run the init script — it asks for your org name and plugin name, then creates a ready-to-use git repo with all placeholders already replaced:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/matthiasrohr/appsec-advisor-packaging-template/dev/scripts/init-org-repo.sh)
+APPSEC_ADVISOR_TEMPLATE_REF=dev bash <(curl -fsSL https://raw.githubusercontent.com/matthiasrohr/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh)
 ```
 
 Alternatively, click **Use this template** on GitHub and replace `Acme Corp` / `acme-appsec` manually.
@@ -148,7 +148,7 @@ Run `make ci-github` or `make ci-gitlab` to install the CI pipeline (see Quick S
 | Variable | Default | Description |
 |---|---|---|
 | `APPSEC_ADVISOR_URL` | upstream GitHub | Upstream repo or internal fork |
-| `APPSEC_ADVISOR_REF` | `dev` | Upstream branch followed by this development branch |
+| `APPSEC_ADVISOR_REF` | branch-dependent | `dev` on `dev`, otherwise `main`; explicitly set it to override |
 | `INTERNAL_NAME` | `acme-appsec` | Plugin name and Claude Code command namespace |
 | `VERSION` | derived from git tag or commit SHA | Version of the produced package |
 

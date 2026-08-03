@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Creates a fresh org packaging repo for appsec-advisor.
-# Usage: bash <(curl -fsSL https://raw.githubusercontent.com/matthiasrohr/appsec-advisor-packaging-template/dev/scripts/init-org-repo.sh)
+# Usage: bash <(curl -fsSL https://raw.githubusercontent.com/matthiasrohr/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh)
+# Dev scaffold: APPSEC_ADVISOR_TEMPLATE_REF=dev bash <(curl -fsSL https://raw.githubusercontent.com/matthiasrohr/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh)
 # Or locally: scripts/init-org-repo.sh
 set -euo pipefail
 
@@ -63,6 +64,7 @@ echo ""
 # Resolve absolute path so relative-path invocations work correctly.
 SCRIPT_ABS="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)/$(basename "${BASH_SOURCE[0]}")" || true
 TEMPLATE_BASE="${SCRIPT_ABS%/scripts/init-org-repo.sh}"
+TEMPLATE_REF="${APPSEC_ADVISOR_TEMPLATE_REF:-main}"
 
 # When invoked via curl/pipe the path above resolves to something like /dev/fd/N
 # which has no Makefile — fall back to cloning.
@@ -70,7 +72,7 @@ if [ ! -f "${TEMPLATE_BASE}/Makefile" ]; then
   TMPDIR_CLONE="$(mktemp -d)"
   trap 'rm -rf "${TMPDIR_CLONE}"' EXIT
   echo "==> Cloning template from GitHub …"
-  git clone --depth 1 --branch dev \
+  git clone --depth 1 --branch "${TEMPLATE_REF}" \
     "https://github.com/matthiasrohr/appsec-advisor-packaging-template.git" \
     "${TMPDIR_CLONE}"
   TEMPLATE_BASE="${TMPDIR_CLONE}"
