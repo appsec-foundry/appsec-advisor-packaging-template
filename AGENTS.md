@@ -126,9 +126,9 @@ organization revision counter:
 ```
 
 The left half is the tag of the upstream checkout (`git describe --tags
---exact-match`, `v` stripped). When the build sits on a branch tip rather than a
-tag there is no tag to name, so it falls back to `0.0.0-<ref>.g<shortsha>`. The
-right half is SemVer build metadata: `ORG_ID` (default: the first segment of
+--exact-match`, `v` stripped). On a branch tip it is derived from the nearest
+tag as `<tag>-dev.g<shortsha>`; only a branch with no reachable tag falls back
+to `0.0.0-<ref>.g<shortsha>`. The right half is SemVer build metadata: `ORG_ID` (default: the first segment of
 `INTERNAL_NAME`) and `ORG_REV` (default `1`).
 
 Bump rule: increment `ORG_REV` when only organization content changes
@@ -144,11 +144,15 @@ a `v*` tag, the literal `latest`, **or a branch name** — `fetch-upstream.sh`
 checks both tags and heads, and a branch ref is pulled up to its current tip on
 every run (a `--depth 1` detached checkout, so effectively a pull).
 
+The packaging branches follow separate upstream lines: this `dev` branch uses
+`APPSEC_ADVISOR_REF=dev`; `main` pins the supported upstream release for
+reproducible release packages.
+
 ```bash
-make package                              # the pinned release (default REF, currently v0.5.1-beta)
+make package                              # upstream dev (default on this branch)
 APPSEC_ADVISOR_REF=latest make package    # follow the highest v* tag instead
 APPSEC_ADVISOR_REF=v0.5.1-beta make package # pin a specific release (reproducible)
-APPSEC_ADVISOR_REF=develop make package   # follow a branch tip, e.g. the upstream dev branch
+APPSEC_ADVISOR_REF=dev make package       # follow the upstream dev branch
 APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 ```
 
@@ -170,7 +174,7 @@ claude --plugin-dir build/acme-appsec
 | Variable | Default | Meaning |
 |---|---|---|
 | `APPSEC_ADVISOR_URL` | upstream GitHub | Upstream repository or an internal fork |
-| `APPSEC_ADVISOR_REF` | `v0.5.1-beta` | Tag, branch, or `latest` |
+| `APPSEC_ADVISOR_REF` | `dev` | Upstream branch followed by this development branch |
 | `INTERNAL_NAME` | `acme-appsec` | Plugin name and command namespace |
 | `ORG_REV` | repository tag or commit SHA | Organization revision in the derived version |
 | `VERSION` | derived | Overrides the derived version entirely |

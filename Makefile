@@ -1,6 +1,7 @@
 APPSEC_ADVISOR_URL ?= https://github.com/matthiasrohr/appsec-advisor.git
-# Pinned so local builds match CI. Use 'latest' to follow the newest v* tag.
-APPSEC_ADVISOR_REF ?= v0.5.1-beta
+# Development branch: follow the corresponding upstream development branch.
+# main pins the current upstream release instead.
+APPSEC_ADVISOR_REF ?= dev
 APPSEC_ADVISOR_DEST ?= upstream/appsec-advisor
 APPSEC_ADVISOR_SOURCE ?= $(APPSEC_ADVISOR_DEST)
 INTERNAL_NAME ?= acme-appsec

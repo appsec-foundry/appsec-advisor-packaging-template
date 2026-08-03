@@ -15,8 +15,9 @@ permissions:
 env:
   INTERNAL_NAME: ${{ vars.INTERNAL_NAME || 'acme-appsec' }}
   APPSEC_ADVISOR_URL: ${{ vars.APPSEC_ADVISOR_URL || 'https://github.com/matthiasrohr/appsec-advisor.git' }}
-  # Pin to a concrete release tag for reproducible builds. Set APPSEC_ADVISOR_REF in repository variables to override.
-  APPSEC_ADVISOR_REF: ${{ vars.APPSEC_ADVISOR_REF || 'v0.5.1-beta' }}
+  # Development template: follow the upstream development branch. Set a
+  # repository variable to pin a release in a release-oriented fork.
+  APPSEC_ADVISOR_REF: ${{ vars.APPSEC_ADVISOR_REF || 'dev' }}
   PYTHONDONTWRITEBYTECODE: "1"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
@@ -32,8 +33,7 @@ jobs:
       - name: Lint shell scripts
         run: make lint
 
-  # Read-only: fails (exit 1) when a newer upstream v* release exists than the
-  # pinned APPSEC_ADVISOR_REF, so the weekly run flags when to bump the pin.
+  # Read-only: fails (exit 1) when the tracked upstream branch has moved.
   upstream-check:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest

@@ -74,7 +74,8 @@ overlay_org_skills() {
 #   <upstream-version>+<org-id>.<org-rev>     e.g. 0.5.1-beta+acme.3
 # The left half is SemVer build metadata's only job here: keep the lineage of a
 # build visible, since package-surface.json records upstream_url but not the ref.
-# Off a branch tip there is no tag to name, so fall back to ref + short sha.
+# Off a branch tip, derive a development version from its nearest release tag.
+# This retains compatibility with the profile's supported core range.
 # An explicit VERSION always wins (CI override, one-off builds).
 semver_safe() {
   printf '%s' "$1" | tr -c '0-9A-Za-z-' '-'
@@ -82,12 +83,18 @@ semver_safe() {
 
 derive_version() {
   local source="$1"
-  local upstream sha
+  local upstream base sha
   upstream="$(git -C "${source}" describe --tags --exact-match 2>/dev/null || true)"
   upstream="${upstream#v}"
   if [ -z "${upstream}" ]; then
     sha="$(git -C "${source}" rev-parse --short HEAD 2>/dev/null || true)"
-    upstream="0.0.0-$(semver_safe "${APPSEC_ADVISOR_REF:-unknown}")${sha:+.g${sha}}"
+    base="$(git -C "${source}" describe --tags --abbrev=0 2>/dev/null || true)"
+    base="${base#v}"
+    if [ -n "${base}" ]; then
+      upstream="${base}-dev${sha:+.g${sha}}"
+    else
+      upstream="0.0.0-$(semver_safe "${APPSEC_ADVISOR_REF:-unknown}")${sha:+.g${sha}}"
+    fi
   fi
   printf '%s+%s.%s' "${upstream}" "$(semver_safe "${ORG_ID}")" "$(semver_safe "${ORG_REV}")"
 }

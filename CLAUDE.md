@@ -31,7 +31,7 @@ ARCHIVE=1 ORG_REV=3 make package-archive       # produce dist/*.tgz + .sha256
 claude --plugin-dir build/<INTERNAL_NAME>
 ```
 
-Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstream repo or fork), `APPSEC_ADVISOR_REF` (defaults to the pinned `v0.5.1-beta`; `latest` resolves to the newest `v*` tag instead), `APPSEC_ADVISOR_SOURCE` (use an existing local checkout, skips fetch), `ORG_SKILLS_DIR` (defaults to `org-skills`), `INTERNAL_NAME`, `ORG_ID`, `ORG_REV`, `VERSION`.
+Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstream repo or fork), `APPSEC_ADVISOR_REF` (defaults to `dev` on this branch; `main` pins the current upstream release, while `latest` resolves to the newest `v*` tag), `APPSEC_ADVISOR_SOURCE` (use an existing local checkout, skips fetch), `ORG_SKILLS_DIR` (defaults to `org-skills`), `INTERNAL_NAME`, `ORG_ID`, `ORG_REV`, `VERSION`.
 
 ### Package versioning
 
@@ -41,7 +41,7 @@ Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstre
 <upstream-version>+<org-id>.<org-rev>     e.g. 0.5.1-beta+acme.3
 ```
 
-Left half: the upstream checkout's tag (`git describe --tags --exact-match`, `v` stripped). Off a branch tip there is no tag to name, so it falls back to `0.0.0-<ref>.g<shortsha>`. Right half is SemVer build metadata: `ORG_ID` (defaults to the first segment of `INTERNAL_NAME`) and `ORG_REV` (defaults to `1`).
+Left half: the upstream checkout's tag (`git describe --tags --exact-match`, `v` stripped). Off a branch tip it derives from the nearest tag as `<tag>-dev.g<shortsha>` (for example `0.5.1-beta-dev.gabc1234`); without a reachable tag it falls back to `0.0.0-<ref>.g<shortsha>`. Right half is SemVer build metadata: `ORG_ID` (defaults to the first segment of `INTERNAL_NAME`) and `ORG_REV` (defaults to `1`).
 
 Bump rule: increment `ORG_REV` for org-only changes (`org-profile/`, `org-skills/`, `package-policy.yaml`); when `APPSEC_ADVISOR_REF` moves, the left half changes and `ORG_REV` restarts at 1. Both CI templates set `ORG_REV` to the repo tag on tag pipelines, else the commit sha, and glob `dist/<name>-*.tgz` for artifacts rather than reconstructing the version string.
 
@@ -49,11 +49,15 @@ Bump rule: increment `ORG_REV` for org-only changes (`org-profile/`, `org-skills
 
 `APPSEC_ADVISOR_REF` is the single knob for "what do I build from". It accepts a `v*` tag, the literal `latest`, **or any branch name** — `fetch-upstream.sh` checks tags and heads, and a branch ref is re-fetched to its current tip on every run (a `--depth 1` detached checkout = effectively a pull).
 
+The branches deliberately follow different upstream lines: this `dev` branch
+uses `APPSEC_ADVISOR_REF=dev`; the packaging repository's `main` branch pins
+the latest supported upstream release for reproducible release packages.
+
 ```bash
-make package                              # the pinned release (REF default, currently v0.5.1-beta)
+make package                              # upstream dev (default on this branch)
 APPSEC_ADVISOR_REF=latest make package    # follow the newest v* tag instead
 APPSEC_ADVISOR_REF=v0.5.1-beta make package # pin a specific release (reproducible builds)
-APPSEC_ADVISOR_REF=develop make package   # follow a branch tip (e.g. upstream dev branch)
+APPSEC_ADVISOR_REF=dev make package       # follow the upstream dev branch
 APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 ```
 

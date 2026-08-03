@@ -7,7 +7,7 @@
 
 Template repo for building an internal [`appsec-advisor`](https://github.com/matthiasrohr/appsec-advisor) Claude Code plugin with your own org-specific defaults, requirements catalog, and cost guardrails.
 
-> **Compatible with appsec-advisor `v0.5.1-beta`.** Verified against that release: the org profile validates against the 0.5 schema (including `hooks:`, `security_coach`, `policy.url_allowlist` and the CI gates), and the 0.5 threat-model skills — `ask-`, `review-`, `show-` and `update-threat-model` — are packaged. CI pins `v0.5.1-beta`; override with `APPSEC_ADVISOR_REF`.
+> **Development branch.** This branch follows `appsec-advisor`'s `dev` branch. `main` remains the release branch and pins the current upstream release (`v0.5.1-beta`).
 
 ## Quick Start
 
@@ -113,6 +113,9 @@ make validate
 # Fetch upstream + build + smoke test
 make package
 
+# This dev branch follows the upstream dev branch by default
+APPSEC_ADVISOR_REF=dev make package
+
 # Force a clean rebuild (removes upstream/, build/, dist/ first)
 make rebuild
 
@@ -125,8 +128,8 @@ make upstream-check
 # Pin a specific upstream release
 APPSEC_ADVISOR_REF=v0.5.1-beta make package
 
-# Follow a branch tip instead of a release (re-pulled to its tip on each build)
-APPSEC_ADVISOR_REF=develop make package
+# Follow a different branch tip (re-pulled to its tip on each build)
+APPSEC_ADVISOR_REF=main make package
 
 # Build a distributable archive (.tgz + .sha256)
 ARCHIVE=1 VERSION=1.0.0 make package-archive
@@ -142,7 +145,7 @@ Run `make ci-github` or `make ci-gitlab` to install the CI pipeline (see Quick S
 | Variable | Default | Description |
 |---|---|---|
 | `APPSEC_ADVISOR_URL` | upstream GitHub | Upstream repo or internal fork |
-| `APPSEC_ADVISOR_REF` | `v0.5.1-beta` | Release tag, branch, or `latest` — pinned so builds are reproducible |
+| `APPSEC_ADVISOR_REF` | `dev` | Upstream branch followed by this development branch |
 | `INTERNAL_NAME` | `acme-appsec` | Plugin name and Claude Code command namespace |
 | `VERSION` | derived from git tag or commit SHA | Version of the produced package |
 

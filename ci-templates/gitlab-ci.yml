@@ -5,8 +5,9 @@ stages:
 variables:
   INTERNAL_NAME: "acme-appsec"
   APPSEC_ADVISOR_URL: "https://github.com/matthiasrohr/appsec-advisor.git"
-  # Pin to a concrete release tag for reproducible builds. Override via CI/CD variables.
-  APPSEC_ADVISOR_REF: "v0.5.1-beta"
+  # Development template: follow the upstream development branch. Override via
+  # CI/CD variables to pin a release in a release-oriented fork.
+  APPSEC_ADVISOR_REF: "dev"
   # The package version is derived by package-local.sh as <upstream>+<org-id>.<org-rev>
   # (ORG_REV is set per-pipeline below). Set a VERSION CI/CD variable to override it.
   PYTHONDONTWRITEBYTECODE: "1"
@@ -30,8 +31,7 @@ lint:
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
 
-# Read-only: fails (exit 1) when a newer upstream v* release exists than the
-# pinned APPSEC_ADVISOR_REF. Run it on a scheduled pipeline to flag pin bumps.
+# Read-only: fails (exit 1) when the tracked upstream branch has moved.
 upstream-check:
   stage: check
   script:
