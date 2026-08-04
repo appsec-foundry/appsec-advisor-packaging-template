@@ -96,7 +96,7 @@ commands, `org-skills/`:
 
 The things you'll most often adjust in `org-profile.yaml`:
 
-- **Requirements catalog** — point `requirements_yaml_url` at Acme Corp's security requirements.
+- **Requirements catalog** — point `requirements_yaml_url` at Acme Corp's security requirements. The two requirements commands are shipped but disabled by default in `skill_toggles`; enable them when the catalog is ready for users.
 - **Presets** — `ci-standard` for everyday runs, `release-review` for thorough release checks. Pick the default with `default_preset`.
 - **Guardrails** — each preset caps `max_cost_usd` and `max_wall_time` so runs stay predictable.
 - **CI gates** — `requirements.gate` and `guardrails.fail_on` (per preset) make CI runs fail on unmet requirements or high-severity findings.

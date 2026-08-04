@@ -24,6 +24,8 @@ plugin_surface:
   hooks:
     include:
       - agent-logger
+      # Enforces the disabled requirements skills declared in org-profile.yaml.
+      - skill-policy-gate
       # Org-declared hooks from org-profile.yaml (hooks:) must be listed here to
       # be included in the build — this is an allowlist.
       - block-risky-bash

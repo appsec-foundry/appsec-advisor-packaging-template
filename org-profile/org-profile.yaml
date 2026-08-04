@@ -38,6 +38,16 @@ requirements:
   standalone_audit:
     enabled: true
 
+# Ship the requirements commands, but keep them unavailable until Acme enables
+# its requirements catalog for users. The reason is shown when invoked.
+skill_toggles:
+  audit-security-requirements:
+    enabled: false
+    reason: "Acme AppSec has not enabled the requirements catalog for this package yet."
+  verify-requirements:
+    enabled: false
+    reason: "Acme AppSec has not enabled the requirements catalog for this package yet."
+
 llm_context:
   documents:
     - id: organization
