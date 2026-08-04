@@ -139,7 +139,19 @@ ARCHIVE=1 VERSION=1.0.0 make package-archive
 
 # Use an existing local upstream checkout
 APPSEC_ADVISOR_SOURCE=/path/to/local/appsec-advisor make package
+
+# Generate build/.claude-plugin/marketplace.json for local marketplace testing
+make local-marketplace
+
+# Register that generated marketplace and install the plugin locally
+make install-local
 ```
+
+`install-local` uses the marketplace name `<plugin-name>-local` and Claude
+Code's `local` installation scope. Override these with
+`LOCAL_MARKETPLACE_NAME` and `LOCAL_MARKETPLACE_SCOPE` when needed. The
+generated catalog lives under `build/`; it is only a local test adapter and
+does not replace your organization's existing marketplace.
 
 ## CI
 

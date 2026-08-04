@@ -24,6 +24,11 @@ FETCH="$ROOT/scripts/fetch-upstream.sh"
 PKG="$ROOT/scripts/package-local.sh"
 INIT="$ROOT/scripts/init-org-repo.sh"
 CHECK="$ROOT/scripts/upstream-check.sh"
+GUARD_TEST="$HERE/test_guard.py"
+MARKETPLACE_TEST="$HERE/test_local_marketplace.py"
+
+/usr/bin/python3 "$GUARD_TEST"
+/usr/bin/python3 "$MARKETPLACE_TEST"
 
 COV="$(mktemp)"
 WORKROOT="$(mktemp -d)"
@@ -212,6 +217,7 @@ else fail "init: demo=no" "rc=$rc"; fi
 # 'make package' / 'make upstream-check' time in the user's repo.
 missing=""
 for f in scripts/fetch-upstream.sh scripts/upstream-check.sh scripts/package-local.sh \
+         scripts/prepare-local-marketplace.py \
          org-profile/package-policy.yaml org-profile/org-profile.yaml Makefile; do
   [ -f "$tgt/$f" ] || missing="$missing $f"
 done
@@ -242,6 +248,10 @@ assert_rc "init: existing dir, abort" 1 "$?"
 clean="$WORKROOT/export"
 mkdir -p "$clean"
 ("$REAL_GIT" -C "$ROOT" archive HEAD) | tar -x -C "$clean"
+# Include newly added source files before they have been committed; once
+# tracked, this simply refreshes the archived copy with the working-tree file.
+cp "$ROOT/scripts/prepare-local-marketplace.py" \
+  "$clean/scripts/prepare-local-marketplace.py"
 lonely="$WORKROOT/lonely"
 mkdir -p "$lonely"
 cp "$INIT" "$lonely/init-org-repo.sh"

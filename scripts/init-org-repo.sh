@@ -117,6 +117,9 @@ cp "${TEMPLATE_BASE}/scripts/fetch-upstream.sh" "${TARGET_DIR}/scripts/fetch-ups
 chmod +x "${TARGET_DIR}/scripts/fetch-upstream.sh"
 cp "${TEMPLATE_BASE}/scripts/upstream-check.sh" "${TARGET_DIR}/scripts/upstream-check.sh"
 chmod +x "${TARGET_DIR}/scripts/upstream-check.sh"
+cp "${TEMPLATE_BASE}/scripts/prepare-local-marketplace.py" \
+   "${TARGET_DIR}/scripts/prepare-local-marketplace.py"
+chmod +x "${TARGET_DIR}/scripts/prepare-local-marketplace.py"
 
 cp "${TEMPLATE_BASE}/ci-templates/github/workflows/package.yml" \
    "${TARGET_DIR}/ci-templates/github/workflows/package.yml"

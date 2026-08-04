@@ -104,6 +104,21 @@ The things you'll most often adjust in `org-profile.yaml`:
 
 After any change, rebuild with `make package`.
 
+### Test installation through a local marketplace
+
+To exercise the same marketplace installation path used by an organization,
+generate a local catalog around the built plugin and install it at local scope:
+
+```bash
+make install-local
+```
+
+This creates `build/.claude-plugin/marketplace.json`, registers `build/` as
+`acme-appsec-local`, and installs `acme-appsec@acme-appsec-local`. It is a local
+test adapter only; it does not create or modify the organization's central
+marketplace. To prepare the catalog without changing Claude Code's local
+configuration, run `make local-marketplace` instead.
+
 ### Add Acme-owned skills
 
 Put custom skills under `org-skills/`:

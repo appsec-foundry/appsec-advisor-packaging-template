@@ -12,6 +12,12 @@ Crucially, the scripts that do the real packaging work (`package_internal_plugin
 
 `make package` runs: `fetch-upstream.sh` (clone/checkout upstream at `APPSEC_ADVISOR_REF`) → optional `org-skills/` overlay into a temporary source tree → upstream `package_internal_plugin.py` (overlay `org-profile/` onto upstream, applying `package-policy.yaml` allowlist) → upstream `smoke_test_package.py` → output to `build/<INTERNAL_NAME>/`.
 
+`make local-marketplace` adds a generated
+`build/.claude-plugin/marketplace.json` around the packaged plugin for local
+Marketplace testing. `make install-local` additionally registers that catalog
+and installs the plugin with Claude Code's local scope. Neither target modifies
+an organization's central Marketplace.
+
 ```bash
 make               # (or `make help`) list all targets with descriptions
 make lint          # shellcheck scripts/ + tests/run.sh (skips gracefully if shellcheck absent)

@@ -113,6 +113,8 @@ make upstream-check                   # read-only drift check: has the build ref
 make package                          # fetch upstream + build the package + smoke-test it
 APPSEC_ADVISOR_REF=v0.5.1-beta make package   # pin a specific release
 make validate                         # validate org-profile.yaml only
+make local-marketplace                # build + generate a local marketplace catalog under build/
+make install-local                    # register that catalog and install the plugin at local scope
 ARCHIVE=1 ORG_REV=3 make package-archive  # produce .tgz + .sha256
 ```
 
@@ -167,6 +169,11 @@ claude --plugin-dir build/acme-appsec
 /acme-appsec:check-permissions --update
 /acme-appsec:create-threat-model
 ```
+
+To test the Marketplace installation path instead of sideloading with
+`--plugin-dir`, run `make install-local`. It generates a disposable catalog at
+`build/.claude-plugin/marketplace.json`; it does not modify or replace the
+organization's central Marketplace.
 
 ## CI variables
 

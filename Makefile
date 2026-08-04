@@ -19,6 +19,8 @@ INTERNAL_NAME ?= acme-appsec
 # APPSEC_ADVISOR_REF moves. Set VERSION to override the whole string.
 ORG_REV ?= 1
 VERSION ?=
+LOCAL_MARKETPLACE_NAME ?= $(INTERNAL_NAME)-local
+LOCAL_MARKETPLACE_SCOPE ?= local
 
 ifeq ($(APPSEC_ADVISOR_SOURCE),$(APPSEC_ADVISOR_DEST))
 FETCH_TARGET := fetch-upstream
@@ -28,7 +30,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint check release-check fetch-upstream upstream-check validate package package-archive smoke ci-github ci-gitlab clean distclean rebuild test
+.PHONY: help lint check release-check fetch-upstream upstream-check validate package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean distclean rebuild test
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -69,6 +71,14 @@ package: $(FETCH_TARGET) ## Fetch + build + smoke-test the plugin into build/<na
 
 package-archive: $(FETCH_TARGET) ## Like package, plus a dist/*.tgz + .sha256 archive
 	APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" APPSEC_ADVISOR_SOURCE="$(APPSEC_ADVISOR_SOURCE)" INTERNAL_NAME="$(INTERNAL_NAME)" ORG_REV="$(ORG_REV)" VERSION="$(VERSION)" ARCHIVE=1 scripts/package-local.sh
+
+local-marketplace: package ## Prepare build/ as a local Claude Code marketplace
+	python3 scripts/prepare-local-marketplace.py --build-root build --plugin-name "$(INTERNAL_NAME)" --marketplace-name "$(LOCAL_MARKETPLACE_NAME)"
+
+install-local: local-marketplace ## Register the local marketplace and install the built plugin
+	@command -v claude >/dev/null 2>&1 || { echo "ERROR: claude CLI not found" >&2; exit 2; }
+	claude plugin marketplace add "$(abspath build)" --scope "$(LOCAL_MARKETPLACE_SCOPE)"
+	claude plugin install "$(INTERNAL_NAME)@$(LOCAL_MARKETPLACE_NAME)" --scope "$(LOCAL_MARKETPLACE_SCOPE)"
 
 smoke: $(FETCH_TARGET) ## Smoke-test an already-built package
 	python3 "$(APPSEC_ADVISOR_SOURCE)/scripts/smoke_test_package.py" "build/$(INTERNAL_NAME)" --name "$(INTERNAL_NAME)"
