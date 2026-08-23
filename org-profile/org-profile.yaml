@@ -1,7 +1,7 @@
 # Org profile for the acme-appsec internal plugin package.
 # Replace the values under 'organization' and point 'requirements_yaml_url'
 # to your internal catalog. Everything else is optional — see:
-# https://github.com/matthiasrohr/appsec-advisor/blob/main/docs/org-profiles.md
+# https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/org-profiles.md
 
 api_version: appsec-advisor.org-profile/v2
 
@@ -12,7 +12,7 @@ organization:
   owner: Acme AppSec Team
 
 compatibility:
-  core: ">=0.5 <0.6"
+  core: ">=0.6 <0.7"
 
 policy:
   disable_opus: true

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A **packaging template** for building an internal `appsec-advisor` Claude Code plugin with org-specific defaults. It contains **only org configuration and build glue — no application code.** The actual plugin code lives upstream at `https://github.com/matthiasrohr/appsec-advisor.git` and is cloned to `upstream/appsec-advisor/` at build time.
+A **packaging template** for building an internal `appsec-advisor` Claude Code plugin with org-specific defaults. It contains **only org configuration and build glue — no application code.** The actual plugin code lives upstream at `https://github.com/appsec-foundry/appsec-advisor.git` and is cloned to `upstream/appsec-advisor/` at build time.
 
 Crucially, the scripts that do the real packaging work (`package_internal_plugin.py`, `validate_org_profile.py`, `smoke_test_package.py`) live **upstream**, not here. The `scripts/` in this repo only fetch upstream and invoke those tools. To understand build behavior, read the upstream scripts after a fetch.
 
@@ -37,7 +37,7 @@ ARCHIVE=1 ORG_REV=3 make package-archive       # produce dist/*.tgz + .sha256
 claude --plugin-dir build/<INTERNAL_NAME>
 ```
 
-Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstream repo or fork), `APPSEC_ADVISOR_REF` (defaults to `dev` on `dev` and `main` otherwise; `latest` resolves to the newest `v*` tag), `APPSEC_ADVISOR_SOURCE` (use an existing local checkout, skips fetch), `ORG_SKILLS_DIR` (defaults to `org-skills`), `INTERNAL_NAME`, `ORG_ID`, `ORG_REV`, `VERSION`.
+Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstream repo or fork), `APPSEC_ADVISOR_REF` (defaults to the pinned release tag `v0.6.0-beta.2` on the `dev` branch and `v0.6.0-beta.1` otherwise; `latest` resolves to the newest `v*` tag), `APPSEC_ADVISOR_SOURCE` (use an existing local checkout, skips fetch), `ORG_SKILLS_DIR` (defaults to `org-skills`), `INTERNAL_NAME`, `ORG_ID`, `ORG_REV`, `VERSION`.
 
 ### Package versioning
 
@@ -55,14 +55,15 @@ Bump rule: increment `ORG_REV` for org-only changes (`org-profile/`, `org-skills
 
 `APPSEC_ADVISOR_REF` is the single knob for "what do I build from". It accepts a `v*` tag, the literal `latest`, **or any branch name** — `fetch-upstream.sh` checks tags and heads, and a branch ref is re-fetched to its current tip on every run (a `--depth 1` detached checkout = effectively a pull).
 
-The branches deliberately follow different upstream lines: `dev` uses
-`APPSEC_ADVISOR_REF=dev`; the packaging repository's `main` branch uses
-`APPSEC_ADVISOR_REF=main`.
+The branches deliberately pin different upstream releases: `dev` uses
+`APPSEC_ADVISOR_REF=v0.6.0-beta.2` (the prerelease under development); the
+packaging repository's `main` branch uses `APPSEC_ADVISOR_REF=v0.6.0-beta.1`.
+Both pins are raised in the `Makefile` when upstream tags a new release.
 
 ```bash
-make package                              # upstream dev (default on this branch)
+make package                              # upstream v0.6.0-beta.2 (default on this branch)
 APPSEC_ADVISOR_REF=latest make package    # follow the newest v* tag instead
-APPSEC_ADVISOR_REF=v0.5.1-beta make package # pin a specific release (reproducible builds)
+APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package # pin a specific release (reproducible builds)
 APPSEC_ADVISOR_REF=dev make package       # follow the upstream dev branch
 APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 ```
@@ -73,7 +74,7 @@ APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 
 | Path | Purpose |
 |---|---|
-| `org-profile/org-profile.yaml` | Org identity, presets, cost/time guardrails, requirements source, output formats — plus CI gates (`requirements.gate`, `guardrails.fail_on`), run policy (`policy.url_allowlist`), security coaching (`security_coach`), and org hooks (`hooks:`). See upstream [`docs/org-profiles.md`](https://github.com/matthiasrohr/appsec-advisor/blob/main/docs/org-profiles.md) |
+| `org-profile/org-profile.yaml` | Org identity, presets, cost/time guardrails, requirements source, output formats — plus CI gates (`requirements.gate`, `guardrails.fail_on`), run policy (`policy.url_allowlist`), security coaching (`security_coach`), and org hooks (`hooks:`). See upstream [`docs/org-profiles.md`](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/org-profiles.md) |
 | `org-profile/context/organization.md` | Org context injected into analyses (max 50 KB, plain Markdown) |
 | `org-profile/actors/*.yaml` | Custom threat actors (globbed in via `actors.add`) |
 | `org-profile/hooks/*.py` | Scripts for org-declared Claude Code hooks (`hooks:` in the profile), referenced via `${CLAUDE_PLUGIN_ROOT}/org-profile/hooks/...` |

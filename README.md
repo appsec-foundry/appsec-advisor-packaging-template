@@ -2,10 +2,10 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-5A67D8.svg)](https://docs.claude.com/en/docs/claude-code)
-[![codecov](https://codecov.io/gh/matthiasrohr/appsec-advisor-packaging-template/graph/badge.svg)](https://codecov.io/gh/matthiasrohr/appsec-advisor-packaging-template)
-[![Upstream](https://img.shields.io/badge/upstream-appsec--advisor-orange.svg)](https://github.com/matthiasrohr/appsec-advisor)
+[![codecov](https://codecov.io/gh/appsec-foundry/appsec-advisor-packaging-template/graph/badge.svg)](https://codecov.io/gh/appsec-foundry/appsec-advisor-packaging-template)
+[![Upstream](https://img.shields.io/badge/upstream-appsec--advisor-orange.svg)](https://github.com/appsec-foundry/appsec-advisor)
 
-Template repo for building an internal [`appsec-advisor`](https://github.com/matthiasrohr/appsec-advisor) Claude Code plugin with your own org-specific defaults, requirements catalog, and cost guardrails.
+Template repo for building an internal [`appsec-advisor`](https://github.com/appsec-foundry/appsec-advisor) Claude Code plugin with your own org-specific defaults, requirements catalog, and cost guardrails.
 
 > **Development branch.** This branch follows `appsec-advisor`'s `dev` branch. The release branch `main` follows `appsec-advisor/main`.
 
@@ -21,7 +21,7 @@ and development workflow.
 Run the init script — it asks for your org name and plugin name, then creates a ready-to-use git repo with all placeholders already replaced:
 
 ```bash
-APPSEC_ADVISOR_TEMPLATE_REF=dev bash <(curl -fsSL https://raw.githubusercontent.com/matthiasrohr/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh)
+APPSEC_ADVISOR_TEMPLATE_REF=dev bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh)
 ```
 
 Alternatively, click **Use this template** on GitHub and replace `Acme Corp` / `acme-appsec` manually.
@@ -116,8 +116,8 @@ make validate
 # Fetch upstream + build + smoke test
 make package
 
-# This dev branch follows the upstream dev branch by default
-APPSEC_ADVISOR_REF=dev make package
+# This dev branch pins the upstream prerelease by default
+APPSEC_ADVISOR_REF=v0.6.0-beta.2 make package
 
 # Force a clean rebuild (removes upstream/, build/, dist/ first)
 make rebuild
@@ -129,7 +129,7 @@ make clean
 make upstream-check
 
 # Pin a specific upstream release
-APPSEC_ADVISOR_REF=v0.5.1-beta make package
+APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package
 
 # Follow a different branch tip (re-pulled to its tip on each build)
 APPSEC_ADVISOR_REF=main make package
@@ -160,17 +160,17 @@ Run `make ci-github` or `make ci-gitlab` to install the CI pipeline (see Quick S
 | Variable | Default | Description |
 |---|---|---|
 | `APPSEC_ADVISOR_URL` | upstream GitHub | Upstream repo or internal fork |
-| `APPSEC_ADVISOR_REF` | branch-dependent | `dev` on `dev`, otherwise `main`; explicitly set it to override |
+| `APPSEC_ADVISOR_REF` | branch-dependent | `v0.6.0-beta.2` on `dev`, otherwise `v0.6.0-beta.1`; explicitly set it to override |
 | `INTERNAL_NAME` | `acme-appsec` | Plugin name and Claude Code command namespace |
 | `VERSION` | derived from git tag or commit SHA | Version of the produced package |
 
 ## Related Projects
 
-- [appsec-advisor](https://github.com/matthiasrohr/appsec-advisor) — upstream Claude Code plugin this template packages
-- [appsec-advisor-fixtures](https://github.com/matthiasrohr/appsec-advisor-fixtures) — test fixtures for `appsec-advisor`
+- [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) — upstream Claude Code plugin this template packages
+- [appsec-advisor-fixtures](https://github.com/appsec-foundry/appsec-advisor-fixtures) — test fixtures for `appsec-advisor`
 
 ## Reference 
 
-- [github.com/matthiasrohr/appsec-advisor](https://github.com/matthiasrohr/appsec-advisor) — upstream plugin
-- [docs/internal-plugin-packaging.md](https://github.com/matthiasrohr/appsec-advisor/blob/main/docs/internal-plugin-packaging.md) — full packaging runbook
-- [docs/org-profiles.md](https://github.com/matthiasrohr/appsec-advisor/blob/main/docs/org-profiles.md) — org-profile.yaml reference
+- [github.com/appsec-foundry/appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) — upstream plugin
+- [docs/internal-plugin-packaging.md](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/internal-plugin-packaging.md) — full packaging runbook
+- [docs/org-profiles.md](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/org-profiles.md) — org-profile.yaml reference

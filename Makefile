@@ -1,13 +1,14 @@
-APPSEC_ADVISOR_URL ?= https://github.com/matthiasrohr/appsec-advisor.git
-# Keep packaging branches aligned with their corresponding upstream branch.
+APPSEC_ADVISOR_URL ?= https://github.com/appsec-foundry/appsec-advisor.git
+# Keep packaging branches pinned to their upstream release tag: dev builds the
+# prerelease under development, main the current release.
 # CI checkouts are detached, so prefer their branch environment variables.
 CURRENT_BRANCH := $(or $(CI_COMMIT_BRANCH),$(GITHUB_HEAD_REF),$(GITHUB_REF_NAME),$(shell git branch --show-current 2>/dev/null))
 APPSEC_ADVISOR_REF ?=
 ifeq ($(strip $(APPSEC_ADVISOR_REF)),)
 ifeq ($(CURRENT_BRANCH),dev)
-APPSEC_ADVISOR_REF := dev
+APPSEC_ADVISOR_REF := v0.6.0-beta.2
 else
-APPSEC_ADVISOR_REF := main
+APPSEC_ADVISOR_REF := v0.6.0-beta.1
 endif
 endif
 APPSEC_ADVISOR_DEST ?= upstream/appsec-advisor

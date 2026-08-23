@@ -4,14 +4,14 @@ This repository is an **example**: it shows how an organization packages and
 customizes the `appsec-advisor` Claude Code plugin for internal use. Treat it as
 a template for your own internal packaging repository. It holds organization
 configuration and build logic only — **no application code**. The plugin itself
-lives upstream at `https://github.com/matthiasrohr/appsec-advisor.git` and is
+lives upstream at `https://github.com/appsec-foundry/appsec-advisor.git` and is
 cloned to `upstream/appsec-advisor` at build time.
 
 ## What you may change here
 
 | File / directory | Purpose |
 |---|---|
-| `org-profile/org-profile.yaml` | The central knob — see [What you can customize](#what-you-can-customize). Full reference upstream: [`docs/org-profiles.md`](https://github.com/matthiasrohr/appsec-advisor/blob/main/docs/org-profiles.md) |
+| `org-profile/org-profile.yaml` | The central knob — see [What you can customize](#what-you-can-customize). Full reference upstream: [`docs/org-profiles.md`](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/org-profiles.md) |
 | `org-profile/context/organization.md` | Short organization context for the analysis (max. 50 KB) |
 | `org-profile/actors/*.yaml` | Your own enterprise actors for threat modeling |
 | `org-profile/hooks/*.py` | Scripts for the hooks declared in the profile's `hooks:` block, referenced via `${CLAUDE_PLUGIN_ROOT}/org-profile/hooks/...` |
@@ -111,7 +111,7 @@ make check                            # offline gate: lint + test (no network, n
 make release-check                    # release gate: check + upstream-check (advisory) + validate + package
 make upstream-check                   # read-only drift check: has the build ref moved, is there a newer v* release (exit 0=current, 1=drift, 2=error)
 make package                          # fetch upstream + build the package + smoke-test it
-APPSEC_ADVISOR_REF=v0.5.1-beta make package   # pin a specific release
+APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package # pin a specific release
 make validate                         # validate org-profile.yaml only
 make local-marketplace                # build + generate a local marketplace catalog under build/
 make install-local                    # register that catalog and install the plugin at local scope
@@ -146,13 +146,15 @@ a `v*` tag, the literal `latest`, **or a branch name** — `fetch-upstream.sh`
 checks both tags and heads, and a branch ref is pulled up to its current tip on
 every run (a `--depth 1` detached checkout, so effectively a pull).
 
-The packaging branches follow separate upstream lines: `dev` uses
-`APPSEC_ADVISOR_REF=dev`; `main` uses `APPSEC_ADVISOR_REF=main`.
+Die Packaging-Branches pinnen verschiedene Upstream-Releases: `dev` nutzt
+`APPSEC_ADVISOR_REF=v0.6.0-beta.2` (das Prerelease in Entwicklung), `main`
+nutzt `APPSEC_ADVISOR_REF=v0.6.0-beta.1`. Beide Pins werden im `Makefile`
+hochgezogen, sobald upstream ein neues Release taggt.
 
 ```bash
-make package                              # upstream dev (default on this branch)
+make package                              # upstream v0.6.0-beta.2 (default on this branch)
 APPSEC_ADVISOR_REF=latest make package    # follow the highest v* tag instead
-APPSEC_ADVISOR_REF=v0.5.1-beta make package # pin a specific release (reproducible)
+APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package # pin a specific release (reproducible)
 APPSEC_ADVISOR_REF=dev make package       # follow the upstream dev branch
 APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 ```
@@ -180,7 +182,7 @@ organization's central Marketplace.
 | Variable | Default | Meaning |
 |---|---|---|
 | `APPSEC_ADVISOR_URL` | upstream GitHub | Upstream repository or an internal fork |
-| `APPSEC_ADVISOR_REF` | branch-dependent | `dev` on `dev`, otherwise `main` |
+| `APPSEC_ADVISOR_REF` | branch-dependent | `v0.6.0-beta.2` on `dev`, otherwise `v0.6.0-beta.1` |
 | `INTERNAL_NAME` | `acme-appsec` | Plugin name and command namespace |
 | `ORG_REV` | repository tag or commit SHA | Organization revision in the derived version |
 | `VERSION` | derived | Overrides the derived version entirely |
