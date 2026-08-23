@@ -1,6 +1,6 @@
 # Example security requirements catalog for appsec-advisor.
 # Replace these demo entries with your organization's real AppSec standards.
-# Schema reference: https://github.com/matthiasrohr/appsec-advisor/blob/main/docs/requirements.md
+# Schema reference: https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/requirements.md
 #
 # To host this file centrally, upload it to an accessible URL and set
 # requirements.source.requirements_yaml_url in org-profile.yaml accordingly.

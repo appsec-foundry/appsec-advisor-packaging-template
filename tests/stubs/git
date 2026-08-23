@@ -65,7 +65,7 @@ if sub == "clone":
 if sub == "remote":
     if rest[:1] == ["get-url"]:
         if os.environ.get("GITSTUB_HAS_ORIGIN") == "1":
-            out("https://github.com/matthiasrohr/appsec-advisor.git")
+            out("https://github.com/appsec-foundry/appsec-advisor.git")
             sys.exit(0)
         sys.stderr.write("error: No such remote 'origin'\n")
         sys.exit(2)

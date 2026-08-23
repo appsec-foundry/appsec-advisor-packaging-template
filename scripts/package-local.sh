@@ -3,7 +3,7 @@ set -euo pipefail
 
 SOURCE="${APPSEC_ADVISOR_SOURCE:-}"
 DEST="${APPSEC_ADVISOR_DEST:-upstream/appsec-advisor}"
-UPSTREAM_URL="${APPSEC_ADVISOR_URL:-https://github.com/matthiasrohr/appsec-advisor.git}"
+UPSTREAM_URL="${APPSEC_ADVISOR_URL:-https://github.com/appsec-foundry/appsec-advisor.git}"
 INTERNAL_NAME="${INTERNAL_NAME:-acme-appsec}"
 VERSION="${VERSION:-}"
 ORG_ID="${ORG_ID:-${INTERNAL_NAME%%-*}}"

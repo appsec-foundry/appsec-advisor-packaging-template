@@ -14,7 +14,7 @@ permissions:
 
 env:
   INTERNAL_NAME: ${{ vars.INTERNAL_NAME || 'acme-appsec' }}
-  APPSEC_ADVISOR_URL: ${{ vars.APPSEC_ADVISOR_URL || 'https://github.com/matthiasrohr/appsec-advisor.git' }}
+  APPSEC_ADVISOR_URL: ${{ vars.APPSEC_ADVISOR_URL || 'https://github.com/appsec-foundry/appsec-advisor.git' }}
   APPSEC_ADVISOR_REF: ${{ vars.APPSEC_ADVISOR_REF }}
   PYTHONDONTWRITEBYTECODE: "1"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"

@@ -77,7 +77,7 @@ fetch_tty() {
 
 echo "--- fetch-upstream.sh ---"
 fetch_run "fetch: bad url overview" 2 0 \
-  APPSEC_ADVISOR_URL="https://github.com/matthiasrohr?tab=repositories"
+  APPSEC_ADVISOR_URL="https://github.com/appsec-foundry?tab=repositories"
 fetch_run "fetch: dest not a checkout" 2 1 GITSTUB_IS_CHECKOUT=0
 fetch_run "fetch: latest->tag, clone, set-url" 0 0 \
   APPSEC_ADVISOR_REF=latest GITSTUB_TAGS="v0.3.0 v0.4.0" GITSTUB_HAS_ORIGIN=1

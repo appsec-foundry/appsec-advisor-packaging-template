@@ -4,7 +4,7 @@ stages:
 
 variables:
   INTERNAL_NAME: "acme-appsec"
-  APPSEC_ADVISOR_URL: "https://github.com/matthiasrohr/appsec-advisor.git"
+  APPSEC_ADVISOR_URL: "https://github.com/appsec-foundry/appsec-advisor.git"
   # The package version is derived by package-local.sh as <upstream>+<org-id>.<org-rev>
   # (ORG_REV is set per-pipeline below). Set a VERSION CI/CD variable to override it.
   PYTHONDONTWRITEBYTECODE: "1"

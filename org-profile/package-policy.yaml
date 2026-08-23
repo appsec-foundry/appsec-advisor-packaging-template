@@ -3,7 +3,7 @@
 # built plugin. New upstream skills and org-skills/ entries are excluded by
 # default until explicitly added.
 # Full list of available skills and hooks:
-# https://github.com/matthiasrohr/appsec-advisor/blob/main/docs/internal-plugin-packaging.md
+# https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/internal-plugin-packaging.md
 plugin_surface:
   skills:
     include:

@@ -1,14 +1,14 @@
 # acme-appsec — Acme Corp's Security Plugin for Claude Code
 
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-5A67D8.svg)](https://docs.claude.com/en/docs/claude-code)
-[![Based on appsec-advisor](https://img.shields.io/badge/based%20on-appsec--advisor-orange.svg)](https://github.com/matthiasrohr/appsec-advisor)
+[![Based on appsec-advisor](https://img.shields.io/badge/based%20on-appsec--advisor-orange.svg)](https://github.com/appsec-foundry/appsec-advisor)
 
 `acme-appsec` brings Acme Corp's security standards into Claude Code. It runs
 threat models and security audits tuned to our requirements, cost limits, and
 review process. Maintained by the Acme AppSec Team.
 
 This repository builds the plugin from the open-source
-[appsec-advisor](https://github.com/matthiasrohr/appsec-advisor) project and
+[appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) project and
 layers Acme Corp's own configuration on top.
 
 ## Build the plugin
@@ -62,7 +62,7 @@ build/acme-appsec/scripts/run-headless.sh \
 ```
 
 The wrapper locates its own plugin directory, so no `--plugin-dir` is needed.
-See the upstream [headless-mode guide](https://github.com/matthiasrohr/appsec-advisor/blob/main/docs/headless-mode.md)
+See the upstream [headless-mode guide](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/headless-mode.md)
 for the full flag reference, CI templates (GitHub/GitLab/Jenkins), and
 pull-request gating.
 
@@ -100,7 +100,7 @@ The things you'll most often adjust in `org-profile.yaml`:
 - **Presets** — `ci-standard` for everyday runs, `release-review` for thorough release checks. Pick the default with `default_preset`.
 - **Guardrails** — each preset caps `max_cost_usd` and `max_wall_time` so runs stay predictable.
 - **CI gates** — `requirements.gate` and `guardrails.fail_on` (per preset) make CI runs fail on unmet requirements or high-severity findings.
-- **Security coaching & hooks** — `security_coach` topics and `policy.url_allowlist` are org-wide; `hooks:` bundles Acme-owned Claude Code hooks. See upstream [`docs/org-profiles.md`](https://github.com/matthiasrohr/appsec-advisor/blob/main/docs/org-profiles.md).
+- **Security coaching & hooks** — `security_coach` topics and `policy.url_allowlist` are org-wide; `hooks:` bundles Acme-owned Claude Code hooks. See upstream [`docs/org-profiles.md`](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/org-profiles.md).
 
 After any change, rebuild with `make package`.
 
@@ -209,9 +209,9 @@ points to, then rebuild — no plugin changes needed.
 release tag. Install it once with `make ci-github` or `make ci-gitlab`.
 
 For deeper build and packaging details, see `AGENTS.md` in this repo and the
-[packaging runbook](https://github.com/matthiasrohr/appsec-advisor/blob/main/docs/internal-plugin-packaging.md).
+[packaging runbook](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/internal-plugin-packaging.md).
 
 ## Reference
 
-- [appsec-advisor](https://github.com/matthiasrohr/appsec-advisor) — the upstream plugin
-- [org-profile reference](https://github.com/matthiasrohr/appsec-advisor/blob/main/docs/org-profiles.md) — all configuration options
+- [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) — the upstream plugin
+- [org-profile reference](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/org-profiles.md) — all configuration options

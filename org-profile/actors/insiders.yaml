@@ -1,6 +1,6 @@
 # Custom threat actors for Acme Corp. Add, edit, or delete entries as needed.
 # Each actor extends the plugin's default actor library for threat model analysis.
-# Schema reference: https://github.com/matthiasrohr/appsec-advisor/blob/main/docs/org-profiles.md
+# Schema reference: https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/org-profiles.md
 actors:
   - id: ACT-E-1
     label: acme-privileged-contractor

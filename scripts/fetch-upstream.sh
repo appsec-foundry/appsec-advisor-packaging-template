@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-URL="${APPSEC_ADVISOR_URL:-https://github.com/matthiasrohr/appsec-advisor.git}"
+URL="${APPSEC_ADVISOR_URL:-https://github.com/appsec-foundry/appsec-advisor.git}"
 REF="${APPSEC_ADVISOR_REF:-latest}"
 DEST="${APPSEC_ADVISOR_DEST:-upstream/appsec-advisor}"
 
 case "${URL}" in
-  *"github.com/matthiasrohr?tab=repositories"*)
+  *"github.com/appsec-foundry?tab=repositories"*)
     echo "ERROR: APPSEC_ADVISOR_URL must be the repository clone URL, not the GitHub repositories overview." >&2
-    echo "Use: https://github.com/matthiasrohr/appsec-advisor.git" >&2
+    echo "Use: https://github.com/appsec-foundry/appsec-advisor.git" >&2
     exit 2
     ;;
 esac

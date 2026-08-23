@@ -11,7 +11,7 @@ set -euo pipefail
 #
 # Exit codes:  0 = up to date   1 = drift detected   2 = error.
 
-URL="${APPSEC_ADVISOR_URL:-https://github.com/matthiasrohr/appsec-advisor.git}"
+URL="${APPSEC_ADVISOR_URL:-https://github.com/appsec-foundry/appsec-advisor.git}"
 REF="${APPSEC_ADVISOR_REF:-latest}"
 DEST="${APPSEC_ADVISOR_DEST:-upstream/appsec-advisor}"
 
