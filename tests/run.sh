@@ -27,8 +27,10 @@ CHECK="$ROOT/scripts/upstream-check.sh"
 GUARD_TEST="$HERE/test_guard.py"
 MARKETPLACE_TEST="$HERE/test_local_marketplace.py"
 
-/usr/bin/python3 "$GUARD_TEST"
-/usr/bin/python3 "$MARKETPLACE_TEST"
+# -B: importing guard.py must not leave __pycache__ in org-profile/hooks/,
+# which the packager would copy and the smoke test rejects.
+/usr/bin/python3 -B "$GUARD_TEST"
+/usr/bin/python3 -B "$MARKETPLACE_TEST"
 
 COV="$(mktemp)"
 WORKROOT="$(mktemp -d)"
