@@ -59,7 +59,19 @@ if script.endswith("package_internal_plugin.py"):
                 file,
             )
         with open(os.path.join(root, "config.json"), "w", encoding="utf-8") as file:
-            json.dump({"skill_toggles": {}}, file)
+            json.dump(
+                {
+                    "skill_toggles": {},
+                    "baseline": {
+                        "id": "aisec-0.1",
+                        "url": (
+                            "https://raw.githubusercontent.com/matthiasrohr/"
+                            "ai-secure-coding-baseline/main/secure-coding-baseline.md"
+                        ),
+                    },
+                },
+                file,
+            )
         for skill, description in (
             ("create-threat-model", "Create a threat model."),
             ("help", "Show generic upstream help."),

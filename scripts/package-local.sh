@@ -167,6 +167,12 @@ python3 "${SOURCE}/scripts/package_internal_plugin.py" \
   --readme "build/${INTERNAL_NAME}/README.md" \
   --skip-archive
 
+# v0.6.0-beta.1 still contains links to the former personal repository
+# namespace. Rewrite only repositories with verified appsec-foundry targets and
+# fail if any unknown personal GitHub origin would remain in the package.
+python3 "${SCRIPT_DIR}/rewrite-packaged-origins.py" \
+  --plugin-root "build/${INTERNAL_NAME}"
+
 # Upstream currently uses plugin.json.version both as the user-facing package
 # identity and for compatibility.core checks. Preserve its version separately,
 # then make the organization-owned version authoritative for Claude Code,

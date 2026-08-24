@@ -488,6 +488,7 @@ for helper in \
   render-packaged-help.py \
   archive-built-plugin.py \
   finalize-package-version.py \
+  rewrite-packaged-origins.py \
   reinit-org-repo.sh; do
   if [ -f "${TEMPLATE_BASE}/scripts/${helper}" ]; then
     helper_tmp="${TARGET_DIR}/scripts/.${helper}.new"
@@ -746,6 +747,22 @@ if [ "${_build_answered}" = true ]; then
 fi
 
 PACKAGING_ROOT="$(pwd)"
+
+print_optional_steps() {
+  echo ""
+  echo "Further steps (optional):"
+  echo "  - Review organization configuration:"
+  echo "       presets, requirements, policy, banner/baseline, context, security coach,"
+  echo "       actors, abuse cases, hooks, and MCP; see README.md#configuration-map"
+  echo "  - Review and customize the default skill selection:"
+  echo "       enabled: help, check-permissions, create/update/review/show/ask-threat-model,"
+  echo "                threat-model-health, status, fix-run-issues, clean-run-state"
+  echo "       disabled: audit-security-requirements, verify-requirements"
+  echo "       package-policy.yaml includes/removes skills; org-profile.yaml skill_toggles"
+  echo "       enable or disable packaged skills; see README.md#customize-skills"
+  echo "  - Distribute the tested plugin through an internal Claude Code Marketplace"
+}
+
 echo ""
 echo "Done. Your packaging repo is ready at: ${PACKAGING_ROOT}"
 if [ "${BUILD_STATE}" = succeeded ]; then
@@ -769,6 +786,7 @@ if [ "${REINIT_MODE}" = true ]; then
   echo "  ${REINIT_STEP}. Load the plugin from any project you want to analyze:"
   echo "       claude --plugin-dir ${PACKAGING_ROOT}/build/${PLUGIN_NAME}"
   echo "  $((REINIT_STEP + 1)). Review and commit the reinitialization changes"
+  print_optional_steps
   exit 0
 fi
 echo "  1. cd ${PACKAGING_ROOT}"
@@ -792,8 +810,4 @@ fi
 echo "  ${LOAD_STEP}. Load the plugin from any project you want to analyze:"
 echo "       cd /path/to/your/project"
 echo "       claude --plugin-dir ${PACKAGING_ROOT}/build/${PLUGIN_NAME}"
-echo ""
-echo "Further steps (optional):"
-echo "  - Customize the available skills:"
-echo "       add organization skills or restrict bundled skills; see README.md#customize-skills"
-echo "  - Distribute the tested plugin through an internal Claude Code Marketplace"
+print_optional_steps

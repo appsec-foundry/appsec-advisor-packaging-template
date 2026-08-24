@@ -13,7 +13,9 @@ does not replace the normal engineering or AppSec review process.
 ## What the plugin provides
 
 - Threat models that can be created once and updated as the code changes.
-- A session-start banner showing plugin, threat-model, and baseline status.
+- A session-start banner showing plugin, threat-model, and
+  [AI Secure Coding Baseline](https://github.com/appsec-foundry/ai-secure-coding-baseline)
+  status.
 - Review and triage workflows for findings, accepted risks, and remediation.
 - Checks against the application-security requirements maintained for Acme Corp.
 - YAML and SARIF output for normal runs, with additional release-review output
@@ -45,20 +47,24 @@ or risk decision.
 
 ## Skills and commands
 
-| Command | When to use it |
-|---|---|
-| `/acme-appsec:help` | Show the commands included in this organization package and whether any are disabled |
-| `/acme-appsec:create-threat-model` | Create the first threat model for a repository |
-| `/acme-appsec:update-threat-model` | Re-analyze relevant changes without starting over |
-| `/acme-appsec:review-threat-model` | Triage findings and plan remediation |
-| `/acme-appsec:ask-threat-model` | Ask read-only questions about the current model |
-| `/acme-appsec:show-threat-model` | Show the current findings, backlog, and coverage summary |
-| `/acme-appsec:threat-model-health` | Check whether the model is stale or incomplete |
-| `/acme-appsec:audit-security-requirements` | Audit the repository against our requirements catalog |
-| `/acme-appsec:verify-requirements` | Check recent changes against applicable requirements |
-| `/acme-appsec:status` | Show the current run state |
-| `/acme-appsec:fix-run-issues` | Diagnose and repair a failed or interrupted run |
-| `/acme-appsec:clean-run-state` | Remove stale run state before a clean restart |
+The initial package has the following skill selection. “Enabled” means that a
+developer can invoke the command; it does not run automatically.
+
+| Command | Default | When to use it |
+|---|---|---|
+| `/acme-appsec:help` | Enabled | Show the commands included in this organization package and whether any are disabled |
+| `/acme-appsec:check-permissions` | Enabled | Review and update the permissions needed by the plugin |
+| `/acme-appsec:create-threat-model` | Enabled | Create the first threat model for a repository |
+| `/acme-appsec:update-threat-model` | Enabled | Re-analyze relevant changes without starting over |
+| `/acme-appsec:review-threat-model` | Enabled | Triage findings and plan remediation |
+| `/acme-appsec:ask-threat-model` | Enabled | Ask read-only questions about the current model |
+| `/acme-appsec:show-threat-model` | Enabled | Show the current findings, backlog, and coverage summary |
+| `/acme-appsec:threat-model-health` | Enabled | Check whether the model is stale or incomplete |
+| `/acme-appsec:audit-security-requirements` | Disabled | Audit the repository against our requirements catalog once it is configured |
+| `/acme-appsec:verify-requirements` | Disabled | Check recent changes against applicable requirements once the catalog is configured |
+| `/acme-appsec:status` | Enabled | Show the current run state |
+| `/acme-appsec:fix-run-issues` | Enabled | Diagnose and repair a failed or interrupted run |
+| `/acme-appsec:clean-run-state` | Enabled | Remove stale run state before a clean restart |
 
 The two requirements commands are available only after the requirements
 catalog has been configured and enabled by the Acme AppSec Team. If a command
@@ -127,7 +133,9 @@ include its id in `org-profile/package-policy.yaml`. The same policy controls
 which bundled skills are present in the package: use its `include` or `exclude`
 selection to remove a command entirely. To keep a command installed but block
 it at runtime with an explanation, configure `skill_toggles` in
-`org-profile/org-profile.yaml` instead.
+`org-profile/org-profile.yaml` instead. Maintainers can use those toggles to
+enable or disable individual packaged skills. Packaging writes the resolved
+toggles to `build/acme-appsec/config.json`; do not edit that generated file.
 
 See the upstream [internal packaging guide](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/internal-plugin-packaging.md)
 and [organization profile reference](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/org-profiles.md)
@@ -144,17 +152,27 @@ release, run:
 make release-check
 ```
 
+### Configuration map
+
 Configuration owned by the Acme AppSec Team:
 
 | Path | Purpose |
 |---|---|
 | `Makefile` → `PACKAGE_VERSION` | Internal plugin release shown in the banner, help and package filename |
-| `org-profile/org-profile.yaml` | Presets, requirements, guardrails, organization hooks, and optional MCP servers |
-| `org-profile/context/organization.md` | Organization context supplied to analyses as untrusted reference data |
-| `org-profile/actors/*.yaml` | Threat actors specific to Acme Corp |
+| `org-profile/org-profile.yaml` | Organization identity; presets and guardrails; requirements; URL and model policy; banner and baseline; context routing; security coach; actor and abuse-case selection; runtime skill toggles; hooks; optional MCP servers |
+| `org-profile/context/*.md` | Organization documents supplied to analyses as untrusted reference data |
+| `org-profile/actors/*.yaml` | Organization-specific threat actors selected by the profile |
+| `org-profile/abuse-cases/*.yaml` | Optional organization-specific abuse cases selected by the profile |
 | `org-profile/hooks/*.py` | Organization-owned Claude Code event hooks |
 | `org-profile/package-policy.yaml` | Allowlist for packaged skills, hooks, and MCP servers |
 | `org-skills/<skill-id>/SKILL.md` | Skills maintained by the Acme AppSec Team |
+| `build/acme-appsec/.claude-plugin/plugin.json` | Generated plugin identity, organization-owned version, and upstream compatibility version |
+| `build/acme-appsec/config.json` | Generated runtime projection of the profile, including banner, baseline, and skill toggles |
+| `build/acme-appsec/.claude-plugin/package-surface.json` | Generated record of included and removed skills, hooks, and MCP servers |
+
+Files under `build/` are outputs. Change the `Makefile`, `org-profile/`, or
+`org-skills/` sources and run `make package` again rather than editing the
+generated manifest or configuration files.
 
 `org-profile/package-policy.yaml` is an allowlist. A new skill, hook, or MCP
 server is not shipped until its id is included there. Keep credentials and

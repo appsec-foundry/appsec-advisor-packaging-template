@@ -55,8 +55,10 @@ make package
 
 This fetches the upstream plugin, overlays your org profile, generates `/help`
 from the final package allowlist and runtime toggles, runs a smoke test, and
-writes the result to `build/your-plugin-name/`. The original upstream help is
-not changed. To force a clean rebuild:
+writes the result to `build/your-plugin-name/`. Verified legacy GitHub links in
+the pinned upstream release are normalized to their `appsec-foundry` origins;
+the build stops if it encounters an unknown personal-repository link. The
+original upstream help is not changed. To force a clean rebuild:
 
 ```bash
 make rebuild
@@ -84,7 +86,7 @@ Beyond the quick start, these files are yours to edit:
 | File | Purpose |
 |---|---|
 | `Makefile` → `PACKAGE_VERSION` | Organization-owned plugin version shown to users |
-| `org-profile/org-profile.yaml` | Presets, banner branding, cost guardrails, requirements source, output formats |
+| `org-profile/org-profile.yaml` | Identity, presets, requirements, policy, banner, baseline, context routing, security coach, actors, abuse cases, skill toggles, hooks, and MCP servers |
 | `org-profile/context/organization.md` | Short org context injected into analyses (max 50 KB) |
 | `org-profile/actors/*.yaml` | Custom threat actors for threat models — edit or delete |
 | `org-profile/package-policy.yaml` | Allowlist of which skills and hooks to include |
@@ -114,6 +116,21 @@ Two rules keep this predictable:
 - If `org-profile/package-policy.yaml` uses `plugin_surface.skills.include`,
   add the local skill name there as well. The allowlist covers both upstream and
   organization skills.
+
+### Control which skills are available
+
+`org-profile/package-policy.yaml` controls the build-time surface. A skill in
+its `include` list is packaged; a skill removed by the policy does not exist in
+the finished plugin. `skill_toggles` in `org-profile/org-profile.yaml` controls
+the runtime state of skills that were packaged, including the reason shown when
+a command is disabled.
+
+The generated `config.json` contains the resolved runtime settings and points
+maintainers back to the profile, its referenced files, and
+`.claude-plugin/package-surface.json`, which records the final skills, hooks,
+and MCP servers. Both files under `build/` are generated; make changes in the
+profile and package policy, then rebuild. `/your-plugin-name:help` shows the
+effective skill selection from the finished package.
 
 ## Build Reference
 

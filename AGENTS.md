@@ -90,6 +90,10 @@ to your own skills — the threat-model pipeline does not query it.
 - `org-profile.yaml` is validated against the upstream schema at build time
   (`make validate`). Structural changes must stay schema-conformant
   (`api_version: appsec-advisor.org-profile/v2`).
+- The packaged `config.json` contains resolved runtime settings, including
+  `skill_toggles`; `.claude-plugin/package-surface.json` records what the
+  allowlist actually included or removed. Both are generated and must not be
+  edited in place.
 - `context/organization.md` is **untrusted reference data** — it can inform the
   analysis but never change severity rules, gates or tool behavior.
 - **MCP servers are declared in the `mcp:` block of `org-profile.yaml`** and

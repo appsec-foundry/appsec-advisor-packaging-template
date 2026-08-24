@@ -29,6 +29,7 @@ GUARD_TEST="$HERE/test_guard.py"
 MARKETPLACE_TEST="$HERE/test_local_marketplace.py"
 PACKAGED_HELP_TEST="$HERE/test_packaged_help.py"
 PACKAGE_VERSION_TEST="$HERE/test_finalize_package_version.py"
+PACKAGED_ORIGINS_TEST="$HERE/test_rewrite_packaged_origins.py"
 
 # -B: importing guard.py must not leave __pycache__ in org-profile/hooks/,
 # which the packager would copy and the smoke test rejects.
@@ -36,6 +37,7 @@ PACKAGE_VERSION_TEST="$HERE/test_finalize_package_version.py"
 /usr/bin/python3 -B "$MARKETPLACE_TEST"
 /usr/bin/python3 -B "$PACKAGED_HELP_TEST"
 /usr/bin/python3 -B "$PACKAGE_VERSION_TEST"
+/usr/bin/python3 -B "$PACKAGED_ORIGINS_TEST"
 
 COV="$(mktemp)"
 WORKROOT="$(mktemp -d)"
@@ -148,6 +150,14 @@ rc=$?
 if [ "$rc" = 0 ] && [ -f "$d/dist/acme-appsec-0.1.0.tgz" ] && \
    tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/.claude-plugin/plugin.json | \
      grep -Fq '"appsec_advisor_core_version": "0.6.0-beta.1"' && \
+   tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/config.json | \
+     grep -Fq 'https://raw.githubusercontent.com/appsec-foundry/ai-secure-coding-baseline/main/secure-coding-baseline.md' && \
+   tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/config.json | \
+     grep -Fq '.claude-plugin/package-surface.json' && \
+   tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/config.json | \
+     grep -Fq 'org-profile/package-policy.yaml' && \
+   ! tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/config.json | \
+     grep -Fq 'githubusercontent.com/matthiasrohr/' && \
    tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/skills/help/SKILL.md | \
      grep -Fq 'acme-appsec 0.1.0' && \
    tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/skills/help/SKILL.md | \
@@ -312,6 +322,11 @@ else fail "init: invalid UTF-8 and package version are retried safely" "rc=$rc";
 if grep -Fq '`poaa-appsec` is the Claude Code security plugin' "$unicode_tgt/README.md" && \
    grep -Fq 'Prüf+Øvelse+Æble+Ångström' "$unicode_tgt/README.md" && \
    grep -Fq 'POAA AppSec Team' "$unicode_tgt/README.md" && \
+   grep -Fq '| `/poaa-appsec:check-permissions` | Enabled |' "$unicode_tgt/README.md" && \
+   grep -Fq '| `/poaa-appsec:audit-security-requirements` | Disabled |' "$unicode_tgt/README.md" && \
+   grep -Fq 'build/poaa-appsec/config.json' "$unicode_tgt/README.md" && \
+   grep -Fq '### Configuration map' "$unicode_tgt/README.md" && \
+   grep -Fq 'Organization identity; presets and guardrails; requirements;' "$unicode_tgt/README.md" && \
    grep -Fq 'https://github.com/appsec-foundry/appsec-advisor-packaging-template' \
      "$unicode_tgt/README.md" && \
    grep -Fq 'https://github.com/appsec-foundry/appsec-advisor)' \
@@ -377,8 +392,14 @@ if [ "$rc" = 0 ] && \
    grep -Fq '  4. Build the plugin: make package' "$build_log" && \
    grep -Fq '  5. Load the plugin' "$build_log" && \
    grep -Fq 'Further steps (optional):' "$build_log" && \
-   grep -Fq '  - Customize the available skills:' "$build_log" && \
-   grep -Fq 'add organization skills or restrict bundled skills; see README.md#customize-skills' "$build_log" && \
+   grep -Fq '  - Review organization configuration:' "$build_log" && \
+   grep -Fq 'presets, requirements, policy, banner/baseline, context, security coach,' "$build_log" && \
+   grep -Fq 'actors, abuse cases, hooks, and MCP; see README.md#configuration-map' "$build_log" && \
+   grep -Fq '  - Review and customize the default skill selection:' "$build_log" && \
+   grep -Fq 'enabled: help, check-permissions, create/update/review/show/ask-threat-model,' "$build_log" && \
+   grep -Fq 'disabled: audit-security-requirements, verify-requirements' "$build_log" && \
+   grep -Fq 'package-policy.yaml includes/removes skills; org-profile.yaml skill_toggles' "$build_log" && \
+   grep -Fq 'enable or disable packaged skills; see README.md#customize-skills' "$build_log" && \
    grep -Fq '  - Distribute the tested plugin through an internal Claude Code Marketplace' "$build_log" && \
    ! grep -Eq '^  [0-9]+\. Optional:' "$build_log" && \
    ! grep -Fq 'Set up CI' "$build_log"; then
@@ -604,7 +625,8 @@ else fail "init: UTF-8 recovery rejects a backup-directory symlink" "rc=$rc"; fi
 missing=""
 for f in scripts/fetch-upstream.sh scripts/upstream-check.sh scripts/package-local.sh \
          scripts/prepare-local-marketplace.py scripts/render-packaged-help.py \
-         scripts/archive-built-plugin.py scripts/reinit-org-repo.sh \
+         scripts/archive-built-plugin.py scripts/finalize-package-version.py \
+         scripts/rewrite-packaged-origins.py scripts/reinit-org-repo.sh \
          org-profile/package-policy.yaml org-profile/org-profile.yaml Makefile; do
   [ -f "$self_contained_tgt/$f" ] || missing="$missing $f"
 done
@@ -644,6 +666,8 @@ cp "$ROOT/scripts/prepare-local-marketplace.py" \
   "$clean/scripts/prepare-local-marketplace.py"
 cp "$ROOT/scripts/render-packaged-help.py" "$clean/scripts/render-packaged-help.py"
 cp "$ROOT/scripts/archive-built-plugin.py" "$clean/scripts/archive-built-plugin.py"
+cp "$ROOT/scripts/rewrite-packaged-origins.py" \
+  "$clean/scripts/rewrite-packaged-origins.py"
 cp "$ROOT/scripts/reinit-org-repo.sh" "$clean/scripts/reinit-org-repo.sh"
 cp "$ROOT/Makefile" "$clean/Makefile"
 lonely="$WORKROOT/lonely"
@@ -661,7 +685,8 @@ assert_rc "init: clone fallback" 0 "$?"
 # otherwise self-consistent template snapshot fail during scaffolding.
 legacy="$WORKROOT/legacy-export"
 cp -r "$clean" "$legacy"
-rm "$legacy/scripts/prepare-local-marketplace.py"
+rm "$legacy/scripts/prepare-local-marketplace.py" \
+   "$legacy/scripts/rewrite-packaged-origins.py"
 d="$(newdir)"
 tgt="$d/out"
 printf 'Test Org\n\n\n\n\n%s\nn\n\n' "$tgt" | \
