@@ -28,6 +28,9 @@ REINIT="$ROOT/scripts/reinit-org-repo.sh"
 GUARD_TEST="$HERE/test_guard.py"
 MARKETPLACE_TEST="$HERE/test_local_marketplace.py"
 PACKAGED_HELP_TEST="$HERE/test_packaged_help.py"
+PACKAGED_README_TEST="$HERE/test_packaged_readme.py"
+SESSION_BANNER_PRUNE_TEST="$HERE/test_prune_packaged_session_banner.py"
+BASELINE_UPSTREAM_TEST="$HERE/test_baseline_upstream_check.py"
 PACKAGE_VERSION_TEST="$HERE/test_finalize_package_version.py"
 PACKAGED_ORIGINS_TEST="$HERE/test_rewrite_packaged_origins.py"
 
@@ -36,6 +39,9 @@ PACKAGED_ORIGINS_TEST="$HERE/test_rewrite_packaged_origins.py"
 /usr/bin/python3 -B "$GUARD_TEST"
 /usr/bin/python3 -B "$MARKETPLACE_TEST"
 /usr/bin/python3 -B "$PACKAGED_HELP_TEST"
+/usr/bin/python3 -B "$PACKAGED_README_TEST"
+/usr/bin/python3 -B "$SESSION_BANNER_PRUNE_TEST"
+/usr/bin/python3 -B "$BASELINE_UPSTREAM_TEST"
 /usr/bin/python3 -B "$PACKAGE_VERSION_TEST"
 /usr/bin/python3 -B "$PACKAGED_ORIGINS_TEST"
 
@@ -51,6 +57,8 @@ assert_rc() { if [ "$2" = "$3" ]; then pass "$1"; else fail "$1" "rc=$3 want $2"
 newdir() { mktemp -d "$WORKROOT/d.XXXXXX"; }
 mkfake() { # a minimal appsec-advisor checkout
   mkdir -p "$1/.claude-plugin" "$1/scripts" "$1/skills"
+  mkdir -p "$(dirname "$1")/org-profile"
+  cp "$ROOT/org-profile/org-profile.yaml" "$(dirname "$1")/org-profile/org-profile.yaml"
   printf '%s\n' '{"name":"appsec-advisor","version":"0.6.0-beta.1"}' \
     >"$1/.claude-plugin/plugin.json"
   local f
@@ -242,7 +250,8 @@ else fail "package: a leftover org-mcp.json no longer overwrites the build" "rc=
 echo "--- init-org-repo.sh ---"
 # answers order: org-name, org-id(default), plugin(default), package-version,
 #                owner(default),
-#                target-dir, demo(y/n), baseline(y/n),
+#                target-dir, demo(y/n), baseline(y/n), statusline(y/n),
+#                internal-repository-url(optional),
 #                [continue? when dir exists], [build(y/n)]
 
 if grep -Fqx '      - session-banner' "$ROOT/org-profile/package-policy.yaml"; then
@@ -270,6 +279,19 @@ if [ "$rc" = 0 ] && grep -Fqx '  enabled: false' "$tgt/org-profile/org-profile.y
   pass "init: baseline=no"
 else fail "init: baseline=no" "rc=$rc"; fi
 
+# Declining the startup status disables the runtime default and removes the
+# SessionStart hook from the package allowlist.
+d="$(newdir)"
+tgt="$d/out"
+printf 'Test Org\n\n\n\n\n%s\nn\n\nn\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
+  >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && \
+   grep -A2 '^banner:' "$tgt/org-profile/org-profile.yaml" | grep -Fqx '  enabled: false' && \
+   ! grep -Fqx '      - session-banner' "$tgt/org-profile/package-policy.yaml"; then
+  pass "init: startup status=no removes packaged hook"
+else fail "init: startup status=no removes packaged hook" "rc=$rc"; fi
+
 d="$(newdir)"
 tgt="$d/out"
 printf 'Test Org\n\n\n\n\n%s\nn\n\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
@@ -283,7 +305,7 @@ else fail "init: demo=no" "rc=$rc"; fi
 # Preserve the display name while deriving an ASCII-safe technical id.
 d="$(newdir)"
 tgt="$d/out"
-printf 'Prüf+Øvelse+Æble+Ångström\n\n\n\n\n%s\nn\n\n' "$tgt" | \
+printf 'Prüf+Øvelse+Æble+Ångström\n\n\n\n\n%s\nn\n\n\nhttps://git.example.test/poaa-appsec\n' "$tgt" | \
   (cd "$ROOT" && env LC_ALL=C timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
 rc=$?
@@ -292,8 +314,11 @@ if [ "$rc" = 0 ] && \
    grep -Fqx '  name: "Prüf+Øvelse+Æble+Ångström"' "$tgt/org-profile/org-profile.yaml" && \
    grep -Fqx '  owner: "POAA AppSec Team"' "$tgt/org-profile/org-profile.yaml" && \
    grep -Fqx '  headline: "POAA AppSec Advisor"' "$tgt/org-profile/org-profile.yaml" && \
-   grep -Fqx '  url: "https://github.com/appsec-foundry/appsec-advisor"' \
-     "$tgt/org-profile/org-profile.yaml"; then
+   grep -Fqx 'INTERNAL_REPOSITORY_URL ?= https://git.example.test/poaa-appsec' \
+     "$tgt/Makefile" && \
+   grep -Fq 'Internal packaging repository: [open repository](<https://git.example.test/poaa-appsec>)' \
+     "$tgt/README.md" && \
+   grep -Fqx 'https://git.example.test/poaa-appsec' "$tgt/.git/remote-origin"; then
   pass "init: UTF-8 organization name"
 else fail "init: UTF-8 organization name" "rc=$rc"; fi
 unicode_tgt="$tgt"
@@ -306,7 +331,7 @@ tgt="$d/out"
 {
   printf 'Pr\303uef Org\n'
   printf 'Prüf: Øvelse # Lab\n'
-  printf 'pol\n\n01.2.3\n1.2.3-internal.1\n\n%s\nn\n\nn\n' "$tgt"
+  printf 'pol\n\n01.2.3\n1.2.3-internal.1\n\n%s\nn\n\n\nhttp://insecure.example/repo\nhttps://git.example.test/pol-appsec\nn\n' "$tgt"
 } | (cd "$ROOT" && env LC_ALL=C timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
 rc=$?
@@ -315,7 +340,9 @@ if [ "$rc" = 0 ] && \
      "$tgt/org-profile/org-profile.yaml" && \
    grep -Fqx '  name: "Prüf: Øvelse # Lab"' "$tgt/org-profile/org-profile.yaml" && \
    grep -Fqx '  owner: "POL AppSec Team"' "$tgt/org-profile/org-profile.yaml" && \
-   grep -Fqx 'PACKAGE_VERSION ?= 1.2.3-internal.1' "$tgt/Makefile"; then
+   grep -Fqx 'PACKAGE_VERSION ?= 1.2.3-internal.1' "$tgt/Makefile" && \
+   grep -Fqx 'INTERNAL_REPOSITORY_URL ?= https://git.example.test/pol-appsec' \
+     "$tgt/Makefile"; then
   pass "init: invalid UTF-8 and package version are retried safely"
 else fail "init: invalid UTF-8 and package version are retried safely" "rc=$rc"; fi
 
@@ -346,7 +373,7 @@ src="$d/upstream-source"
 mkfake "$src"
 tgt="$d/out"
 build_log="$d/build-success.log"
-printf 'Test Org\n\n\n2.3.0-internal.1\n\n%s\nn\n\ny\n' "$tgt" | \
+printf 'Test Org\n\n\n2.3.0-internal.1\n\n%s\nn\n\n\nhttps://git.example.test/to-appsec\ny\n' "$tgt" | \
   (cd "$ROOT" && env APPSEC_ADVISOR_SOURCE="$src" timeout 20 bash -x "$INIT") \
   >"$build_log" 2>>"$COV"
 rc=$?
@@ -358,6 +385,10 @@ if [ "$rc" = 0 ] && [ -d "$tgt/.git" ] && [ -d "$tgt/build/to-appsec" ] && \
      "$tgt/ci-templates/gitlab-ci.yml" && \
    grep -Fq '"version": "2.3.0-internal.1"' "$tgt/build/to-appsec/.claude-plugin/plugin.json" && \
    grep -Fq 'to-appsec 2.3.0-internal.1' "$tgt/build/to-appsec/skills/help/SKILL.md" && \
+   grep -Fq 'maintained by TO AppSec Team' "$tgt/build/to-appsec/README.md" && \
+   grep -Fq '/to-appsec:help' "$tgt/build/to-appsec/README.md" && \
+   grep -Fq 'https://git.example.test/to-appsec' "$tgt/build/to-appsec/README.md" && \
+   grep -Fq 'https://git.example.test/to-appsec' "$tgt/build/to-appsec/skills/help/SKILL.md" && \
    grep -Fq '  4. Load the plugin' "$build_log" && \
    ! grep -Fq '  4. Build the plugin' "$build_log" && \
    ! grep -Fq '  4. Rebuild' "$build_log"; then
@@ -369,7 +400,7 @@ else fail "init: accepted initial build creates plugin" "rc=$rc"; fi
 d="$(newdir)"
 tgt="$d/out"
 build_log="$d/build-failure.log"
-printf 'Test Org\n\n\n\n\n%s\nn\n\ny\n' "$tgt" | \
+printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\ny\n' "$tgt" | \
   (cd "$ROOT" && env APPSEC_ADVISOR_SOURCE="$d/missing-upstream" \
     timeout 20 bash -x "$INIT") \
   >"$build_log" 2>>"$COV"
@@ -385,7 +416,7 @@ else fail "init: failed initial build preserves repo" "rc=$rc"; fi
 d="$(newdir)"
 tgt="$d/out"
 build_log="$d/build-skipped.log"
-printf 'Test Org\n\n\n\n\n%s\nn\n\nn\n' "$tgt" | \
+printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\nn\n' "$tgt" | \
   (cd "$ROOT" && timeout 20 bash -x "$INIT") >"$build_log" 2>>"$COV"
 rc=$?
 if [ "$rc" = 0 ] && \
@@ -414,6 +445,8 @@ readme_before="$(cksum "$self_contained_tgt/README.md")"
 printf 'stale infrastructure\n' >"$self_contained_tgt/scripts/package-local.sh"
 sed -i 's/^PACKAGE_VERSION ?= 0.1.0$/PACKAGE_VERSION ?= 2.4.0/' \
   "$self_contained_tgt/Makefile"
+sed -i 's|^INTERNAL_REPOSITORY_URL ?=$|INTERNAL_REPOSITORY_URL ?= https://git.example.test/to-appsec|' \
+  "$self_contained_tgt/Makefile"
 sed -i '/^      - help$/d; /^      - session-banner$/d' \
   "$self_contained_tgt/org-profile/package-policy.yaml"
 printf '\n# retained organization policy marker\n' >> \
@@ -428,16 +461,20 @@ if [ "$rc" = 0 ] && \
    [ "$readme_before" = "$(cksum "$self_contained_tgt/README.md")" ] && \
    grep -Fqx 'INTERNAL_NAME ?= to-appsec' "$self_contained_tgt/Makefile" && \
    grep -Fqx 'PACKAGE_VERSION ?= 2.4.0' "$self_contained_tgt/Makefile" && \
+   grep -Fqx 'INTERNAL_REPOSITORY_URL ?= https://git.example.test/to-appsec' \
+     "$self_contained_tgt/Makefile" && \
    grep -Fq 'render-packaged-help.py' "$self_contained_tgt/scripts/package-local.sh" && \
    [ "$(grep -Fxc '      - help' "$self_contained_tgt/org-profile/package-policy.yaml")" = 1 ] && \
-   [ "$(grep -Fxc '      - session-banner' "$self_contained_tgt/org-profile/package-policy.yaml")" = 1 ] && \
+   [ "$(grep -Fxc '      - session-banner' "$self_contained_tgt/org-profile/package-policy.yaml")" = 0 ] && \
    grep -Fq 'retained organization policy marker' "$self_contained_tgt/org-profile/package-policy.yaml" && \
    grep -Fq 'Re-initialization complete' "$reinit_log" && \
-   grep -Fq 'enabled help, session-banner' "$reinit_log" && \
+   grep -Fq 'enabled help' "$reinit_log" && \
    grep -Fq '  1. Build the plugin: make package' "$reinit_log" && \
    grep -Fq 'Review and commit the reinitialization changes' "$reinit_log"; then
   pass "reinit: existing settings and user files are preserved"
-else fail "reinit: existing settings and user files are preserved" "rc=$rc"; fi
+else
+  fail "reinit: existing settings and user files are preserved" "rc=$rc"
+fi
 
 # An exclude-based policy enables required surface entries by removing them
 # from the exclusion list rather than converting the organization's policy mode.
@@ -454,7 +491,7 @@ if [ "$rc" = 0 ] && \
    ! grep -Fq '      - help' "$self_contained_tgt/org-profile/package-policy.yaml" && \
    ! grep -Fq '      - session-banner' "$self_contained_tgt/org-profile/package-policy.yaml" && \
    grep -Fq '      - create-threat-model' "$self_contained_tgt/org-profile/package-policy.yaml" && \
-   grep -Fq 'enabled help, session-banner' "$exclude_log"; then
+   grep -Fq 'enabled help' "$exclude_log"; then
   pass "reinit: required entries are enabled in an exclude policy"
 else fail "reinit: required entries are enabled in an exclude policy" "rc=$rc"; fi
 
@@ -573,7 +610,7 @@ tgt="$d/out"
 mkdir -p "$tgt/org-profile"
 printf 'name: Pr\303uef\n' >"$tgt/org-profile/org-profile.yaml"
 repair_log="$d/repair.log"
-printf 'Test Org\n\n\n\n\n%s\nn\n\ny\ny\nn\n' "$tgt" | \
+printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\ny\ny\nn\n' "$tgt" | \
   (cd "$ROOT" && timeout 20 bash -x "$INIT") >"$repair_log" 2>>"$COV"
 rc=$?
 if [ "$rc" = 0 ] && \
@@ -591,7 +628,7 @@ tgt="$d/out"
 mkdir -p "$tgt/org-profile"
 printf 'name: Pr\303uef\n' >"$tgt/org-profile/org-profile.yaml"
 invalid_before="$(cksum "$tgt/org-profile/org-profile.yaml")"
-printf 'Test Org\n\n\n\n\n%s\nn\n\ny\nn\n' "$tgt" | \
+printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\ny\nn\n' "$tgt" | \
   (cd "$ROOT" && timeout 20 bash -x "$INIT") >/dev/null 2>>"$COV"
 rc=$?
 if [ "$rc" = 2 ] && \
@@ -609,7 +646,7 @@ mkdir -p "$tgt/org-profile" "$d/outside"
 printf 'name: Pr\303uef\n' >"$tgt/org-profile/org-profile.yaml"
 invalid_before="$(cksum "$tgt/org-profile/org-profile.yaml")"
 ln -s "$d/outside" "$tgt/.reinit-backups"
-printf 'Test Org\n\n\n\n\n%s\nn\n\ny\ny\n' "$tgt" | \
+printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\ny\ny\n' "$tgt" | \
   (cd "$ROOT" && timeout 20 bash -x "$INIT") >/dev/null 2>>"$COV"
 rc=$?
 if [ "$rc" = 2 ] && \
@@ -625,6 +662,8 @@ else fail "init: UTF-8 recovery rejects a backup-directory symlink" "rc=$rc"; fi
 missing=""
 for f in scripts/fetch-upstream.sh scripts/upstream-check.sh scripts/package-local.sh \
          scripts/prepare-local-marketplace.py scripts/render-packaged-help.py \
+         scripts/render-packaged-readme.py scripts/prune-packaged-session-banner.py \
+         scripts/baseline-upstream-check.py \
          scripts/archive-built-plugin.py scripts/finalize-package-version.py \
          scripts/rewrite-packaged-origins.py scripts/reinit-org-repo.sh \
          org-profile/package-policy.yaml org-profile/org-profile.yaml Makefile; do
@@ -641,7 +680,7 @@ else fail "init: scaffold is self-contained" "missing:$missing"; fi
 d="$(newdir)"
 tgt="$d/out"
 mkdir -p "$tgt"
-printf 'Test Org\n\n\n\n\n%s\nn\n\ny\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
+printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\ny\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
 rc=$?
 if [ "$rc" = 0 ] && [ -d "$tgt/.git" ]; then
@@ -651,7 +690,7 @@ else fail "init: partial existing dir is initialized and completed" "rc=$rc"; fi
 d="$(newdir)"
 tgt="$d/out"
 mkdir -p "$tgt"
-printf 'Test Org\n\n\n\n\n%s\nn\n\nn\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
+printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\nn\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
 assert_rc "init: existing dir, abort" 1 "$?"
 
@@ -665,6 +704,10 @@ mkdir -p "$clean"
 cp "$ROOT/scripts/prepare-local-marketplace.py" \
   "$clean/scripts/prepare-local-marketplace.py"
 cp "$ROOT/scripts/render-packaged-help.py" "$clean/scripts/render-packaged-help.py"
+cp "$ROOT/scripts/render-packaged-readme.py" "$clean/scripts/render-packaged-readme.py"
+cp "$ROOT/scripts/prune-packaged-session-banner.py" \
+  "$clean/scripts/prune-packaged-session-banner.py"
+cp "$ROOT/scripts/baseline-upstream-check.py" "$clean/scripts/baseline-upstream-check.py"
 cp "$ROOT/scripts/archive-built-plugin.py" "$clean/scripts/archive-built-plugin.py"
 cp "$ROOT/scripts/rewrite-packaged-origins.py" \
   "$clean/scripts/rewrite-packaged-origins.py"

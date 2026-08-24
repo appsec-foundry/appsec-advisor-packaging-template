@@ -5,6 +5,7 @@ SOURCE="${APPSEC_ADVISOR_SOURCE:-}"
 DEST="${APPSEC_ADVISOR_DEST:-upstream/appsec-advisor}"
 UPSTREAM_URL="${APPSEC_ADVISOR_URL:-https://github.com/appsec-foundry/appsec-advisor.git}"
 INTERNAL_NAME="${INTERNAL_NAME:-acme-appsec}"
+INTERNAL_REPOSITORY_URL="${INTERNAL_REPOSITORY_URL:-}"
 PACKAGE_VERSION="${PACKAGE_VERSION:-0.1.0}"
 VERSION="${VERSION:-}"
 ARCHIVE="${ARCHIVE:-0}"
@@ -164,6 +165,7 @@ python3 "${SOURCE}/scripts/package_internal_plugin.py" \
   --version "${CORE_VERSION}" \
   --description "${DESCRIPTION}" \
   --upstream-url "${UPSTREAM_URL}" \
+  --info-url "${INTERNAL_REPOSITORY_URL}" \
   --readme "build/${INTERNAL_NAME}/README.md" \
   --skip-archive
 
@@ -191,6 +193,16 @@ python3 "build/${INTERNAL_NAME}/scripts/validate_org_profile.py" \
 # written its authoritative package-surface.json. The upstream source tree is
 # never modified.
 python3 "${SCRIPT_DIR}/render-packaged-help.py" \
+  --plugin-root "build/${INTERNAL_NAME}"
+
+# Replace the generic upstream README with a package-specific welcome and quick
+# start derived from the same final surface and runtime configuration as help.
+python3 "${SCRIPT_DIR}/render-packaged-readme.py" \
+  --plugin-root "build/${INTERNAL_NAME}"
+
+# A package policy that removes the SessionStart hook should also remove its
+# unreferenced implementation from the distributed artifact.
+python3 "${SCRIPT_DIR}/prune-packaged-session-banner.py" \
   --plugin-root "build/${INTERNAL_NAME}"
 
 python3 "${SOURCE}/scripts/smoke_test_package.py" \

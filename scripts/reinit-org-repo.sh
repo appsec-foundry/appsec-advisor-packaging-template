@@ -52,11 +52,14 @@ organization = {}
 inside = False
 baseline_enabled = True
 baseline = False
+banner_enabled = True
+banner = False
 for line in lines:
     if line and not line[0].isspace():
         key = line.split(":", 1)[0]
         inside = key == "organization"
         baseline = key == "baseline"
+        banner = key == "banner"
         continue
     if inside:
         match = re.match(r"^  (id|name|owner):\s*(.+?)\s*$", line)
@@ -64,6 +67,49 @@ for line in lines:
             organization[match.group(1)] = scalar(match.group(2))
     if baseline and re.match(r"^  enabled:\s*false(?:\s+#.*)?$", line):
         baseline_enabled = False
+    if banner and re.match(r"^  enabled:\s*false(?:\s+#.*)?$", line):
+        banner_enabled = False
+
+policy_path = root / "org-profile" / "package-policy.yaml"
+try:
+    policy_lines = policy_path.read_text(encoding="utf-8").splitlines()
+except UnicodeDecodeError as error:
+    print(
+        f"ERROR: {policy_path} is not valid UTF-8 at byte {error.start}; repair it before reinitializing",
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
+
+hook_mode = None
+hook_names = set()
+inside_hooks = False
+inside_selection = False
+for line in policy_lines:
+    if re.match(r"^  hooks:\s*(?:#.*)?$", line):
+        inside_hooks = True
+        inside_selection = False
+        continue
+    if inside_hooks and line and not line.startswith(" "):
+        break
+    if inside_hooks:
+        match = re.match(r"^    (include|exclude):\s*(?:#.*)?$", line)
+        if match:
+            hook_mode = match.group(1)
+            inside_selection = True
+            continue
+        if inside_selection:
+            item = re.match(r"^      -\s+([A-Za-z0-9_.-]+)\s*(?:#.*)?$", line)
+            if item:
+                hook_names.add(item.group(1))
+            elif line.strip() and not line.lstrip().startswith("#") and len(line) - len(line.lstrip(" ")) <= 4:
+                inside_selection = False
+
+if hook_mode == "include":
+    banner_packaged = "session-banner" in hook_names
+elif hook_mode == "exclude":
+    banner_packaged = "session-banner" not in hook_names
+else:
+    banner_packaged = True
 
 makefile = (root / "Makefile").read_text(encoding="utf-8")
 match = re.search(r"^INTERNAL_NAME\s*\?=\s*([a-z0-9][a-z0-9-]*)\s*$", makefile, re.MULTILINE)
@@ -73,6 +119,8 @@ package_version = match.group(1) if match else ""
 if not package_version:
     match = re.search(r"^VERSION\s*\?=\s*([^\s#]+)\s*$", makefile, re.MULTILINE)
     package_version = match.group(1) if match else "0.1.0"
+match = re.search(r"^INTERNAL_REPOSITORY_URL\s*\?=\s*([^\s#]+)?\s*$", makefile, re.MULTILINE)
+repository_url = (match.group(1) or "") if match else ""
 values = [
     organization.get("name", ""),
     organization.get("id", ""),
@@ -81,6 +129,8 @@ values = [
     organization.get("owner", ""),
     "true" if (root / "org-profile" / "requirements.yaml").is_file() else "false",
     "true" if baseline_enabled else "false",
+    "true" if banner_enabled and banner_packaged else "false",
+    repository_url,
 ]
 if any(not value for value in values[:5]):
     print("ERROR: cannot recover organization name/id/owner, INTERNAL_NAME or PACKAGE_VERSION from this repository", file=sys.stderr)
@@ -93,7 +143,7 @@ for value in values:
 PY
 )
 
-if [ "${#SETTINGS[@]}" -ne 7 ]; then
+if [ "${#SETTINGS[@]}" -ne 9 ]; then
   echo "ERROR: failed to read existing packaging settings" >&2
   exit 2
 fi
@@ -118,5 +168,7 @@ APPSEC_REINIT_PACKAGE_VERSION="${SETTINGS[3]}" \
 APPSEC_REINIT_OWNER="${SETTINGS[4]}" \
 APPSEC_REINIT_DEMO="${SETTINGS[5]}" \
 APPSEC_REINIT_BASELINE="${SETTINGS[6]}" \
+APPSEC_REINIT_STATUSLINE="${SETTINGS[7]}" \
+APPSEC_REINIT_REPOSITORY_URL="${SETTINGS[8]}" \
 APPSEC_REINIT_BUILD="${REINIT_BUILD}" \
   "${TEMPLATE_SOURCE}/scripts/init-org-repo.sh"

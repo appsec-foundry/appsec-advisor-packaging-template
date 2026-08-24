@@ -68,12 +68,22 @@ if sub == "init":
 
 if sub == "remote":
     if rest[:1] == ["get-url"]:
+        marker = os.path.join(".git", "remote-origin")
+        if os.path.isfile(marker):
+            with open(marker, encoding="utf-8") as file:
+                out(file.read().strip())
+            sys.exit(0)
         if os.environ.get("GITSTUB_HAS_ORIGIN") == "1":
             out("https://github.com/appsec-foundry/appsec-advisor.git")
             sys.exit(0)
         sys.stderr.write("error: No such remote 'origin'\n")
         sys.exit(2)
-    # set-url / add
+    if rest[:1] == ["add"] and len(rest) >= 3 and rest[1] == "origin":
+        os.makedirs(".git", exist_ok=True)
+        with open(os.path.join(".git", "remote-origin"), "w", encoding="utf-8") as file:
+            file.write(rest[2] + "\n")
+        sys.exit(0)
+    # set-url
     sys.exit(0)
 
 if sub == "ls-remote":

@@ -8,13 +8,16 @@ endif
 APPSEC_ADVISOR_DEST ?= upstream/appsec-advisor
 APPSEC_ADVISOR_SOURCE ?= $(APPSEC_ADVISOR_DEST)
 INTERNAL_NAME ?= acme-appsec
+# Internal packaging repository shown in packaged help and README output. Keep
+# empty until the internal HTTPS URL exists.
+INTERNAL_REPOSITORY_URL ?=
 # Organization-owned version shown in the plugin banner, help, manifest and
 # archive name. Bump it when publishing a new internal package release.
 PACKAGE_VERSION ?= 0.1.0
 # Backward-compatible one-off override; normally leave this empty and edit
 # PACKAGE_VERSION instead.
 VERSION ?=
-export PACKAGE_VERSION VERSION
+export PACKAGE_VERSION VERSION INTERNAL_REPOSITORY_URL
 LOCAL_MARKETPLACE_NAME ?= $(INTERNAL_NAME)-local
 LOCAL_MARKETPLACE_SCOPE ?= local
 APPSEC_ADVISOR_TEMPLATE_URL ?= https://github.com/appsec-foundry/appsec-advisor-packaging-template.git
@@ -31,7 +34,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint check release-check fetch-upstream upstream-check validate package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean distclean rebuild reinit test
+.PHONY: help lint check release-check fetch-upstream upstream-check baseline-check drift-check validate package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean distclean rebuild reinit test
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -54,12 +57,29 @@ check: lint test ## Offline gate: lint + test (no network, no upstream fetch)
 
 release-check: ## Release-boundary gate: check + validate + build a clean plugin against upstream
 	@$(MAKE) --no-print-directory check
-	@$(MAKE) --no-print-directory upstream-check || echo "  ^ upstream drift (advisory) — not blocking release-check"
+	@$(MAKE) --no-print-directory drift-check || echo "  ^ upstream drift or check error (advisory) — not blocking release-check"
 	@$(MAKE) --no-print-directory validate
 	@$(MAKE) --no-print-directory package
 
-upstream-check: ## Read-only drift check vs upstream (exit 1 if a newer release exists)
+upstream-check: ## Read-only drift check for the appsec-advisor ref and releases
 	APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" scripts/upstream-check.sh
+
+baseline-check: ## Read-only drift check for the configured secure-coding baseline
+	python3 scripts/baseline-upstream-check.py --profile org-profile/org-profile.yaml --core-config "$(APPSEC_ADVISOR_SOURCE)/config.json"
+
+drift-check: ## Check appsec-advisor and secure-coding baseline upstream drift
+	@status=0; \
+	APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" scripts/upstream-check.sh || status=$$?; \
+	echo; \
+	baseline_status=0; \
+	python3 scripts/baseline-upstream-check.py --profile org-profile/org-profile.yaml --core-config "$(APPSEC_ADVISOR_SOURCE)/config.json" || baseline_status=$$?; \
+	if [ "$$status" -eq 2 ] || [ "$$baseline_status" -eq 2 ]; then \
+		echo "ERROR: at least one upstream check could not complete" >&2; exit 2; \
+	fi; \
+	if [ "$$status" -eq 1 ] || [ "$$baseline_status" -eq 1 ]; then \
+		echo "DRIFT: at least one upstream source has changed"; exit 1; \
+	fi; \
+	echo "OK: appsec-advisor and baseline are current"
 
 fetch-upstream: ## Clone/checkout upstream appsec-advisor at APPSEC_ADVISOR_REF
 	APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" scripts/fetch-upstream.sh

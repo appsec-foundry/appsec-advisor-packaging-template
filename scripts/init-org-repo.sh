@@ -91,6 +91,47 @@ ask_package_version() {
   done
 }
 
+normalize_optional_https_url() {
+  PYTHONUTF8=1 python3 - "$1" <<'PY'
+import sys
+from urllib.parse import urlsplit
+
+value = sys.argv[1].strip()
+if not value:
+    print("")
+    raise SystemExit(0)
+if len(value) > 2048 or any(
+    character.isspace() or not character.isprintable() or character in "#$'\"`<>\\|"
+    for character in value
+):
+    raise SystemExit(2)
+try:
+    parsed = urlsplit(value)
+except ValueError:
+    raise SystemExit(2)
+if (
+    parsed.scheme != "https"
+    or not parsed.hostname
+    or parsed.username is not None
+    or parsed.password is not None
+):
+    raise SystemExit(2)
+print(value)
+PY
+}
+
+ask_optional_https_url() {
+  local prompt="$1" reply normalized
+  while true; do
+    read -r -p "${prompt} (optional; HTTPS): " reply || reply=""
+    if normalized=$(normalize_optional_https_url "${reply}"); then
+      printf '%s\n' "${normalized}"
+      return 0
+    fi
+    echo "  (enter an HTTPS URL without credentials, whitespace, fragments, or shell metacharacters; or leave empty)" >&2
+  done
+}
+
 initials() {
   PYTHONUTF8=1 python3 - "$1" <<'PY'
 import sys
@@ -237,26 +278,57 @@ def ensure_available(section: str, entry: str) -> bool:
     return bool(matches)
 
 
-banner_enabled = False
+def ensure_unavailable(section: str, entry: str) -> bool:
+    mode, selection = selection_block(section)
+    if mode is None or selection is None:
+        return False
+    item_pattern = re.compile(rf"^      -\s+{re.escape(entry)}\s*(?:#.*)?$")
+    end = next(
+        (
+            index
+            for index in range(selection + 1, len(lines))
+            if lines[index].strip()
+            and not lines[index].lstrip().startswith("#")
+            and len(lines[index]) - len(lines[index].lstrip(" ")) <= 4
+        ),
+        len(lines),
+    )
+    matches = [
+        index
+        for index in range(selection + 1, end)
+        if item_pattern.match(lines[index].rstrip("\r\n"))
+    ]
+    if mode == "include":
+        for index in reversed(matches):
+            del lines[index]
+        return bool(matches)
+    if matches:
+        return False
+    lines.insert(selection + 1, f"      - {entry}\n")
+    return True
+
+
+banner_disabled = False
 inside_banner = False
 for line in profile_lines:
     if line and not line[0].isspace():
         inside_banner = line.split(":", 1)[0] == "banner"
         continue
-    if inside_banner and re.match(r"^  enabled:\s*true(?:\s+#.*)?$", line):
-        banner_enabled = True
+    if inside_banner and re.match(r"^  enabled:\s*false(?:\s+#.*)?$", line):
+        banner_disabled = True
 
 enabled = []
+disabled = []
 try:
     if ensure_available("skills", "help"):
         enabled.append("help")
-    if banner_enabled and ensure_available("hooks", "session-banner"):
-        enabled.append("session-banner")
+    if banner_disabled and ensure_unavailable("hooks", "session-banner"):
+        disabled.append("session-banner")
 except ValueError as error:
     print(f"ERROR: cannot migrate package policy: {error}", file=sys.stderr)
     raise SystemExit(2)
 
-if enabled:
+if enabled or disabled:
     mode = stat.S_IMODE(policy_path.stat().st_mode)
     descriptor, temporary_name = tempfile.mkstemp(
         dir=policy_path.parent, prefix=f".{policy_path.name}."
@@ -269,7 +341,12 @@ if enabled:
     finally:
         if os.path.exists(temporary_name):
             os.unlink(temporary_name)
-    print(f"  migrated: {policy_path} (enabled {', '.join(enabled)})")
+    changes = []
+    if enabled:
+        changes.append(f"enabled {', '.join(enabled)}")
+    if disabled:
+        changes.append(f"disabled {', '.join(disabled)}")
+    print(f"  migrated: {policy_path} ({'; '.join(changes)})")
 PY
 }
 
@@ -301,6 +378,14 @@ if [ -n "${APPSEC_REINIT_TARGET:-}" ]; then
   OWNER="$(printf '%s' "${APPSEC_REINIT_OWNER:?}" | normalize_utf8)"
   DEMO_CONTENT="${APPSEC_REINIT_DEMO:?}"
   BASELINE_ENABLED="${APPSEC_REINIT_BASELINE:?}"
+  # Older reinit wrappers do not carry this setting; preserve the historical
+  # default-on behavior for those repositories.
+  STATUSLINE_ENABLED="${APPSEC_REINIT_STATUSLINE:-true}"
+  INTERNAL_REPOSITORY_URL="${APPSEC_REINIT_REPOSITORY_URL:-}"
+  if ! INTERNAL_REPOSITORY_URL=$(normalize_optional_https_url "${INTERNAL_REPOSITORY_URL}"); then
+    echo "ERROR: existing INTERNAL_REPOSITORY_URL must be an HTTPS URL without credentials or shell metacharacters" >&2
+    exit 2
+  fi
   OWNER_PREFIX="${ORG_ID^^}"
 else
   ORG_NAME=$(ask "Organization name (e.g. Acme Corp)")
@@ -323,6 +408,14 @@ else
     [nN]*) BASELINE_ENABLED=false ;;
     *)     BASELINE_ENABLED=true ;;
   esac
+
+  read -r -p "Show plugin and security status when Claude Code starts? [Y/n] (change later in org-profile and package-policy): " _statusline_reply || _statusline_reply=""
+  case "${_statusline_reply}" in
+    [nN]*) STATUSLINE_ENABLED=false ;;
+    *)     STATUSLINE_ENABLED=true ;;
+  esac
+
+  INTERNAL_REPOSITORY_URL=$(ask_optional_https_url "Internal packaging repository URL")
 fi
 
 echo ""
@@ -486,6 +579,9 @@ if [ -f "${TEMPLATE_BASE}/scripts/prepare-local-marketplace.py" ]; then
 fi
 for helper in \
   render-packaged-help.py \
+  render-packaged-readme.py \
+  prune-packaged-session-banner.py \
+  baseline-upstream-check.py \
   archive-built-plugin.py \
   finalize-package-version.py \
   rewrite-packaged-origins.py \
@@ -534,9 +630,15 @@ fi
 
 E_PLUGIN=$(sed_escape "${PLUGIN_NAME}")
 E_PACKAGE_VERSION=$(sed_escape "${PACKAGE_VERSION}")
+INTERNAL_REPOSITORY_ASSIGNMENT="INTERNAL_REPOSITORY_URL ?="
+if [ -n "${INTERNAL_REPOSITORY_URL}" ]; then
+  INTERNAL_REPOSITORY_ASSIGNMENT="${INTERNAL_REPOSITORY_ASSIGNMENT} ${INTERNAL_REPOSITORY_URL}"
+fi
+E_INTERNAL_REPOSITORY_ASSIGNMENT=$(sed_escape "${INTERNAL_REPOSITORY_ASSIGNMENT}")
 sed \
   -e "s/acme-appsec/${E_PLUGIN}/g" \
   -e "s/^PACKAGE_VERSION ?= 0.1.0$/PACKAGE_VERSION ?= ${E_PACKAGE_VERSION}/" \
+  -e "s|^INTERNAL_REPOSITORY_URL ?=$|${E_INTERNAL_REPOSITORY_ASSIGNMENT}|" \
   "${TEMPLATE_BASE}/Makefile" > "${TARGET_DIR}/Makefile"
 
 # ── Render org-profile.yaml ───────────────────────────────────────────────────
@@ -614,6 +716,10 @@ if [ "${BASELINE_ENABLED}" = false ]; then
   sed -i '/^compatibility:/i baseline:\n  enabled: false\n' \
     "${PROFILE_CANDIDATE}"
 fi
+if [ "${STATUSLINE_ENABLED}" = false ]; then
+  sed -i '/^banner:/,/^[^ ]/ s/^  enabled: true$/  enabled: false/' \
+    "${PROFILE_CANDIDATE}"
+fi
 refresh_user_file \
   "${PROFILE_CANDIDATE}" \
   "${TARGET_DIR}/org-profile/org-profile.yaml" \
@@ -673,10 +779,17 @@ refresh_user_file \
 # ── Render README.md ──────────────────────────────────────────────────────────
 
 README_CANDIDATE="${CANDIDATE_DIR}/README.md"
+if [ -n "${INTERNAL_REPOSITORY_URL}" ]; then
+  INTERNAL_REPOSITORY_LINK="Internal packaging repository: [open repository](<${INTERNAL_REPOSITORY_URL}>)"
+else
+  INTERNAL_REPOSITORY_LINK=""
+fi
+E_INTERNAL_REPOSITORY_LINK=$(sed_escape "${INTERNAL_REPOSITORY_LINK}")
 sed \
   -e "s/acme-appsec/${E_PLUGIN}/g" \
   -e "s/Acme Corp/${E_ORG_NAME}/g" \
   -e "s/Acme AppSec Team/${E_OWNER}/g" \
+  -e "s|<!-- INTERNAL_REPOSITORY_LINK -->|${E_INTERNAL_REPOSITORY_LINK}|" \
   "${TEMPLATE_BASE}/README.example.md" > "${README_CANDIDATE}"
 refresh_user_file \
   "${README_CANDIDATE}" \
@@ -705,6 +818,15 @@ sed -i \
 cd "${TARGET_DIR}"
 if [ ! -e .git ]; then
   git init -q -b main
+fi
+if [ -n "${INTERNAL_REPOSITORY_URL}" ]; then
+  if EXISTING_ORIGIN=$(git remote get-url origin 2>/dev/null); then
+    if [ "${EXISTING_ORIGIN}" != "${INTERNAL_REPOSITORY_URL}" ]; then
+      echo "WARNING: existing origin differs from INTERNAL_REPOSITORY_URL; keeping ${EXISTING_ORIGIN}" >&2
+    fi
+  else
+    git remote add origin "${INTERNAL_REPOSITORY_URL}"
+  fi
 fi
 if [ "${REINIT}" = true ]; then
   echo "(reinitialization changes left uncommitted for review)"

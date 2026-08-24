@@ -68,11 +68,12 @@ to your own skills — the threat-model pipeline does not query it.
   own from `org-skills/`, and any hook declared in the profile (`hooks:`) reach
   the internal package only once its id is listed under
   `plugin_surface.skills` / `hooks`.
-- The packaged `help` skill is generated from the final
+- The packaged `help` skill and developer-facing README are generated from the final
   `.claude-plugin/package-surface.json` and `config.json` after upstream
   packaging. It lists only included public skills and marks runtime-disabled
-  ones. `banner.url` becomes its “More information” link. Keep `help` in the
-  skill allowlist; do not edit the upstream help.
+  ones. `INTERNAL_REPOSITORY_URL` is the internal packaging repository URL and
+  becomes their “More information” link through packaged `config.json`. Keep
+  `help` in the skill allowlist; do not edit the upstream help or README.
 - **Org hooks run on Claude Code's event layer only.** The `hooks:` block bundles
   your scripts from `org-profile/hooks/` into the built `hooks/hooks.json` and
   records them in `package-surface.json` under `hooks.org`. They never reach the
@@ -117,8 +118,10 @@ make                                  # (or `make help`) lists every target with
 make lint                             # shellcheck over scripts/ + tests/run.sh (skipped when shellcheck is absent)
 make test                             # shell test suite + coverage gate (skipped when tests/ is absent, e.g. in a scaffolded repo)
 make check                            # offline gate: lint + test (no network, no upstream fetch)
-make release-check                    # release gate: check + upstream-check (advisory) + validate + package
-make upstream-check                   # read-only drift check: has the build ref moved, is there a newer v* release (exit 0=current, 1=drift, 2=error)
+make release-check                    # release gate: check + drift-check (advisory) + validate + package
+make upstream-check                   # read-only drift check: has the build ref moved, is there a newer v* release
+make baseline-check                   # read-only drift check: does the configured baseline id match its published document
+make drift-check                      # run both upstream drift checks
 make package                          # fetch upstream + build the package + smoke-test it
 APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package # pin a specific release
 make validate                         # validate org-profile.yaml only

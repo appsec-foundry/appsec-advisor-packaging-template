@@ -11,13 +11,14 @@ organization:
   profile_version: "2026.06.1"
   owner: Acme AppSec Team
 
-# Session-start branding. The remaining lines always report live repository and
-# baseline state and are intentionally not configurable.
+# Session-start status and branding. Set enabled false for a silent default and
+# also remove session-banner from package-policy.yaml to omit the hook entirely.
+# The remaining lines report live repository and baseline state.
 banner:
   enabled: true
   headline: "ACME AppSec Advisor"
-  # Shown by the packaged help skill, not in the compact session-start banner.
-  url: "https://github.com/appsec-foundry/appsec-advisor"
+  # The internal information URL shown by packaged help and README output is
+  # INTERNAL_REPOSITORY_URL in the Makefile, not part of the startup status.
 
 compatibility:
   core: ">=0.6 <0.7"

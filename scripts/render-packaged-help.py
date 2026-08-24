@@ -158,13 +158,13 @@ def _info_url(config: dict[str, Any]) -> str | None:
         )
     parsed = urlsplit(value)
     if (
-        parsed.scheme not in {"http", "https"}
+        parsed.scheme != "https"
         or not parsed.hostname
         or parsed.username is not None
         or parsed.password is not None
     ):
         raise HelpRenderError(
-            "config.json banner.url must be an http(s) URL without credentials"
+            "config.json banner.url must be an HTTPS URL without credentials"
         )
     return value
 

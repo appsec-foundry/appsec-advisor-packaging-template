@@ -26,6 +26,7 @@ plugin_surface:
   hooks:
     include:
       # Shows plugin, threat-model, and baseline status when a session starts.
+      # Remove this entry (and set banner.enabled false) for a silent package.
       - session-banner
       - agent-logger
       # Enforces the disabled requirements skills declared in org-profile.yaml.

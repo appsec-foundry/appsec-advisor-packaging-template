@@ -162,6 +162,15 @@ class PackagedHelpTests(unittest.TestCase):
             (self.root / "skills" / "help" / "SKILL.md").read_bytes(),
         )
 
+    def test_rejects_plain_http_info_url(self) -> None:
+        config_path = self.root / "config.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        config["banner"]["url"] = "http://security.example.test/appsec"
+        config_path.write_text(json.dumps(config), encoding="utf-8")
+
+        with self.assertRaisesRegex(help_renderer.HelpRenderError, "HTTPS"):
+            help_renderer.render_help(self.root)
+
     def test_rejects_info_url_that_can_break_the_reference_block(self) -> None:
         config_path = self.root / "config.json"
         config = json.loads(config_path.read_text(encoding="utf-8"))

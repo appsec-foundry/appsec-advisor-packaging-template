@@ -17,8 +17,8 @@ workflow.
 **1. Create your packaging repo**
 
 Run the init script — it asks for your org name and plugin name, creates a
-package version, creates a ready-to-use git repo, and offers to build the plugin
-immediately:
+package version, configures optional startup status and an internal information
+URL, creates a ready-to-use git repo, and offers to build the plugin immediately:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh)
@@ -38,6 +38,12 @@ Set `PACKAGE_VERSION` in the generated `Makefile` to your internal plugin
 release. It defaults to `0.1.0` and is independent of `APPSEC_ADVISOR_REF`,
 which continues to pin the upstream implementation.
 
+Set `INTERNAL_REPOSITORY_URL` to the HTTPS URL of the internal packaging
+repository. The initializer fills it when provided and configures it as
+`origin` when the new local repository has no remote yet. It also becomes the
+“More information” link in packaged help and README output; an empty value
+omits that link.
+
 **3. Set up CI for your platform** — run one of:
 
 ```bash
@@ -54,8 +60,9 @@ make package
 ```
 
 This fetches the upstream plugin, overlays your org profile, generates `/help`
-from the final package allowlist and runtime toggles, runs a smoke test, and
-writes the result to `build/your-plugin-name/`. Verified legacy GitHub links in
+and the developer-facing README from the final package allowlist and runtime
+configuration, runs a smoke test, and writes the result to
+`build/your-plugin-name/`. Verified legacy GitHub links in
 the pinned upstream release are normalized to their `appsec-foundry` origins;
 the build stops if it encounters an unknown personal-repository link. The
 original upstream help is not changed. To force a clean rebuild:
@@ -86,6 +93,7 @@ Beyond the quick start, these files are yours to edit:
 | File | Purpose |
 |---|---|
 | `Makefile` → `PACKAGE_VERSION` | Organization-owned plugin version shown to users |
+| `Makefile` → `INTERNAL_REPOSITORY_URL` | Internal packaging repository used as `origin` and shown in packaged help and README output |
 | `org-profile/org-profile.yaml` | Identity, presets, requirements, policy, banner, baseline, context routing, security coach, actors, abuse cases, skill toggles, hooks, and MCP servers |
 | `org-profile/context/organization.md` | Short org context injected into analyses (max 50 KB) |
 | `org-profile/actors/*.yaml` | Custom threat actors for threat models — edit or delete |
@@ -132,6 +140,15 @@ and MCP servers. Both files under `build/` are generated; make changes in the
 profile and package policy, then rebuild. `/your-plugin-name:help` shows the
 effective skill selection from the finished package.
 
+### Control the startup status
+
+The session-start status is controlled at two layers. `banner.enabled: false`
+in `org-profile/org-profile.yaml` makes the runtime default silent. Removing
+`session-banner` from `plugin_surface.hooks` in `package-policy.yaml` removes
+the hook from the package entirely. The initializer keeps both settings aligned
+when you decline startup status, and `make reinit` preserves a deliberate
+package-level removal.
+
 ## Build Reference
 
 ```bash
@@ -158,6 +175,12 @@ make clean
 
 # Read-only drift check (newer release, or branch tip moved past local build)
 make upstream-check
+
+# Compare the configured baseline id with its published document
+make baseline-check
+
+# Run both read-only upstream checks
+make drift-check
 
 # Pin a specific upstream release
 APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package
@@ -199,6 +222,7 @@ Run `make ci-github` or `make ci-gitlab` to install the CI pipeline (see Quick S
 | `APPSEC_ADVISOR_REF` | `v0.6.0-beta.1` | Pinned upstream release; explicitly set it to override |
 | `INTERNAL_NAME` | `acme-appsec` | Plugin name and Claude Code command namespace |
 | `PACKAGE_VERSION` | `0.1.0` | Organization-owned version shown in the banner, help, manifest and archive name |
+| `INTERNAL_REPOSITORY_URL` | empty | Internal HTTPS packaging repository; also shown to developers |
 | `VERSION` | empty | Optional one-off override of `PACKAGE_VERSION` |
 
 ## Related Projects

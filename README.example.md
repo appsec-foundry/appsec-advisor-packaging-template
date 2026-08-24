@@ -5,6 +5,8 @@ the Acme AppSec Team. It adds our threat-modeling defaults, security
 requirements, review guardrails, and organization context to the upstream
 [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) plugin.
 
+<!-- INTERNAL_REPOSITORY_LINK -->
+
 Use it when designing a new service, reviewing a significant change, preparing
 a release, or checking whether an existing threat model still matches the
 code. The plugin analyzes the repository in which Claude Code is running; it
@@ -13,7 +15,7 @@ does not replace the normal engineering or AppSec review process.
 ## What the plugin provides
 
 - Threat models that can be created once and updated as the code changes.
-- A session-start banner showing plugin, threat-model, and
+- An optional session-start status showing plugin, threat-model, and
   [AI Secure Coding Baseline](https://github.com/appsec-foundry/ai-secure-coding-baseline)
   status.
 - Review and triage workflows for findings, accepted risks, and remediation.
@@ -33,10 +35,15 @@ cd /path/to/your/project
 claude --plugin-dir /absolute/path/to/the-packaging-repo/build/acme-appsec
 ```
 
-On first use in a repository, check the required permissions and create the
-initial threat model:
+When startup status is enabled, you should now see the plugin version,
+threat-model state, and baseline state. If neither that status nor
+`/acme-appsec:help` is available, the plugin probably has not loaded.
+
+Start with the package-specific help. On first use in a repository, check the
+required permissions and create the initial threat model:
 
 ```text
+/acme-appsec:help
 /acme-appsec:check-permissions --update
 /acme-appsec:create-threat-model
 ```
@@ -73,8 +80,23 @@ is disabled, Claude Code shows the reason rather than running it.
 The `/acme-appsec:help` reference is generated during packaging from the final
 allowlist and runtime toggles. It therefore lists the package people actually
 have, including organization-owned skills, instead of the larger upstream
-command set. Its “More information” link comes from `banner.url` in
-`org-profile/org-profile.yaml`.
+command set. Its “More information” link comes from the generated runtime
+configuration. Set it once as `INTERNAL_REPOSITORY_URL` in the `Makefile`; the
+initializer asks for the internal packaging repository URL and also configures
+it as `origin` when the new local repository has no remote yet.
+
+## AI Secure Coding Baseline
+
+The AI Secure Coding Baseline is not another scanner. It is a set of secure
+coding rules that Claude Code loads before writing or changing code, so common
+security expectations are present while implementation decisions are being
+made. When startup status is enabled, it reports whether the baseline this
+package expects was found and loaded.
+
+The command surface is package-specific. Run `/acme-appsec:help` to see whether
+baseline installation or verification commands are included. If they are not,
+use the internal information link or contact the Acme AppSec Team for the
+approved installation path.
 
 ## Headless and CI use
 
@@ -122,9 +144,18 @@ apply that choice to all remaining files. The default is to keep it; every
 overwritten file is backed up under `.reinit-backups/`. Existing organization
 and plugin identity settings are reused, and all changes remain uncommitted for
 review. The plugin is rebuilt afterwards; use `REINIT_BUILD=0 make reinit` to
-skip that build. For legacy repositories, reinitialization also ensures the
-package policy enables `help` and, when the session banner is enabled, its
-`session-banner` hook.
+skip that build. For legacy repositories, reinitialization ensures the package
+policy enables `help`. A deliberately removed `session-banner` hook stays
+removed.
+
+### Configure startup status
+
+The initializer asks whether the package should show status when Claude Code
+starts. Choosing no sets `banner.enabled: false` and removes `session-banner`
+from the package allowlist. This means the hook is not registered and its
+implementation is removed from the built artifact. To change the decision
+later, update both `banner.enabled` in `org-profile/org-profile.yaml` and the
+`session-banner` entry in `org-profile/package-policy.yaml`, then rebuild.
 
 ### Customize skills
 
@@ -152,13 +183,18 @@ release, run:
 make release-check
 ```
 
+Use `make upstream-check` for the appsec-advisor core only, `make
+baseline-check` for the configured secure-coding baseline, or `make
+drift-check` for both. These checks are read-only and require network access;
+`make check` remains the offline test gate.
+
 ### Configuration map
 
 Configuration owned by the Acme AppSec Team:
 
 | Path | Purpose |
 |---|---|
-| `Makefile` → `PACKAGE_VERSION` | Internal plugin release shown in the banner, help and package filename |
+| `Makefile` → `PACKAGE_VERSION`, `INTERNAL_REPOSITORY_URL` | Internal plugin release and the internal repository/AppSec link shown in packaged help and README output |
 | `org-profile/org-profile.yaml` | Organization identity; presets and guardrails; requirements; URL and model policy; banner and baseline; context routing; security coach; actor and abuse-case selection; runtime skill toggles; hooks; optional MCP servers |
 | `org-profile/context/*.md` | Organization documents supplied to analyses as untrusted reference data |
 | `org-profile/actors/*.yaml` | Organization-specific threat actors selected by the profile |

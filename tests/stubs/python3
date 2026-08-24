@@ -25,6 +25,8 @@ if script.endswith("package_internal_plugin.py"):
     name = None
     source = None
     version = None
+    org_profile = None
+    info_url = None
     for i, a in enumerate(args):
         if a == "--name" and i + 1 < len(args):
             name = args[i + 1]
@@ -32,6 +34,10 @@ if script.endswith("package_internal_plugin.py"):
             source = args[i + 1]
         if a == "--version" and i + 1 < len(args):
             version = args[i + 1]
+        if a == "--org-profile" and i + 1 < len(args):
+            org_profile = args[i + 1]
+        if a == "--info-url" and i + 1 < len(args):
+            info_url = args[i + 1]
     expected_skill = os.environ.get("PYSTUB_EXPECT_SOURCE_SKILL", "")
     if expected_skill:
         skill_md = os.path.join(source or "", "skills", expected_skill, "SKILL.md")
@@ -43,6 +49,8 @@ if script.endswith("package_internal_plugin.py"):
         metadata = os.path.join(root, ".claude-plugin")
         os.makedirs(metadata, exist_ok=True)
         shutil.copytree(os.path.join(source or "", "scripts"), os.path.join(root, "scripts"))
+        if org_profile:
+            shutil.copytree(org_profile, os.path.join(root, "org-profile"))
         with open(os.path.join(metadata, "plugin.json"), "w", encoding="utf-8") as file:
             json.dump({"name": name, "version": version or "0.0.0-test.1"}, file)
         with open(
@@ -55,6 +63,8 @@ if script.endswith("package_internal_plugin.py"):
                         "included": ["create-threat-model", "help"],
                         "removed": ["publish-threat-model"],
                     },
+                    "hooks": {"included": ["session-banner"], "removed": []},
+                    "upstream_url": "https://github.com/appsec-foundry/appsec-advisor.git",
                 },
                 file,
             )
@@ -62,8 +72,14 @@ if script.endswith("package_internal_plugin.py"):
             json.dump(
                 {
                     "skill_toggles": {},
+                    "banner": {
+                        "enabled": True,
+                        "url": info_url or None,
+                    },
                     "baseline": {
+                        "enabled": True,
                         "id": "aisec-0.1",
+                        "name": "AI Secure Coding Baseline",
                         "url": (
                             "https://raw.githubusercontent.com/matthiasrohr/"
                             "ai-secure-coding-baseline/main/secure-coding-baseline.md"
