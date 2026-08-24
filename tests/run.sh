@@ -185,6 +185,10 @@ echo "--- init-org-repo.sh ---"
 #                target-dir, demo(y/n), baseline(y/n),
 #                [continue? when dir exists], [build(y/n)]
 
+if grep -Fqx '      - session-banner' "$ROOT/org-profile/package-policy.yaml"; then
+  pass "policy: session banner is included"
+else fail "policy: session banner is included" "missing hook id"; fi
+
 # demo=yes; leading empty answer exercises the "(required)" retry on org-name.
 d="$(newdir)"
 tgt="$d/out"

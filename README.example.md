@@ -13,6 +13,7 @@ does not replace the normal engineering or AppSec review process.
 ## What the plugin provides
 
 - Threat models that can be created once and updated as the code changes.
+- A session-start banner showing plugin, threat-model, and baseline status.
 - Review and triage workflows for findings, accepted risks, and remediation.
 - Checks against the application-security requirements maintained for Acme Corp.
 - YAML and SARIF output for normal runs, with additional release-review output

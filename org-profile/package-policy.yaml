@@ -23,6 +23,8 @@ plugin_surface:
       # - acme-architecture-review
   hooks:
     include:
+      # Shows plugin, threat-model, and baseline status when a session starts.
+      - session-banner
       - agent-logger
       # Enforces the disabled requirements skills declared in org-profile.yaml.
       - skill-policy-gate
