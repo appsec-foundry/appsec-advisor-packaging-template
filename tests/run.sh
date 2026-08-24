@@ -24,6 +24,7 @@ FETCH="$ROOT/scripts/fetch-upstream.sh"
 PKG="$ROOT/scripts/package-local.sh"
 INIT="$ROOT/scripts/init-org-repo.sh"
 CHECK="$ROOT/scripts/upstream-check.sh"
+REINIT="$ROOT/scripts/reinit-org-repo.sh"
 GUARD_TEST="$HERE/test_guard.py"
 MARKETPLACE_TEST="$HERE/test_local_marketplace.py"
 PACKAGED_HELP_TEST="$HERE/test_packaged_help.py"
@@ -335,6 +336,51 @@ if [ "$rc" = 0 ] && \
 else fail "init: skipped build remains a next step" "rc=$rc"; fi
 self_contained_tgt="$tgt"
 
+# make reinit reads identity from the existing repo, preserves user-owned
+# files, refreshes infrastructure from template main, and can skip packaging.
+profile_before="$(cksum "$self_contained_tgt/org-profile/org-profile.yaml")"
+readme_before="$(cksum "$self_contained_tgt/README.md")"
+printf 'stale infrastructure\n' >"$self_contained_tgt/scripts/package-local.sh"
+reinit_log="$d/reinit.log"
+(cd "$self_contained_tgt" && set -x && export SHELLOPTS && \
+  timeout 20 make --no-print-directory GITSTUB_CLONE_SRC="$ROOT" \
+    REINIT_BUILD=0 reinit) >"$reinit_log" 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && \
+   [ "$profile_before" = "$(cksum "$self_contained_tgt/org-profile/org-profile.yaml")" ] && \
+   [ "$readme_before" = "$(cksum "$self_contained_tgt/README.md")" ] && \
+   grep -Fqx 'INTERNAL_NAME ?= to-appsec' "$self_contained_tgt/Makefile" && \
+   grep -Fq 'render-packaged-help.py' "$self_contained_tgt/scripts/package-local.sh" && \
+   grep -Fq 'Re-initialization complete' "$reinit_log" && \
+   grep -Fq '  1. Build the plugin: make package' "$reinit_log" && \
+   grep -Fq 'Review and commit the reinitialization changes' "$reinit_log"; then
+  pass "reinit: existing settings and user files are preserved"
+else fail "reinit: existing settings and user files are preserved" "rc=$rc"; fi
+
+d="$(newdir)"
+(cd "$d" && timeout 20 bash -x "$REINIT") >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 2 ] && grep -Fq 'must run from a scaffolded packaging repository root' "$COV"; then
+  pass "reinit: rejects a non-scaffold directory"
+else fail "reinit: rejects a non-scaffold directory" "rc=$rc"; fi
+
+d="$(newdir)"
+mkdir -p "$d/org-profile"
+printf 'INTERNAL_NAME ?= incomplete-appsec\n' >"$d/Makefile"
+printf 'organization:\n  id: incomplete\n' >"$d/org-profile/org-profile.yaml"
+(cd "$d" && timeout 20 bash -x "$REINIT") >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 2 ] && grep -Fq 'failed to read existing packaging settings' "$COV"; then
+  pass "reinit: rejects incomplete existing settings"
+else fail "reinit: rejects incomplete existing settings" "rc=$rc"; fi
+
+(cd "$self_contained_tgt" && env APPSEC_ADVISOR_TEMPLATE_SOURCE="$d/missing-template" \
+  timeout 20 bash -x "$REINIT") >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 2 ] && grep -Fq 'template source does not contain scripts/init-org-repo.sh' "$COV"; then
+  pass "reinit: rejects an invalid template source"
+else fail "reinit: rejects an invalid template source" "rc=$rc"; fi
+
 # Reinitialization keeps user-owned profile content, but must reject legacy
 # invalid bytes before reaching the packager and its less useful traceback.
 d="$(newdir)"
@@ -354,7 +400,7 @@ else fail "init: reinit rejects a kept profile with invalid UTF-8" "rc=$rc"; fi
 missing=""
 for f in scripts/fetch-upstream.sh scripts/upstream-check.sh scripts/package-local.sh \
          scripts/prepare-local-marketplace.py scripts/render-packaged-help.py \
-         scripts/archive-built-plugin.py \
+         scripts/archive-built-plugin.py scripts/reinit-org-repo.sh \
          org-profile/package-policy.yaml org-profile/org-profile.yaml Makefile; do
   [ -f "$self_contained_tgt/$f" ] || missing="$missing $f"
 done
@@ -394,6 +440,8 @@ cp "$ROOT/scripts/prepare-local-marketplace.py" \
   "$clean/scripts/prepare-local-marketplace.py"
 cp "$ROOT/scripts/render-packaged-help.py" "$clean/scripts/render-packaged-help.py"
 cp "$ROOT/scripts/archive-built-plugin.py" "$clean/scripts/archive-built-plugin.py"
+cp "$ROOT/scripts/reinit-org-repo.sh" "$clean/scripts/reinit-org-repo.sh"
+cp "$ROOT/Makefile" "$clean/Makefile"
 lonely="$WORKROOT/lonely"
 mkdir -p "$lonely"
 cp "$INIT" "$lonely/init-org-repo.sh"
@@ -454,7 +502,7 @@ echo ""
 echo "functional checks: $PASS passed, $FAIL failed"
 python3 "$HERE/lib/coverage.py" --trace "$COV" --threshold "$THRESHOLD" \
   --lcov "$ROOT/coverage.lcov" --source-root "$ROOT" \
-  "$FETCH" "$PKG" "$INIT" "$CHECK"
+  "$FETCH" "$PKG" "$INIT" "$REINIT" "$CHECK"
 covrc=$?
 
 if [ "$FAIL" -eq 0 ] && [ "$covrc" -eq 0 ]; then exit 0; else exit 1; fi

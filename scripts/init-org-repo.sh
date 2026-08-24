@@ -106,25 +106,38 @@ echo ""
 
 # ── Gather input ─────────────────────────────────────────────────────────────
 
-ORG_NAME=$(ask "Organization name (e.g. Acme Corp)")
-ORG_ID=$(initials "${ORG_NAME}")
-ORG_ID=$(ask "Organization id (short lowercase abbreviation, e.g. 'acme', 'hl' — used in plugin name)" "${ORG_ID}")
-PLUGIN_NAME=$(ask "Plugin name (Claude Code command prefix)" "${ORG_ID}-appsec")
-OWNER_PREFIX="${ORG_ID^^}"
-OWNER=$(ask "Team owner (e.g. AppSec Team)" "${OWNER_PREFIX} AppSec Team")
-TARGET_DIR=$(ask "Target directory" "./${ORG_ID}-appsec-advisor")
+REINIT_MODE=false
+if [ -n "${APPSEC_REINIT_TARGET:-}" ]; then
+  REINIT_MODE=true
+  TARGET_DIR="${APPSEC_REINIT_TARGET}"
+  ORG_NAME="$(printf '%s' "${APPSEC_REINIT_ORG_NAME:?}" | normalize_utf8)"
+  ORG_ID="${APPSEC_REINIT_ORG_ID:?}"
+  PLUGIN_NAME="${APPSEC_REINIT_PLUGIN_NAME:?}"
+  OWNER="$(printf '%s' "${APPSEC_REINIT_OWNER:?}" | normalize_utf8)"
+  DEMO_CONTENT="${APPSEC_REINIT_DEMO:?}"
+  BASELINE_ENABLED="${APPSEC_REINIT_BASELINE:?}"
+  OWNER_PREFIX="${ORG_ID^^}"
+else
+  ORG_NAME=$(ask "Organization name (e.g. Acme Corp)")
+  ORG_ID=$(initials "${ORG_NAME}")
+  ORG_ID=$(ask "Organization id (short lowercase abbreviation, e.g. 'acme', 'hl' — used in plugin name)" "${ORG_ID}")
+  PLUGIN_NAME=$(ask "Plugin name (Claude Code command prefix)" "${ORG_ID}-appsec")
+  OWNER_PREFIX="${ORG_ID^^}"
+  OWNER=$(ask "Team owner (e.g. AppSec Team)" "${OWNER_PREFIX} AppSec Team")
+  TARGET_DIR=$(ask "Target directory" "./${ORG_ID}-appsec-advisor")
 
-read -r -p "Include demo content (example requirements + filled org profile)? [y/N]: " _demo_reply
-case "${_demo_reply}" in
-  [yY]*) DEMO_CONTENT=true ;;
-  *)     DEMO_CONTENT=false ;;
-esac
+  read -r -p "Include demo content (example requirements + filled org profile)? [y/N]: " _demo_reply
+  case "${_demo_reply}" in
+    [yY]*) DEMO_CONTENT=true ;;
+    *)     DEMO_CONTENT=false ;;
+  esac
 
-read -r -p "Include the AI Secure Coding Baseline? [Y/n] (change later in org-profile/org-profile.yaml): " _baseline_reply || _baseline_reply=""
-case "${_baseline_reply}" in
-  [nN]*) BASELINE_ENABLED=false ;;
-  *)     BASELINE_ENABLED=true ;;
-esac
+  read -r -p "Include the AI Secure Coding Baseline? [Y/n] (change later in org-profile/org-profile.yaml): " _baseline_reply || _baseline_reply=""
+  case "${_baseline_reply}" in
+    [nN]*) BASELINE_ENABLED=false ;;
+    *)     BASELINE_ENABLED=true ;;
+  esac
+fi
 
 echo ""
 
@@ -150,7 +163,14 @@ fi
 # ── Create repo ───────────────────────────────────────────────────────────────
 
 REINIT=false
-if [ -e "${TARGET_DIR}" ]; then
+if [ "${REINIT_MODE}" = true ]; then
+  if [ ! -d "${TARGET_DIR}" ]; then
+    echo "ERROR: reinitialization target is not a directory: ${TARGET_DIR}" >&2
+    exit 2
+  fi
+  REINIT=true
+  echo "==> Re-initializing existing packaging repository: ${TARGET_DIR}"
+elif [ -e "${TARGET_DIR}" ]; then
   echo ""
   echo "Warning: '${TARGET_DIR}' already exists."
   echo "  Infrastructure files (Makefile, scripts/, ci-templates/, .gitignore)"
@@ -185,10 +205,12 @@ if [ -f "${TEMPLATE_BASE}/scripts/prepare-local-marketplace.py" ]; then
      "${TARGET_DIR}/scripts/prepare-local-marketplace.py"
   chmod +x "${TARGET_DIR}/scripts/prepare-local-marketplace.py"
 fi
-for helper in render-packaged-help.py archive-built-plugin.py; do
+for helper in render-packaged-help.py archive-built-plugin.py reinit-org-repo.sh; do
   if [ -f "${TEMPLATE_BASE}/scripts/${helper}" ]; then
-    cp "${TEMPLATE_BASE}/scripts/${helper}" "${TARGET_DIR}/scripts/${helper}"
-    chmod +x "${TARGET_DIR}/scripts/${helper}"
+    helper_tmp="${TARGET_DIR}/scripts/.${helper}.new"
+    cp "${TEMPLATE_BASE}/scripts/${helper}" "${helper_tmp}"
+    chmod +x "${helper_tmp}"
+    mv "${helper_tmp}" "${TARGET_DIR}/scripts/${helper}"
   fi
 done
 
@@ -333,19 +355,29 @@ cd "${TARGET_DIR}"
 if [ ! -e .git ]; then
   git init -q -b main
 fi
-git add .
-if git diff --cached --quiet; then
-  echo "(no changes to commit)"
+if [ "${REINIT}" = true ]; then
+  echo "(reinitialization changes left uncommitted for review)"
 else
-  if [ "${REINIT}" = true ]; then
-    git commit -q -m "reinit: update infrastructure files for ${PLUGIN_NAME}"
+  git add .
+  if git diff --cached --quiet; then
+    echo "(no changes to commit)"
   else
     git commit -q -m "init: ${PLUGIN_NAME} packaging repo for ${ORG_NAME}"
   fi
 fi
 
 BUILD_STATE=skipped
-if read -r -p "Build the plugin now? [Y/n]: " _build_reply; then
+_build_answered=false
+if [ "${REINIT_MODE}" = true ]; then
+  _build_answered=true
+  case "${APPSEC_REINIT_BUILD:-1}" in
+    0|false|no|off) _build_reply=n ;;
+    *) _build_reply=y ;;
+  esac
+elif read -r -p "Build the plugin now? [Y/n]: " _build_reply; then
+  _build_answered=true
+fi
+if [ "${_build_answered}" = true ]; then
   case "${_build_reply}" in
     [nN]*) ;;
     *)
@@ -370,7 +402,24 @@ if [ "${BUILD_STATE}" = succeeded ]; then
 echo "The built plugin is ready at: ${PACKAGING_ROOT}/build/${PLUGIN_NAME}"
 fi
 echo ""
+if [ "${REINIT_MODE}" = true ]; then
+echo "Re-initialization complete. Existing organization files and settings were preserved."
+fi
 echo "Next steps:"
+if [ "${REINIT_MODE}" = true ]; then
+  REINIT_STEP=1
+  if [ "${BUILD_STATE}" = failed ]; then
+    echo "  1. Retry the plugin build: make package"
+    REINIT_STEP=2
+  elif [ "${BUILD_STATE}" = skipped ]; then
+    echo "  1. Build the plugin: make package"
+    REINIT_STEP=2
+  fi
+  echo "  ${REINIT_STEP}. Load the plugin from any project you want to analyze:"
+  echo "       claude --plugin-dir ${PACKAGING_ROOT}/build/${PLUGIN_NAME}"
+  echo "  $((REINIT_STEP + 1)). Review and commit the reinitialization changes"
+  exit 0
+fi
 echo "  1. cd ${PACKAGING_ROOT}"
 if [ "${DEMO_CONTENT}" = true ]; then
 echo "  2. Edit org-profile/requirements.yaml — replace demo entries with your real requirements"

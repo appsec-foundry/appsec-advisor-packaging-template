@@ -124,6 +124,12 @@ APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package
 # Force a clean rebuild (removes upstream/, build/, dist/ first)
 make rebuild
 
+# Reapply the current main template using this repo's existing settings
+make reinit
+
+# Refresh infrastructure without rebuilding the plugin afterwards
+REINIT_BUILD=0 make reinit
+
 # Remove all generated directories
 make clean
 

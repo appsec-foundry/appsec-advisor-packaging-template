@@ -120,6 +120,8 @@ APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package # pin a specific release
 make validate                         # validate org-profile.yaml only
 make local-marketplace                # build + generate a local marketplace catalog under build/
 make install-local                    # register that catalog and install the plugin at local scope
+make reinit                           # reapply template main with existing settings, then package
+REINIT_BUILD=0 make reinit            # reapply template without packaging afterwards
 ARCHIVE=1 ORG_REV=3 make package-archive  # produce .tgz + .sha256
 ```
 

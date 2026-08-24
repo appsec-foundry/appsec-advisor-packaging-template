@@ -109,6 +109,13 @@ profile, package policy, hooks, or organization skills:
 make package
 ```
 
+To update this repository's packaging infrastructure from the current template
+while retaining its organization profile, README, and skills, run `make
+reinit`. It reuses the existing organization and plugin settings and rebuilds
+the plugin; use `REINIT_BUILD=0 make reinit` to update infrastructure only.
+The refreshed files are left uncommitted so they can be reviewed together with
+any existing local changes.
+
 The plugin is written to `build/acme-appsec/` and smoke-tested as part of the
 build. Before publishing a release, run:
 

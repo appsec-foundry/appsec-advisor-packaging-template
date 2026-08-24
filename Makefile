@@ -16,6 +16,11 @@ ORG_REV ?= 1
 VERSION ?=
 LOCAL_MARKETPLACE_NAME ?= $(INTERNAL_NAME)-local
 LOCAL_MARKETPLACE_SCOPE ?= local
+APPSEC_ADVISOR_TEMPLATE_URL ?= https://github.com/appsec-foundry/appsec-advisor-packaging-template.git
+APPSEC_ADVISOR_TEMPLATE_REF ?= main
+APPSEC_ADVISOR_TEMPLATE_SOURCE ?=
+REINIT_BUILD ?= 1
+export APPSEC_ADVISOR_TEMPLATE_URL APPSEC_ADVISOR_TEMPLATE_REF APPSEC_ADVISOR_TEMPLATE_SOURCE REINIT_BUILD
 
 ifeq ($(APPSEC_ADVISOR_SOURCE),$(APPSEC_ADVISOR_DEST))
 FETCH_TARGET := fetch-upstream
@@ -25,7 +30,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint check release-check fetch-upstream upstream-check validate package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean distclean rebuild test
+.PHONY: help lint check release-check fetch-upstream upstream-check validate package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean distclean rebuild reinit test
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -85,6 +90,9 @@ distclean: clean ## clean, then strip template build glue from a scaffolded repo
 	rm -rf ci-templates/ scripts/ AGENTS.md README.md Makefile
 
 rebuild: clean package ## clean then package
+
+reinit: ## Reapply the current template to this repo using its existing settings
+	scripts/reinit-org-repo.sh
 
 ci-github: ## Install the GitHub Actions packaging workflow
 	mkdir -p .github/workflows
