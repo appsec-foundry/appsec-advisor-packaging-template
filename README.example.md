@@ -114,7 +114,9 @@ while retaining its organization profile, README, and skills, run `make
 reinit`. It reuses the existing organization and plugin settings and rebuilds
 the plugin; use `REINIT_BUILD=0 make reinit` to update infrastructure only.
 The refreshed files are left uncommitted so they can be reviewed together with
-any existing local changes.
+any existing local changes. For legacy repositories, reinitialization also
+ensures the package policy enables `help` and, when the session banner is
+enabled, its `session-banner` hook.
 
 The plugin is written to `build/acme-appsec/` and smoke-tested as part of the
 build. Before publishing a release, run:

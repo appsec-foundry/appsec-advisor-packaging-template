@@ -96,6 +96,134 @@ except UnicodeDecodeError as error:
 PY
 }
 
+migrate_package_policy() {
+  PYTHONUTF8=1 python3 - "$1" "$2" <<'PY'
+from pathlib import Path
+import os
+import re
+import stat
+import sys
+import tempfile
+
+policy_path = Path(sys.argv[1])
+profile_path = Path(sys.argv[2])
+
+
+def read_utf8(path: Path, *, keepends: bool = False) -> list[str]:
+    try:
+        return path.read_text(encoding="utf-8").splitlines(keepends=keepends)
+    except UnicodeDecodeError as error:
+        print(
+            f"ERROR: {path} is not valid UTF-8 at byte {error.start}",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+
+
+lines = read_utf8(policy_path, keepends=True)
+profile_lines = read_utf8(profile_path)
+
+
+def selection_block(section: str) -> tuple[str | None, int | None]:
+    section_pattern = re.compile(rf"^  {re.escape(section)}:\s*(?:#.*)?$")
+    section_start = next(
+        (index for index, line in enumerate(lines) if section_pattern.match(line.rstrip("\r\n"))),
+        None,
+    )
+    if section_start is None:
+        raise ValueError(f"plugin_surface.{section} is missing")
+    section_end = next(
+        (
+            index
+            for index in range(section_start + 1, len(lines))
+            if re.match(r"^  [A-Za-z0-9_-]+:", lines[index])
+        ),
+        len(lines),
+    )
+    selections = []
+    for mode in ("include", "exclude"):
+        pattern = re.compile(rf"^    {mode}:\s*(?:#.*)?$")
+        index = next(
+            (
+                index
+                for index in range(section_start + 1, section_end)
+                if pattern.match(lines[index].rstrip("\r\n"))
+            ),
+            None,
+        )
+        if index is not None:
+            selections.append((mode, index))
+    if len(selections) > 1:
+        raise ValueError(f"plugin_surface.{section} defines include and exclude")
+    return selections[0] if selections else (None, None)
+
+
+def ensure_available(section: str, entry: str) -> bool:
+    mode, selection = selection_block(section)
+    if mode is None or selection is None:
+        return False
+    item_pattern = re.compile(rf"^      -\s+{re.escape(entry)}\s*(?:#.*)?$")
+    end = next(
+        (
+            index
+            for index in range(selection + 1, len(lines))
+            if lines[index].strip()
+            and not lines[index].lstrip().startswith("#")
+            and len(lines[index]) - len(lines[index].lstrip(" ")) <= 4
+        ),
+        len(lines),
+    )
+    matches = [
+        index
+        for index in range(selection + 1, end)
+        if item_pattern.match(lines[index].rstrip("\r\n"))
+    ]
+    if mode == "include":
+        if matches:
+            return False
+        lines.insert(selection + 1, f"      - {entry}\n")
+        return True
+    for index in reversed(matches):
+        del lines[index]
+    return bool(matches)
+
+
+banner_enabled = False
+inside_banner = False
+for line in profile_lines:
+    if line and not line[0].isspace():
+        inside_banner = line.split(":", 1)[0] == "banner"
+        continue
+    if inside_banner and re.match(r"^  enabled:\s*true(?:\s+#.*)?$", line):
+        banner_enabled = True
+
+enabled = []
+try:
+    if ensure_available("skills", "help"):
+        enabled.append("help")
+    if banner_enabled and ensure_available("hooks", "session-banner"):
+        enabled.append("session-banner")
+except ValueError as error:
+    print(f"ERROR: cannot migrate package policy: {error}", file=sys.stderr)
+    raise SystemExit(2)
+
+if enabled:
+    mode = stat.S_IMODE(policy_path.stat().st_mode)
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=policy_path.parent, prefix=f".{policy_path.name}."
+    )
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as temporary:
+            temporary.writelines(lines)
+        os.chmod(temporary_name, mode)
+        os.replace(temporary_name, policy_path)
+    finally:
+        if os.path.exists(temporary_name):
+            os.unlink(temporary_name)
+    print(f"  migrated: {policy_path} (enabled {', '.join(enabled)})")
+PY
+}
+
 # ── Intro ─────────────────────────────────────────────────────────────────────
 
 echo ""
@@ -177,6 +305,7 @@ elif [ -e "${TARGET_DIR}" ]; then
   echo "  Infrastructure files (Makefile, scripts/, ci-templates/, .gitignore)"
   echo "  will be updated. User-editable files (org-profile/, README.md, AGENTS.md)"
   echo "  will be kept if they already exist."
+  echo "  Required package-policy entries may be reconciled."
   read -r -p "Re-initialize? [y/N]: " confirm
   case "${confirm}" in
     [yY]*) REINIT=true ;;
@@ -330,6 +459,9 @@ fi
 # Validate both newly rendered profiles and existing profiles retained during
 # reinitialization before the upstream packager can produce a Python traceback.
 validate_utf8_file "${TARGET_DIR}/org-profile/org-profile.yaml"
+migrate_package_policy \
+  "${TARGET_DIR}/org-profile/package-policy.yaml" \
+  "${TARGET_DIR}/org-profile/org-profile.yaml"
 
 # ── Render organization.md ────────────────────────────────────────────────────
 
@@ -438,7 +570,8 @@ echo "The built plugin is ready at: ${PACKAGING_ROOT}/build/${PLUGIN_NAME}"
 fi
 echo ""
 if [ "${REINIT_MODE}" = true ]; then
-echo "Re-initialization complete. Existing organization files and settings were preserved."
+echo "Re-initialization complete. Existing organization files and settings were preserved;"
+echo "required package-policy entries were reconciled."
 fi
 echo "Next steps:"
 if [ "${REINIT_MODE}" = true ]; then

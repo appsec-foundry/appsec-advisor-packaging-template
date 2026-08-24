@@ -341,6 +341,10 @@ self_contained_tgt="$tgt"
 profile_before="$(cksum "$self_contained_tgt/org-profile/org-profile.yaml")"
 readme_before="$(cksum "$self_contained_tgt/README.md")"
 printf 'stale infrastructure\n' >"$self_contained_tgt/scripts/package-local.sh"
+sed -i '/^      - help$/d; /^      - session-banner$/d' \
+  "$self_contained_tgt/org-profile/package-policy.yaml"
+printf '\n# retained organization policy marker\n' >> \
+  "$self_contained_tgt/org-profile/package-policy.yaml"
 reinit_log="$d/reinit.log"
 (cd "$self_contained_tgt" && set -x && export SHELLOPTS && \
   timeout 20 make --no-print-directory GITSTUB_CLONE_SRC="$ROOT" \
@@ -351,11 +355,34 @@ if [ "$rc" = 0 ] && \
    [ "$readme_before" = "$(cksum "$self_contained_tgt/README.md")" ] && \
    grep -Fqx 'INTERNAL_NAME ?= to-appsec' "$self_contained_tgt/Makefile" && \
    grep -Fq 'render-packaged-help.py' "$self_contained_tgt/scripts/package-local.sh" && \
+   [ "$(grep -Fxc '      - help' "$self_contained_tgt/org-profile/package-policy.yaml")" = 1 ] && \
+   [ "$(grep -Fxc '      - session-banner' "$self_contained_tgt/org-profile/package-policy.yaml")" = 1 ] && \
+   grep -Fq 'retained organization policy marker' "$self_contained_tgt/org-profile/package-policy.yaml" && \
    grep -Fq 'Re-initialization complete' "$reinit_log" && \
+   grep -Fq 'enabled help, session-banner' "$reinit_log" && \
    grep -Fq '  1. Build the plugin: make package' "$reinit_log" && \
    grep -Fq 'Review and commit the reinitialization changes' "$reinit_log"; then
   pass "reinit: existing settings and user files are preserved"
 else fail "reinit: existing settings and user files are preserved" "rc=$rc"; fi
+
+# An exclude-based policy enables required surface entries by removing them
+# from the exclusion list rather than converting the organization's policy mode.
+sed -i '/^  skills:/,/^  hooks:/ s/^    include:/    exclude:/' \
+  "$self_contained_tgt/org-profile/package-policy.yaml"
+sed -i '/^  hooks:/,$ s/^    include:/    exclude:/' \
+  "$self_contained_tgt/org-profile/package-policy.yaml"
+exclude_log="$d/reinit-exclude.log"
+(cd "$self_contained_tgt" && env APPSEC_ADVISOR_TEMPLATE_SOURCE="$ROOT" \
+  REINIT_BUILD=0 timeout 20 make --no-print-directory reinit) >"$exclude_log" 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && \
+   grep -Fq '    exclude:' "$self_contained_tgt/org-profile/package-policy.yaml" && \
+   ! grep -Fq '      - help' "$self_contained_tgt/org-profile/package-policy.yaml" && \
+   ! grep -Fq '      - session-banner' "$self_contained_tgt/org-profile/package-policy.yaml" && \
+   grep -Fq '      - create-threat-model' "$self_contained_tgt/org-profile/package-policy.yaml" && \
+   grep -Fq 'enabled help, session-banner' "$exclude_log"; then
+  pass "reinit: required entries are enabled in an exclude policy"
+else fail "reinit: required entries are enabled in an exclude policy" "rc=$rc"; fi
 
 d="$(newdir)"
 (cd "$d" && timeout 20 bash -x "$REINIT") >/dev/null 2>>"$COV"
