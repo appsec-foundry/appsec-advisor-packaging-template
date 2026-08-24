@@ -12,6 +12,7 @@ ARCHIVE="${ARCHIVE:-0}"
 DESCRIPTION="${DESCRIPTION:-Internal packaged build of appsec-advisor with Acme Corp defaults.}"
 ORG_SKILLS_DIR="${ORG_SKILLS_DIR:-org-skills}"
 TEMP_SOURCE=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cleanup() {
   if [ -n "${TEMP_SOURCE}" ]; then
@@ -122,9 +123,14 @@ fi
 
 overlay_org_skills "${ORG_SKILLS_DIR}" "${SOURCE}"
 
-EXTRA_ARGS=(--skip-archive)
+# Do not leave an older same-version release artifact behind if regeneration
+# fails before the new archive is ready.
 if [ "${ARCHIVE}" = "1" ] || [ "${ARCHIVE}" = "true" ]; then
-  EXTRA_ARGS=()
+  python3 "${SCRIPT_DIR}/archive-built-plugin.py" \
+    --clean-only \
+    --name "${INTERNAL_NAME}" \
+    --version "${VERSION}" \
+    --dist-dir dist
 fi
 
 python3 "${SOURCE}/scripts/package_internal_plugin.py" \
@@ -135,8 +141,22 @@ python3 "${SOURCE}/scripts/package_internal_plugin.py" \
   --description "${DESCRIPTION}" \
   --upstream-url "${UPSTREAM_URL}" \
   --readme "build/${INTERNAL_NAME}/README.md" \
-  "${EXTRA_ARGS[@]}"
+  --skip-archive
+
+# The package-specific help is derived only after the upstream packager has
+# written its authoritative package-surface.json. The upstream source tree is
+# never modified.
+python3 "${SCRIPT_DIR}/render-packaged-help.py" \
+  --plugin-root "build/${INTERNAL_NAME}"
 
 python3 "${SOURCE}/scripts/smoke_test_package.py" \
   "build/${INTERNAL_NAME}" \
   --name "${INTERNAL_NAME}"
+
+# Archive the same directory that passed the smoke test. Letting the upstream
+# packager archive earlier would capture its generic help instead.
+if [ "${ARCHIVE}" = "1" ] || [ "${ARCHIVE}" = "true" ]; then
+  python3 "${SCRIPT_DIR}/archive-built-plugin.py" \
+    --plugin-root "build/${INTERNAL_NAME}" \
+    --dist-dir dist
+fi

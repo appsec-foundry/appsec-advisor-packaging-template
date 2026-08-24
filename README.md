@@ -48,7 +48,10 @@ Then set `INTERNAL_NAME` to your plugin name in the CI repository variables if i
 make package
 ```
 
-This fetches the upstream plugin, overlays your org profile, runs a smoke test, and writes the result to `build/your-plugin-name/`. To force a clean rebuild:
+This fetches the upstream plugin, overlays your org profile, generates `/help`
+from the final package allowlist and runtime toggles, runs a smoke test, and
+writes the result to `build/your-plugin-name/`. The original upstream help is
+not changed. To force a clean rebuild:
 
 ```bash
 make rebuild

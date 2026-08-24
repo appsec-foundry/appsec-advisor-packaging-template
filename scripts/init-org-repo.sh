@@ -134,6 +134,12 @@ if [ -f "${TEMPLATE_BASE}/scripts/prepare-local-marketplace.py" ]; then
      "${TARGET_DIR}/scripts/prepare-local-marketplace.py"
   chmod +x "${TARGET_DIR}/scripts/prepare-local-marketplace.py"
 fi
+for helper in render-packaged-help.py archive-built-plugin.py; do
+  if [ -f "${TEMPLATE_BASE}/scripts/${helper}" ]; then
+    cp "${TEMPLATE_BASE}/scripts/${helper}" "${TARGET_DIR}/scripts/${helper}"
+    chmod +x "${TARGET_DIR}/scripts/${helper}"
+  fi
+done
 
 cp "${TEMPLATE_BASE}/ci-templates/github/workflows/package.yml" \
    "${TARGET_DIR}/ci-templates/github/workflows/package.yml"

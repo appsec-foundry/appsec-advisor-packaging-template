@@ -7,6 +7,8 @@
 plugin_surface:
   skills:
     include:
+      # Replaced after packaging with a reference generated from this surface.
+      - help
       - create-threat-model
       - update-threat-model
       - ask-threat-model

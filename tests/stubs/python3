@@ -10,8 +10,10 @@ Intercepts the upstream packaging/smoke scripts so no real upstream is needed.
   PYSTUB_FAIL=smoke     -> smoke_test_package.py exits non-zero
 Anything else is delegated to the real python3 so normal use is unaffected.
 """
+
 import os
 import sys
+import json
 
 args = sys.argv[1:]
 script = args[0] if args else ""
@@ -21,11 +23,14 @@ if script.endswith("package_internal_plugin.py"):
     # Create the expected build output dir so a following smoke step has a target.
     name = None
     source = None
+    version = None
     for i, a in enumerate(args):
         if a == "--name" and i + 1 < len(args):
             name = args[i + 1]
         if a == "--source" and i + 1 < len(args):
             source = args[i + 1]
+        if a == "--version" and i + 1 < len(args):
+            version = args[i + 1]
     expected_skill = os.environ.get("PYSTUB_EXPECT_SOURCE_SKILL", "")
     if expected_skill:
         skill_md = os.path.join(source or "", "skills", expected_skill, "SKILL.md")
@@ -33,7 +38,38 @@ if script.endswith("package_internal_plugin.py"):
             print(f"expected source skill not found: {skill_md}", file=sys.stderr)
             sys.exit(5)
     if name:
-        os.makedirs(os.path.join("build", name), exist_ok=True)
+        root = os.path.join("build", name)
+        metadata = os.path.join(root, ".claude-plugin")
+        os.makedirs(metadata, exist_ok=True)
+        with open(os.path.join(metadata, "plugin.json"), "w", encoding="utf-8") as file:
+            json.dump({"name": name, "version": version or "0.0.0-test.1"}, file)
+        with open(
+            os.path.join(metadata, "package-surface.json"), "w", encoding="utf-8"
+        ) as file:
+            json.dump(
+                {
+                    "version": 1,
+                    "skills": {
+                        "included": ["create-threat-model", "help"],
+                        "removed": ["publish-threat-model"],
+                    },
+                },
+                file,
+            )
+        with open(os.path.join(root, "config.json"), "w", encoding="utf-8") as file:
+            json.dump({"skill_toggles": {}}, file)
+        for skill, description in (
+            ("create-threat-model", "Create a threat model."),
+            ("help", "Show generic upstream help."),
+        ):
+            skill_dir = os.path.join(root, "skills", skill)
+            os.makedirs(skill_dir, exist_ok=True)
+            with open(
+                os.path.join(skill_dir, "SKILL.md"), "w", encoding="utf-8"
+            ) as file:
+                file.write(
+                    f"---\nname: {skill}\ndescription: {description}\n---\n\nStub.\n"
+                )
     sys.exit(3 if fail == "package" else 0)
 
 if script.endswith("smoke_test_package.py"):

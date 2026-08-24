@@ -26,11 +26,13 @@ INIT="$ROOT/scripts/init-org-repo.sh"
 CHECK="$ROOT/scripts/upstream-check.sh"
 GUARD_TEST="$HERE/test_guard.py"
 MARKETPLACE_TEST="$HERE/test_local_marketplace.py"
+PACKAGED_HELP_TEST="$HERE/test_packaged_help.py"
 
 # -B: importing guard.py must not leave __pycache__ in org-profile/hooks/,
 # which the packager would copy and the smoke test rejects.
 /usr/bin/python3 -B "$GUARD_TEST"
 /usr/bin/python3 -B "$MARKETPLACE_TEST"
+/usr/bin/python3 -B "$PACKAGED_HELP_TEST"
 
 COV="$(mktemp)"
 WORKROOT="$(mktemp -d)"
@@ -124,7 +126,26 @@ d="$(newdir)"
 mkfake "$d/src"
 (cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" ARCHIVE=1 INTERNAL_NAME=acme-appsec \
   timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
-assert_rc "package: valid SOURCE ARCHIVE=1" 0 "$?"
+rc=$?
+if [ "$rc" = 0 ] && [ -f "$d/dist/acme-appsec-"*.tgz ] && \
+   tar -xOf "$d/dist/acme-appsec-"*.tgz acme-appsec/skills/help/SKILL.md | \
+     grep -Fq '/acme-appsec:create-threat-model'; then
+  pass "package: ARCHIVE=1 contains generated help"
+else fail "package: ARCHIVE=1 contains generated help" "rc=$rc"; fi
+
+d="$(newdir)"
+mkfake "$d/src"
+mkdir -p "$d/dist"
+printf stale >"$d/dist/acme-appsec-1.2.3.tgz"
+printf stale >"$d/dist/acme-appsec-1.2.3.tgz.sha256"
+(cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" ARCHIVE=1 VERSION=1.2.3 \
+  PYSTUB_FAIL=smoke INTERNAL_NAME=acme-appsec timeout 15 bash -x "$PKG") \
+  >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" != 0 ] && [ ! -e "$d/dist/acme-appsec-1.2.3.tgz" ] && \
+   [ ! -e "$d/dist/acme-appsec-1.2.3.tgz.sha256" ]; then
+  pass "package: failed rebuild removes stale same-version archive"
+else fail "package: failed rebuild removes stale same-version archive" "rc=$rc"; fi
 
 d="$(newdir)"
 mkfake "$d/src"
@@ -275,7 +296,8 @@ else fail "init: failed initial build preserves repo" "rc=$rc"; fi
 # 'make package' / 'make upstream-check' time in the user's repo.
 missing=""
 for f in scripts/fetch-upstream.sh scripts/upstream-check.sh scripts/package-local.sh \
-         scripts/prepare-local-marketplace.py \
+         scripts/prepare-local-marketplace.py scripts/render-packaged-help.py \
+         scripts/archive-built-plugin.py \
          org-profile/package-policy.yaml org-profile/org-profile.yaml Makefile; do
   [ -f "$tgt/$f" ] || missing="$missing $f"
 done
@@ -313,6 +335,8 @@ mkdir -p "$clean"
 # tracked, this simply refreshes the archived copy with the working-tree file.
 cp "$ROOT/scripts/prepare-local-marketplace.py" \
   "$clean/scripts/prepare-local-marketplace.py"
+cp "$ROOT/scripts/render-packaged-help.py" "$clean/scripts/render-packaged-help.py"
+cp "$ROOT/scripts/archive-built-plugin.py" "$clean/scripts/archive-built-plugin.py"
 lonely="$WORKROOT/lonely"
 mkdir -p "$lonely"
 cp "$INIT" "$lonely/init-org-repo.sh"
