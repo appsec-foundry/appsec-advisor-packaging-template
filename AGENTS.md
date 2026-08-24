@@ -125,6 +125,12 @@ REINIT_BUILD=0 make reinit            # reapply template without packaging after
 ARCHIVE=1 PACKAGE_VERSION=1.2.0 make package-archive # produce .tgz + .sha256
 ```
 
+Reinitialization refreshes infrastructure directly. For each differing
+user-editable template file, it prompts to overwrite, keep, overwrite all
+remaining, or keep all remaining. The default is keep; overwritten files are
+recoverable from `.reinit-backups/`, and the resulting changes remain
+uncommitted for review.
+
 ### Package versioning
 
 `PACKAGE_VERSION` is the organization-owned plugin version. It defaults to

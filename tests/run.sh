@@ -312,9 +312,17 @@ else fail "init: invalid UTF-8 and package version are retried safely" "rc=$rc";
 if grep -Fq '`poaa-appsec` is the Claude Code security plugin' "$unicode_tgt/README.md" && \
    grep -Fq 'Prüf+Øvelse+Æble+Ångström' "$unicode_tgt/README.md" && \
    grep -Fq 'POAA AppSec Team' "$unicode_tgt/README.md" && \
+   grep -Fq 'https://github.com/appsec-foundry/appsec-advisor-packaging-template' \
+     "$unicode_tgt/README.md" && \
+   grep -Fq 'https://github.com/appsec-foundry/appsec-advisor)' \
+     "$unicode_tgt/README.md" && \
+   grep -Fq 'APPSEC_ADVISOR_TEMPLATE_URL ?= https://github.com/appsec-foundry/appsec-advisor-packaging-template.git' \
+     "$unicode_tgt/Makefile" && \
+   grep -Fq 'APPSEC_ADVISOR_URL ?= https://github.com/appsec-foundry/appsec-advisor.git' \
+     "$unicode_tgt/Makefile" && \
    ! grep -Fq 'Acme' "$unicode_tgt/README.md"; then
-  pass "init: generated README uses organization identity"
-else fail "init: generated README uses organization identity" "placeholder or identity mismatch"; fi
+  pass "init: generated README uses organization identity and records repository lineage"
+else fail "init: generated README uses organization identity and records repository lineage" "placeholder, identity, or lineage mismatch"; fi
 
 # An explicitly accepted initial build runs only after the repository exists
 # and writes the actual Claude plugin below build/<plugin-name>/.
@@ -378,8 +386,8 @@ if [ "$rc" = 0 ] && \
 else fail "init: skipped build remains a next step" "rc=$rc"; fi
 self_contained_tgt="$tgt"
 
-# make reinit reads identity from the existing repo, preserves user-owned
-# files, refreshes infrastructure from template main, and can skip packaging.
+# make reinit reads identity from the existing repo, keeps differing user-owned
+# files by default, refreshes infrastructure from template main, and can skip packaging.
 profile_before="$(cksum "$self_contained_tgt/org-profile/org-profile.yaml")"
 readme_before="$(cksum "$self_contained_tgt/README.md")"
 printf 'stale infrastructure\n' >"$self_contained_tgt/scripts/package-local.sh"
@@ -428,6 +436,75 @@ if [ "$rc" = 0 ] && \
    grep -Fq 'enabled help, session-banner' "$exclude_log"; then
   pass "reinit: required entries are enabled in an exclude policy"
 else fail "reinit: required entries are enabled in an exclude policy" "rc=$rc"; fi
+
+# Changed user-editable files are decided interactively. A single-file yes
+# creates a backup, no preserves that file, and "all" applies only to the
+# remaining changed files without further prompts.
+prompt_tgt="$unicode_tgt"
+printf '\n# local guard marker\n' >>"$prompt_tgt/org-profile/hooks/guard.py"
+printf '\nlocal organization marker\n' >>"$prompt_tgt/org-profile/context/organization.md"
+printf '\nlocal agents marker\n' >>"$prompt_tgt/AGENTS.md"
+printf '\nlocal readme marker\n' >>"$prompt_tgt/README.md"
+prompt_log="$d/reinit-prompts.log"
+printf 'y\nn\na\n' | \
+  (cd "$prompt_tgt" && set -x && export SHELLOPTS && \
+    APPSEC_ADVISOR_TEMPLATE_SOURCE="$ROOT" REINIT_BUILD=0 \
+    timeout 20 make --no-print-directory reinit) \
+  >"$prompt_log" 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && \
+   ! grep -Fq 'local guard marker' "$prompt_tgt/org-profile/hooks/guard.py" && \
+   grep -Fq 'local organization marker' "$prompt_tgt/org-profile/context/organization.md" && \
+   ! grep -Fq 'local agents marker' "$prompt_tgt/AGENTS.md" && \
+   ! grep -Fq 'local readme marker' "$prompt_tgt/README.md" && \
+   [ "$(find "$prompt_tgt/.reinit-backups" -type f -path '*/org-profile/hooks/guard.py' | wc -l)" = 1 ] && \
+   [ "$(find "$prompt_tgt/.reinit-backups" -type f -path '*/AGENTS.md' | wc -l)" = 1 ] && \
+   [ "$(find "$prompt_tgt/.reinit-backups" -type f -path '*/README.md' | wc -l)" = 1 ] && \
+   grep -Fq 'updated: '"$prompt_tgt"'/org-profile/hooks/guard.py' "$prompt_log" && \
+   grep -Fq 'kept: '"$prompt_tgt"'/org-profile/context/organization.md' "$prompt_log" && \
+   grep -Fq 'updated: '"$prompt_tgt"'/AGENTS.md' "$prompt_log" && \
+   grep -Fq 'updated: '"$prompt_tgt"'/README.md' "$prompt_log"; then
+  pass "reinit: per-file choices and overwrite-all update safely with backups"
+else fail "reinit: per-file choices and overwrite-all update safely with backups" "rc=$rc"; fi
+
+# "Keep all" suppresses every later prompt and leaves all differing files in
+# place. The already-custom organization context is deliberately the first
+# changed file encountered in this second run.
+printf '\nsecond local guard marker\n' >>"$prompt_tgt/org-profile/hooks/guard.py"
+printf '\nsecond local readme marker\n' >>"$prompt_tgt/README.md"
+keep_all_log="$d/reinit-keep-all.log"
+printf 'k\n' | \
+  (cd "$prompt_tgt" && set -x && export SHELLOPTS && \
+    APPSEC_ADVISOR_TEMPLATE_SOURCE="$ROOT" REINIT_BUILD=0 \
+    timeout 20 make --no-print-directory reinit) \
+  >"$keep_all_log" 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && \
+   grep -Fq 'second local guard marker' "$prompt_tgt/org-profile/hooks/guard.py" && \
+   grep -Fq 'local organization marker' "$prompt_tgt/org-profile/context/organization.md" && \
+   grep -Fq 'second local readme marker' "$prompt_tgt/README.md" && \
+   grep -Fq 'kept: '"$prompt_tgt"'/org-profile/hooks/guard.py' "$keep_all_log" && \
+   grep -Fq 'kept: '"$prompt_tgt"'/README.md' "$keep_all_log"; then
+  pass "reinit: keep-all preserves all remaining changed files"
+else fail "reinit: keep-all preserves all remaining changed files" "rc=$rc"; fi
+
+# Overwrite choices must never follow a user-owned file symlink outside the
+# packaging repository. Reject it before the external target can be changed.
+outside_readme="$d/outside-readme.md"
+printf 'outside content must remain unchanged\n' >"$outside_readme"
+rm "$prompt_tgt/README.md"
+ln -s "$outside_readme" "$prompt_tgt/README.md"
+symlink_log="$d/reinit-file-symlink.log"
+(cd "$prompt_tgt" && set -x && export SHELLOPTS && \
+  APPSEC_ADVISOR_TEMPLATE_SOURCE="$ROOT" REINIT_BUILD=0 \
+  timeout 20 make --no-print-directory reinit) </dev/null \
+  >"$symlink_log" 2>>"$COV"
+rc=$?
+if [ "$rc" = 2 ] && \
+   grep -Fqx 'outside content must remain unchanged' "$outside_readme" && \
+   grep -Fq 'refusing to replace a symlinked template file' "$COV"; then
+  pass "reinit: refuses a user-editable file symlink"
+else fail "reinit: refuses a user-editable file symlink" "rc=$rc"; fi
 
 # A reinit wrapper produced before PACKAGE_VERSION existed does not pass that
 # setting. The newer initializer must accept it and establish the new default.

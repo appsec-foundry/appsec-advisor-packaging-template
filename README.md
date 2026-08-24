@@ -161,6 +161,11 @@ make local-marketplace
 make install-local
 ```
 
+During reinitialization, changed user-editable template files can be kept or
+overwritten individually, with choices to apply either decision to all
+remaining files. Overwritten files are backed up under `.reinit-backups/` and
+the resulting changes are left uncommitted for review.
+
 `install-local` uses the marketplace name `<plugin-name>-local` and Claude
 Code's `local` installation scope. Override these with
 `LOCAL_MARKETPLACE_NAME` and `LOCAL_MARKETPLACE_SCOPE` when needed. The

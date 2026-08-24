@@ -4,6 +4,19 @@
 # Or locally: scripts/init-org-repo.sh
 set -euo pipefail
 
+TMPDIR_CLONE=""
+CANDIDATE_DIR=""
+
+cleanup() {
+  if [ -n "${TMPDIR_CLONE}" ]; then
+    rm -rf -- "${TMPDIR_CLONE}"
+  fi
+  if [ -n "${CANDIDATE_DIR}" ]; then
+    rm -rf -- "${CANDIDATE_DIR}"
+  fi
+}
+trap cleanup EXIT
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 normalize_utf8() {
@@ -325,7 +338,6 @@ TEMPLATE_REF="${APPSEC_ADVISOR_TEMPLATE_REF:-main}"
 # which has no Makefile — fall back to cloning.
 if [ ! -f "${TEMPLATE_BASE}/Makefile" ]; then
   TMPDIR_CLONE="$(mktemp -d)"
-  trap 'rm -rf "${TMPDIR_CLONE}"' EXIT
   echo "==> Cloning template from GitHub …"
   git clone --depth 1 --branch "${TEMPLATE_REF}" \
     "https://github.com/appsec-foundry/appsec-advisor-packaging-template.git" \
@@ -347,8 +359,8 @@ elif [ -e "${TARGET_DIR}" ]; then
   echo ""
   echo "Warning: '${TARGET_DIR}' already exists."
   echo "  Infrastructure files (Makefile, scripts/, ci-templates/, .gitignore)"
-  echo "  will be updated. User-editable files (org-profile/, README.md, AGENTS.md)"
-  echo "  will be kept if they already exist."
+  echo "  will be updated. User-editable files that differ from the new template"
+  echo "  (org-profile/, org-skills/, README.md, AGENTS.md) will be offered individually."
   echo "  Required package-policy entries may be reconciled."
   read -r -p "Re-initialize? [y/N]: " confirm
   case "${confirm}" in
@@ -358,8 +370,101 @@ elif [ -e "${TARGET_DIR}" ]; then
   echo ""
 fi
 
-# Returns 0 (skip write) when re-initializing and the file already exists.
-keep_if_reinit() { [ "${REINIT}" = true ] && [ -f "$1" ] && { echo "  kept: $1"; return 0; }; return 1; }
+if [ "${REINIT}" = true ]; then
+  echo "For each changed user-editable file: y=overwrite, n=keep,"
+  echo "a=overwrite all remaining, k=keep all remaining. The default is n."
+  echo "Overwritten files are backed up under ${TARGET_DIR}/.reinit-backups/."
+  echo ""
+fi
+
+REINIT_FILE_MODE=""
+REINIT_BACKUP_RUN=""
+REINIT_BACKUP_PATH=""
+
+validate_refresh_target() {
+  PYTHONUTF8=1 python3 - "${TARGET_DIR}" "$1" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1]).resolve()
+target_path = Path(sys.argv[2])
+if target_path.is_symlink():
+    print(f"ERROR: refusing to replace a symlinked template file: {target_path}", file=sys.stderr)
+    raise SystemExit(2)
+resolved = target_path.resolve(strict=False)
+try:
+    resolved.relative_to(root)
+except ValueError:
+    print(f"ERROR: template file resolves outside the target repository: {target_path}", file=sys.stderr)
+    raise SystemExit(2)
+PY
+}
+
+backup_replaced_file() {
+  local source="$1"
+  local relative_path="$2"
+  local backup_root="${TARGET_DIR}/.reinit-backups"
+  local backup_path
+
+  if [ -L "${backup_root}" ] || \
+     { [ -e "${backup_root}" ] && [ ! -d "${backup_root}" ]; }; then
+    echo "ERROR: recovery backup path is not a regular directory: ${backup_root}" >&2
+    exit 2
+  fi
+  if [ -z "${REINIT_BACKUP_RUN}" ]; then
+    REINIT_BACKUP_RUN="${backup_root}/$(date +%Y%m%d-%H%M%S)-$$"
+    mkdir -p "${REINIT_BACKUP_RUN}"
+    chmod 700 "${backup_root}" "${REINIT_BACKUP_RUN}"
+  fi
+  backup_path="${REINIT_BACKUP_RUN}/${relative_path}"
+  mkdir -p "$(dirname "${backup_path}")"
+  cp -p -- "${source}" "${backup_path}"
+  REINIT_BACKUP_PATH="${backup_path}"
+}
+
+refresh_user_file() {
+  local candidate="$1"
+  local target="$2"
+  local relative_path="$3"
+  local answer backup_path
+
+  validate_refresh_target "${target}"
+  if [ "${REINIT}" != true ] || [ ! -f "${target}" ]; then
+    cp -- "${candidate}" "${target}"
+    return 0
+  fi
+  if cmp -s -- "${candidate}" "${target}"; then
+    return 0
+  fi
+
+  case "${REINIT_FILE_MODE}" in
+    overwrite-all) answer=y ;;
+    keep-all) answer=n ;;
+    *)
+      while true; do
+        read -r -p "Template update available for ${relative_path}. Overwrite? [y/N/a=all/k=keep all]: " answer || answer=""
+        case "${answer}" in
+          [yYnN]|"") break ;;
+          [aA]) REINIT_FILE_MODE=overwrite-all; answer=y; break ;;
+          [kK]) REINIT_FILE_MODE=keep-all; answer=n; break ;;
+          *) echo "  (enter y, n, a, or k)" >&2 ;;
+        esac
+      done
+      ;;
+  esac
+
+  case "${answer}" in
+    [yY])
+      backup_replaced_file "${target}" "${relative_path}"
+      backup_path="${REINIT_BACKUP_PATH}"
+      cp -- "${candidate}" "${target}"
+      echo "  updated: ${target} (backup: ${backup_path})"
+      ;;
+    *) echo "  kept: ${target}" ;;
+  esac
+}
+
+CANDIDATE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/appsec-reinit-candidates.XXXXXX")"
 
 mkdir -p \
   "${TARGET_DIR}/org-profile/context" \
@@ -399,26 +504,29 @@ cp "${TEMPLATE_BASE}/ci-templates/gitlab-ci.yml" \
 
 cp "${TEMPLATE_BASE}/.gitignore" "${TARGET_DIR}/.gitignore"
 if [ -f "${TEMPLATE_BASE}/org-skills/README.md" ]; then
-  keep_if_reinit "${TARGET_DIR}/org-skills/README.md" || \
-    cp "${TEMPLATE_BASE}/org-skills/README.md" \
-       "${TARGET_DIR}/org-skills/README.md"
+  refresh_user_file \
+    "${TEMPLATE_BASE}/org-skills/README.md" \
+    "${TARGET_DIR}/org-skills/README.md" \
+    "org-skills/README.md"
 fi
 # The rendered org-profile.yaml declares the block-risky-bash hook and
 # package-policy.yaml allowlists it, so the script must ship with the scaffold.
-keep_if_reinit "${TARGET_DIR}/org-profile/hooks/guard.py" || {
-  cp "${TEMPLATE_BASE}/org-profile/hooks/guard.py" \
-     "${TARGET_DIR}/org-profile/hooks/guard.py"
-  chmod +x "${TARGET_DIR}/org-profile/hooks/guard.py"
-}
+refresh_user_file \
+  "${TEMPLATE_BASE}/org-profile/hooks/guard.py" \
+  "${TARGET_DIR}/org-profile/hooks/guard.py" \
+  "org-profile/hooks/guard.py"
+chmod +x "${TARGET_DIR}/org-profile/hooks/guard.py"
 
-keep_if_reinit "${TARGET_DIR}/org-profile/package-policy.yaml" || \
-  cp "${TEMPLATE_BASE}/org-profile/package-policy.yaml" \
-     "${TARGET_DIR}/org-profile/package-policy.yaml"
+refresh_user_file \
+  "${TEMPLATE_BASE}/org-profile/package-policy.yaml" \
+  "${TARGET_DIR}/org-profile/package-policy.yaml" \
+  "org-profile/package-policy.yaml"
 
 if [ "${DEMO_CONTENT}" = true ]; then
-  keep_if_reinit "${TARGET_DIR}/org-profile/requirements.yaml" || \
-    cp "${TEMPLATE_BASE}/org-profile/requirements-example.yaml" \
-       "${TARGET_DIR}/org-profile/requirements.yaml"
+  refresh_user_file \
+    "${TEMPLATE_BASE}/org-profile/requirements-example.yaml" \
+    "${TARGET_DIR}/org-profile/requirements.yaml" \
+    "org-profile/requirements.yaml"
 fi
 
 # ── Render Makefile ───────────────────────────────────────────────────────────
@@ -476,36 +584,39 @@ if [ "${REINIT}" = true ] && [ -f "${PROFILE_PATH}" ] && \
   esac
 fi
 
-if ! keep_if_reinit "${TARGET_DIR}/org-profile/org-profile.yaml"; then
-  if [ "${DEMO_CONTENT}" = true ]; then
-    sed \
-      -e "s/id: acme/id: ${E_ORG_ID}/" \
-      -e "s/name: Acme Corp/name: ${E_ORG_NAME_YAML}/" \
-      -e "s/profile_version: \"2026.06.1\"/profile_version: \"${TODAY}\"/" \
-      -e "s/owner: Acme AppSec Team/owner: ${E_OWNER_YAML}/" \
-      -e "s/headline: \"ACME AppSec Advisor\"/headline: ${E_BANNER_HEADLINE_YAML}/" \
-      -e "s|requirements_yaml_url: \"https://security.example.internal/appsec-requirements.yaml\"|requirements_yaml_url: \"org-profile/requirements.yaml\"|" \
-      -e "s|human_source_url: \"https://security.example.internal/appsec/requirements\"|human_source_url: \"# TODO: add URL to hosted requirements catalog\"|" \
-      -e "s/label: \"Acme Corp AppSec Requirements\"/label: ${E_LABEL_YAML}/" \
-      "${TEMPLATE_BASE}/org-profile/org-profile.yaml" > "${TARGET_DIR}/org-profile/org-profile.yaml"
-  else
-    sed \
-      -e "s/id: acme/id: ${E_ORG_ID}/" \
-      -e "s/name: Acme Corp/name: ${E_ORG_NAME_YAML}/" \
-      -e "s/profile_version: \"2026.06.1\"/profile_version: \"${TODAY}\"/" \
-      -e "s/owner: Acme AppSec Team/owner: ${E_OWNER_YAML}/" \
-      -e "s/headline: \"ACME AppSec Advisor\"/headline: ${E_BANNER_HEADLINE_YAML}/" \
-      -e "s|requirements_yaml_url: \"https://security.example.internal/appsec-requirements.yaml\"|requirements_yaml_url: \"# TODO: add URL to hosted requirements catalog\"|" \
-      -e "/human_source_url:/d" \
-      -e "/label: \"Acme Corp AppSec Requirements\"/d" \
-      "${TEMPLATE_BASE}/org-profile/org-profile.yaml" > "${TARGET_DIR}/org-profile/org-profile.yaml"
-  fi
-
-  if [ "${BASELINE_ENABLED}" = false ]; then
-    sed -i '/^compatibility:/i baseline:\n  enabled: false\n' \
-      "${TARGET_DIR}/org-profile/org-profile.yaml"
-  fi
+PROFILE_CANDIDATE="${CANDIDATE_DIR}/org-profile.yaml"
+if [ "${DEMO_CONTENT}" = true ]; then
+  sed \
+    -e "s/id: acme/id: ${E_ORG_ID}/" \
+    -e "s/name: Acme Corp/name: ${E_ORG_NAME_YAML}/" \
+    -e "s/profile_version: \"2026.06.1\"/profile_version: \"${TODAY}\"/" \
+    -e "s/owner: Acme AppSec Team/owner: ${E_OWNER_YAML}/" \
+    -e "s/headline: \"ACME AppSec Advisor\"/headline: ${E_BANNER_HEADLINE_YAML}/" \
+    -e "s|requirements_yaml_url: \"https://security.example.internal/appsec-requirements.yaml\"|requirements_yaml_url: \"org-profile/requirements.yaml\"|" \
+    -e "s|human_source_url: \"https://security.example.internal/appsec/requirements\"|human_source_url: \"# TODO: add URL to hosted requirements catalog\"|" \
+    -e "s/label: \"Acme Corp AppSec Requirements\"/label: ${E_LABEL_YAML}/" \
+    "${TEMPLATE_BASE}/org-profile/org-profile.yaml" > "${PROFILE_CANDIDATE}"
+else
+  sed \
+    -e "s/id: acme/id: ${E_ORG_ID}/" \
+    -e "s/name: Acme Corp/name: ${E_ORG_NAME_YAML}/" \
+    -e "s/profile_version: \"2026.06.1\"/profile_version: \"${TODAY}\"/" \
+    -e "s/owner: Acme AppSec Team/owner: ${E_OWNER_YAML}/" \
+    -e "s/headline: \"ACME AppSec Advisor\"/headline: ${E_BANNER_HEADLINE_YAML}/" \
+    -e "s|requirements_yaml_url: \"https://security.example.internal/appsec-requirements.yaml\"|requirements_yaml_url: \"# TODO: add URL to hosted requirements catalog\"|" \
+    -e "/human_source_url:/d" \
+    -e "/label: \"Acme Corp AppSec Requirements\"/d" \
+    "${TEMPLATE_BASE}/org-profile/org-profile.yaml" > "${PROFILE_CANDIDATE}"
 fi
+
+if [ "${BASELINE_ENABLED}" = false ]; then
+  sed -i '/^compatibility:/i baseline:\n  enabled: false\n' \
+    "${PROFILE_CANDIDATE}"
+fi
+refresh_user_file \
+  "${PROFILE_CANDIDATE}" \
+  "${TARGET_DIR}/org-profile/org-profile.yaml" \
+  "org-profile/org-profile.yaml"
 
 # Validate both newly rendered profiles and existing profiles retained during
 # reinitialization before the upstream packager can produce a Python traceback.
@@ -516,7 +627,8 @@ migrate_package_policy \
 
 # ── Render organization.md ────────────────────────────────────────────────────
 
-keep_if_reinit "${TARGET_DIR}/org-profile/context/organization.md" || cat > "${TARGET_DIR}/org-profile/context/organization.md" <<EOF
+ORGANIZATION_CANDIDATE="${CANDIDATE_DIR}/organization.md"
+cat > "${ORGANIZATION_CANDIDATE}" <<EOF
 # ${ORG_NAME} — Organization Context
 
 Replace this stub with a short, factual description of your organization,
@@ -526,30 +638,49 @@ rules, QA gates, schemas, permissions, or tool behavior.
 
 Keep this under 50 KB. Plain Markdown only.
 EOF
+refresh_user_file \
+  "${ORGANIZATION_CANDIDATE}" \
+  "${TARGET_DIR}/org-profile/context/organization.md" \
+  "org-profile/context/organization.md"
 
 # ── Render actors stub ────────────────────────────────────────────────────────
 
-keep_if_reinit "${TARGET_DIR}/org-profile/actors/custom-actors.yaml" || cat > "${TARGET_DIR}/org-profile/actors/custom-actors.yaml" <<EOF
+ACTORS_CANDIDATE="${CANDIDATE_DIR}/custom-actors.yaml"
+cat > "${ACTORS_CANDIDATE}" <<EOF
 # Custom threat actors for ${ORG_NAME}.
 # Add, edit, or delete entries as needed.
 # Schema reference: https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/org-profiles.md
 actors: []
 EOF
+refresh_user_file \
+  "${ACTORS_CANDIDATE}" \
+  "${TARGET_DIR}/org-profile/actors/custom-actors.yaml" \
+  "org-profile/actors/custom-actors.yaml"
 
 # ── Render AGENTS.md ──────────────────────────────────────────────────────────
 
-keep_if_reinit "${TARGET_DIR}/AGENTS.md" || sed \
+AGENTS_CANDIDATE="${CANDIDATE_DIR}/AGENTS.md"
+sed \
   -e "s/acme-appsec/${E_PLUGIN}/g" \
   -e "s/Acme Corp/${E_ORG_NAME}/g" \
-  "${TEMPLATE_BASE}/AGENTS.md" > "${TARGET_DIR}/AGENTS.md"
+  "${TEMPLATE_BASE}/AGENTS.md" > "${AGENTS_CANDIDATE}"
+refresh_user_file \
+  "${AGENTS_CANDIDATE}" \
+  "${TARGET_DIR}/AGENTS.md" \
+  "AGENTS.md"
 
 # ── Render README.md ──────────────────────────────────────────────────────────
 
-keep_if_reinit "${TARGET_DIR}/README.md" || sed \
+README_CANDIDATE="${CANDIDATE_DIR}/README.md"
+sed \
   -e "s/acme-appsec/${E_PLUGIN}/g" \
   -e "s/Acme Corp/${E_ORG_NAME}/g" \
   -e "s/Acme AppSec Team/${E_OWNER}/g" \
-  "${TEMPLATE_BASE}/README.example.md" > "${TARGET_DIR}/README.md"
+  "${TEMPLATE_BASE}/README.example.md" > "${README_CANDIDATE}"
+refresh_user_file \
+  "${README_CANDIDATE}" \
+  "${TARGET_DIR}/README.md" \
+  "README.md"
 
 # ── Render package-local.sh with correct org name ─────────────────────────────
 
@@ -622,7 +753,7 @@ echo "The built plugin is ready at: ${PACKAGING_ROOT}/build/${PLUGIN_NAME}"
 fi
 echo ""
 if [ "${REINIT_MODE}" = true ]; then
-echo "Re-initialization complete. Existing organization files and settings were preserved;"
+echo "Re-initialization complete. Selected template updates were applied and kept files preserved;"
 echo "required package-policy entries were reconciled."
 fi
 echo "Next steps:"

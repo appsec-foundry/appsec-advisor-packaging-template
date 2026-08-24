@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Refresh a scaffolded packaging repository from the current template while
-# preserving its organization-owned files and settings.
+# asking before replacing differing organization-owned files.
 set -euo pipefail
 
 REPO_ROOT="$(pwd)"

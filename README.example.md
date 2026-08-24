@@ -109,14 +109,16 @@ profile, package policy, hooks, or organization skills:
 make package
 ```
 
-To update this repository's packaging infrastructure from the current template
-while retaining its organization profile, README, and skills, run `make
-reinit`. It reuses the existing organization and plugin settings and rebuilds
-the plugin; use `REINIT_BUILD=0 make reinit` to update infrastructure only.
-The refreshed files are left uncommitted so they can be reviewed together with
-any existing local changes. For legacy repositories, reinitialization also
-ensures the package policy enables `help` and, when the session banner is
-enabled, its `session-banner` hook.
+To update this repository from the current packaging template, run `make
+reinit`. Infrastructure is refreshed automatically. When a user-editable
+template file differs, choose whether to overwrite or keep it individually, or
+apply that choice to all remaining files. The default is to keep it; every
+overwritten file is backed up under `.reinit-backups/`. Existing organization
+and plugin identity settings are reused, and all changes remain uncommitted for
+review. The plugin is rebuilt afterwards; use `REINIT_BUILD=0 make reinit` to
+skip that build. For legacy repositories, reinitialization also ensures the
+package policy enables `help` and, when the session banner is enabled, its
+`session-banner` hook.
 
 ### Customize skills
 
@@ -166,3 +168,11 @@ Maintainer references:
 
 - [Organization profiles](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/org-profiles.md)
 - [Internal plugin packaging](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/internal-plugin-packaging.md)
+
+## Repository lineage
+
+This internal packaging repository was generated with the
+[appsec-advisor packaging template](https://github.com/appsec-foundry/appsec-advisor-packaging-template)
+and builds an organization-specific distribution of
+[appsec-advisor](https://github.com/appsec-foundry/appsec-advisor). The source
+URLs and pinned refs used by the repository are recorded in the `Makefile`.
