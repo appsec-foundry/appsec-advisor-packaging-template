@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Creates a fresh org packaging repo for appsec-advisor.
 # Usage: bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh)
-# Dev scaffold: APPSEC_ADVISOR_TEMPLATE_REF=dev bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/dev/scripts/init-org-repo.sh)
 # Or locally: scripts/init-org-repo.sh
 set -euo pipefail
 
@@ -265,7 +264,7 @@ sed -i \
 
 cd "${TARGET_DIR}"
 if [ ! -e .git ]; then
-  git init -q
+  git init -q -b main
 fi
 git add .
 if git diff --cached --quiet; then
@@ -278,11 +277,33 @@ else
   fi
 fi
 
+BUILD_SUCCEEDED=false
+if read -r -p "Build the plugin now? [Y/n]: " _build_reply; then
+  case "${_build_reply}" in
+    [nN]*) ;;
+    *)
+      echo ""
+      echo "==> Building plugin …"
+      if make package; then
+        BUILD_SUCCEEDED=true
+      else
+        echo "" >&2
+        echo "WARNING: The packaging repo is ready, but the initial plugin build failed." >&2
+        echo "         Fix the reported build error, then run: make package" >&2
+      fi
+      ;;
+  esac
+fi
+
+PACKAGING_ROOT="$(pwd)"
 echo ""
-echo "Done. Your packaging repo is ready at: ${TARGET_DIR}"
+echo "Done. Your packaging repo is ready at: ${PACKAGING_ROOT}"
+if [ "${BUILD_SUCCEEDED}" = true ]; then
+echo "The built plugin is ready at: ${PACKAGING_ROOT}/build/${PLUGIN_NAME}"
+fi
 echo ""
 echo "Next steps:"
-echo "  1. cd ${TARGET_DIR}"
+echo "  1. cd ${PACKAGING_ROOT}"
 if [ "${DEMO_CONTENT}" = true ]; then
 echo "  2. Edit org-profile/requirements.yaml — replace demo entries with your real requirements"
 echo "     When ready to host it centrally, set requirements_yaml_url to an https:// URL in org-profile/org-profile.yaml"
@@ -290,8 +311,12 @@ else
 echo "  2. Edit org-profile/org-profile.yaml — set requirements_yaml_url to your requirements catalog"
 fi
 echo "  3. Edit org-profile/context/organization.md — describe your org for analyses"
-echo "  4. Run: make package"
+if [ "${BUILD_SUCCEEDED}" = true ]; then
+echo "  4. Rebuild after configuration changes: make package"
+else
+echo "  4. Build the plugin: make package"
+fi
 echo "  5. Load the plugin from any project you want to analyze:"
 echo "       cd /path/to/your/project"
-echo "       claude --plugin-dir $(pwd)/build/${PLUGIN_NAME}"
+echo "       claude --plugin-dir ${PACKAGING_ROOT}/build/${PLUGIN_NAME}"
 echo "  6. Set up CI: make ci-github  or  make ci-gitlab"

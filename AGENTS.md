@@ -146,13 +146,12 @@ a `v*` tag, the literal `latest`, **or a branch name** — `fetch-upstream.sh`
 checks both tags and heads, and a branch ref is pulled up to its current tip on
 every run (a `--depth 1` detached checkout, so effectively a pull).
 
-Die Packaging-Branches pinnen verschiedene Upstream-Releases: `dev` nutzt
-`APPSEC_ADVISOR_REF=v0.6.0-beta.2` (das Prerelease in Entwicklung), `main`
-nutzt `APPSEC_ADVISOR_REF=v0.6.0-beta.1`. Beide Pins werden im `Makefile`
-hochgezogen, sobald upstream ein neues Release taggt.
+Das Packaging-Repository verwendet aktuell ausschließlich `main` und pinnt
+`APPSEC_ADVISOR_REF=v0.6.0-beta.1`. Der Pin wird im `Makefile` hochgezogen,
+sobald upstream ein neues Release taggt.
 
 ```bash
-make package                              # upstream v0.6.0-beta.2 (default on this branch)
+make package                              # upstream v0.6.0-beta.1 (default)
 APPSEC_ADVISOR_REF=latest make package    # follow the highest v* tag instead
 APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package # pin a specific release (reproducible)
 APPSEC_ADVISOR_REF=dev make package       # follow the upstream dev branch
@@ -182,7 +181,7 @@ organization's central Marketplace.
 | Variable | Default | Meaning |
 |---|---|---|
 | `APPSEC_ADVISOR_URL` | upstream GitHub | Upstream repository or an internal fork |
-| `APPSEC_ADVISOR_REF` | branch-dependent | `v0.6.0-beta.2` on `dev`, otherwise `v0.6.0-beta.1` |
+| `APPSEC_ADVISOR_REF` | `v0.6.0-beta.1` | Pinned upstream release |
 | `INTERNAL_NAME` | `acme-appsec` | Plugin name and command namespace |
 | `ORG_REV` | repository tag or commit SHA | Organization revision in the derived version |
 | `VERSION` | derived | Overrides the derived version entirely |

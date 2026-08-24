@@ -2,20 +2,14 @@
 
 ## Branch-Modell
 
-| Packaging-Branch | Zweck | Standard-Ref von `appsec-advisor` |
-|---|---|---|
-| `main` | Release-Linie | `v0.6.0-beta.1` |
-| `dev` | Entwicklung | `v0.6.0-beta.2` (Prerelease in Entwicklung) |
-
-Entwicklungsarbeit erfolgt auf `dev`. Dort verwendet `make package`
-automatisch `APPSEC_ADVISOR_REF=v0.6.0-beta.2`. Nach dem Merge nach `main`
-baut derselbe Build gegen `v0.6.0-beta.1`. Beide Pins stehen in der
-`Makefile` und werden hochgezogen, sobald upstream ein neues Release taggt.
+Aktuell verwendet das Packaging-Repository ausschließlich `main`. Die
+`Makefile` pinnt `appsec-advisor` standardmäßig auf `v0.6.0-beta.1`.
+Ein langfristiger Entwicklungsbranch kann später bei Bedarf ergänzt werden.
 
 ## Lokale Entwicklung
 
 ```bash
-git switch dev
+git switch main
 git pull --ff-only
 make package
 make check
@@ -27,13 +21,8 @@ make check
 APPSEC_ADVISOR_SOURCE=/home/mrohr/appsec-advisor make package
 ```
 
-## Neues Entwicklungs-Repository erzeugen
-
-Für ein Scaffold, das ebenfalls gegen `appsec-advisor/dev` baut:
+## Neues Packaging-Repository erzeugen
 
 ```bash
-APPSEC_ADVISOR_TEMPLATE_REF=dev bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/dev/scripts/init-org-repo.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh)
 ```
-
-Für ein releaseorientiertes Scaffold stattdessen die Script-URL mit `/main/`
-verwenden und `APPSEC_ADVISOR_TEMPLATE_REF` weglassen.

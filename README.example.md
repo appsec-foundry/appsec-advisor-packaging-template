@@ -1,59 +1,73 @@
-# acme-appsec — Acme Corp's Security Plugin for Claude Code
+# acme-appsec
 
-[![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-5A67D8.svg)](https://docs.claude.com/en/docs/claude-code)
-[![Based on appsec-advisor](https://img.shields.io/badge/based%20on-appsec--advisor-orange.svg)](https://github.com/appsec-foundry/appsec-advisor)
+`acme-appsec` is the Claude Code security plugin maintained for Acme Corp by
+the Acme AppSec Team. It adds our threat-modeling defaults, security
+requirements, review guardrails, and organization context to the upstream
+[appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) plugin.
 
-`acme-appsec` brings Acme Corp's security standards into Claude Code. It runs
-threat models and security audits tuned to our requirements, cost limits, and
-review process. Maintained by the Acme AppSec Team.
+Use it when designing a new service, reviewing a significant change, preparing
+a release, or checking whether an existing threat model still matches the
+code. The plugin analyzes the repository in which Claude Code is running; it
+does not replace the normal engineering or AppSec review process.
 
-This repository builds the plugin from the open-source
-[appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) project and
-layers Acme Corp's own configuration on top.
+## What the plugin provides
 
-## Build the plugin
+- Threat models that can be created once and updated as the code changes.
+- Review and triage workflows for findings, accepted risks, and remediation.
+- Checks against the application-security requirements maintained for Acme Corp.
+- YAML and SARIF output for normal runs, with additional release-review output
+  when the `release-review` preset is selected.
+- Cost, duration, and quality limits maintained by the Acme AppSec Team.
 
-```bash
-make package
-```
+## Getting started
 
-This creates the plugin in `build/acme-appsec/`.
-
-## Use the plugin
-
-### In Claude Code (interactive)
-
-`claude` analyzes whatever directory you launch it in. To audit your own
-project, `cd` into it and point `--plugin-dir` at the **absolute** path of the
-build output:
+If `acme-appsec` is already installed through our internal Claude Code
+Marketplace, start Claude Code in the project you want to review. For a local
+build, point Claude Code at the absolute plugin path:
 
 ```bash
 cd /path/to/your/project
-claude --plugin-dir /abs/path/to/<your-packaging-repo>/build/acme-appsec
+claude --plugin-dir /absolute/path/to/the-packaging-repo/build/acme-appsec
 ```
 
-| Command | What it does |
+On first use in a repository, check the required permissions and create the
+initial threat model:
+
+```text
+/acme-appsec:check-permissions --update
+/acme-appsec:create-threat-model
+```
+
+The analysis can take several minutes depending on repository size and the
+selected preset. Review the generated findings before using them in a release
+or risk decision.
+
+## Skills and commands
+
+| Command | When to use it |
 |---|---|
-| `/acme-appsec:create-threat-model` | Build a full threat model for your project |
-| `/acme-appsec:update-threat-model` | Re-analyze only what changed since the last run |
-| `/acme-appsec:ask-threat-model` | Ask anything about the threat model — read-only Q&A |
-| `/acme-appsec:review-threat-model` | Triage findings: browse, fix, accept, or plan remediation |
-| `/acme-appsec:show-threat-model` | Print the summary block: findings, backlog, coverage |
-| `/acme-appsec:audit-security-requirements` | Check the codebase against Acme Corp requirements |
-| `/acme-appsec:verify-requirements` | Check your recent changes against the requirements |
-| `/acme-appsec:threat-model-health` | Quick check: is the threat model still current? |
-| `/acme-appsec:check-permissions --update` | Set up Claude Code permissions (run once per repo) |
+| `/acme-appsec:create-threat-model` | Create the first threat model for a repository |
+| `/acme-appsec:update-threat-model` | Re-analyze relevant changes without starting over |
+| `/acme-appsec:review-threat-model` | Triage findings and plan remediation |
+| `/acme-appsec:ask-threat-model` | Ask read-only questions about the current model |
+| `/acme-appsec:show-threat-model` | Show the current findings, backlog, and coverage summary |
+| `/acme-appsec:threat-model-health` | Check whether the model is stale or incomplete |
+| `/acme-appsec:audit-security-requirements` | Audit the repository against our requirements catalog |
+| `/acme-appsec:verify-requirements` | Check recent changes against applicable requirements |
+| `/acme-appsec:status` | Show the current run state |
+| `/acme-appsec:fix-run-issues` | Diagnose and repair a failed or interrupted run |
+| `/acme-appsec:clean-run-state` | Remove stale run state before a clean restart |
 
-### From the command line (headless)
+The two requirements commands are available only after the requirements
+catalog has been configured and enabled by the Acme AppSec Team. If a command
+is disabled, Claude Code shows the reason rather than running it.
 
-For CI or scripted runs, use the `run-headless.sh` wrapper that ships **inside
-the build**. It handles authentication, cost and duration caps, SARIF output,
-and CI exit codes — and it already targets the `acme-appsec` command namespace,
-so no flags change from the upstream project:
+## Headless and CI use
+
+For CI or a scripted review, use the wrapper included in the built plugin:
 
 ```bash
-# Minimal incremental scan with cost/time caps, writing SARIF
-build/acme-appsec/scripts/run-headless.sh \
+/absolute/path/to/the-packaging-repo/build/acme-appsec/scripts/run-headless.sh \
   --repo /path/to/your/project \
   --incremental \
   --max-duration 1800 \
@@ -61,157 +75,59 @@ build/acme-appsec/scripts/run-headless.sh \
   --sarif
 ```
 
-The wrapper locates its own plugin directory, so no `--plugin-dir` is needed.
-See the upstream [headless-mode guide](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/headless-mode.md)
-for the full flag reference, CI templates (GitHub/GitLab/Jenkins), and
-pull-request gating.
+The wrapper supplies the plugin path and command namespace and applies the
+requested cost, duration, output, and exit-code settings. See the upstream
+[headless-mode guide](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/headless-mode.md)
+for the full flag reference.
 
-Alternatively, for a one-off command, add `-p` to `claude` directly — from your
-project directory, with the same absolute `--plugin-dir` path:
+## Getting help
+
+Before reporting a problem:
+
+1. Run `/acme-appsec:status` to inspect the current state.
+2. Run `/acme-appsec:fix-run-issues` for a failed or interrupted analysis.
+3. Include the command used, the selected preset, and the non-sensitive part of
+   the error when contacting the Acme AppSec Team.
+
+Do not attach source code, credentials, tokens, or complete analysis artifacts
+to tickets unless the support channel is approved for that data.
+
+## For AppSec maintainers
+
+The setup script normally creates the first package. Rebuild after changing the
+profile, package policy, hooks, or organization skills:
 
 ```bash
-# Run a threat model unattended and exit
-claude --plugin-dir /abs/path/to/<your-packaging-repo>/build/acme-appsec -p "/acme-appsec:create-threat-model"
-
-# Audit the code against Acme Corp's security requirements
-claude --plugin-dir /abs/path/to/<your-packaging-repo>/build/acme-appsec -p "/acme-appsec:audit-security-requirements"
+make package
 ```
 
-Results are written as YAML and SARIF (plus a PDF for release reviews), so they
-can be archived or fed into other tools.
+The plugin is written to `build/acme-appsec/` and smoke-tested as part of the
+build. Before publishing a release, run:
 
-## What you can configure
+```bash
+make release-check
+```
 
-Everything Acme-specific lives in `org-profile/` and, if you add your own
-commands, `org-skills/`:
+Configuration owned by the Acme AppSec Team:
 
-| File | What it controls |
+| Path | Purpose |
 |---|---|
-| `org-profile/org-profile.yaml` | The main settings — presets, cost & time limits, requirements source, output formats, CI gates, security coaching, org hooks |
-| `org-profile/context/organization.md` | A short description of Acme Corp, used as background for analyses |
-| `org-profile/actors/*.yaml` | Custom threat actors to consider |
-| `org-profile/hooks/*.py` | Scripts for Acme-owned Claude Code hooks declared in the profile |
-| `org-profile/package-policy.yaml` | Which skills and hooks are included in the build |
-| `org-skills/<skill-id>/SKILL.md` | Acme-owned skills shipped next to upstream skills |
+| `org-profile/org-profile.yaml` | Presets, requirements, guardrails, organization hooks, and optional MCP servers |
+| `org-profile/context/organization.md` | Organization context supplied to analyses as untrusted reference data |
+| `org-profile/actors/*.yaml` | Threat actors specific to Acme Corp |
+| `org-profile/hooks/*.py` | Organization-owned Claude Code event hooks |
+| `org-profile/package-policy.yaml` | Allowlist for packaged skills, hooks, and MCP servers |
+| `org-skills/<skill-id>/SKILL.md` | Skills maintained by the Acme AppSec Team |
 
-The things you'll most often adjust in `org-profile.yaml`:
+`org-profile/package-policy.yaml` is an allowlist. A new skill, hook, or MCP
+server is not shipped until its id is included there. Keep credentials and
+tokens out of this repository; MCP configuration must reference them through
+`${ENV_VAR}` values.
 
-- **Requirements catalog** — point `requirements_yaml_url` at Acme Corp's security requirements. The two requirements commands are shipped but disabled by default in `skill_toggles`; enable them when the catalog is ready for users.
-- **Presets** — `ci-standard` for everyday runs, `release-review` for thorough release checks. Pick the default with `default_preset`.
-- **Guardrails** — each preset caps `max_cost_usd` and `max_wall_time` so runs stay predictable.
-- **CI gates** — `requirements.gate` and `guardrails.fail_on` (per preset) make CI runs fail on unmet requirements or high-severity findings.
-- **Security coaching & hooks** — `security_coach` topics and `policy.url_allowlist` are org-wide; `hooks:` bundles Acme-owned Claude Code hooks. See upstream [`docs/org-profiles.md`](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/org-profiles.md).
+Install a CI definition with `make ci-github` or `make ci-gitlab`. Generated
+content under `upstream/`, `build/`, and `dist/` must not be committed.
 
-After any change, rebuild with `make package`.
+Maintainer references:
 
-### Test installation through a local marketplace
-
-To exercise the same marketplace installation path used by an organization,
-generate a local catalog around the built plugin and install it at local scope:
-
-```bash
-make install-local
-```
-
-This creates `build/.claude-plugin/marketplace.json`, registers `build/` as
-`acme-appsec-local`, and installs `acme-appsec@acme-appsec-local`. It is a local
-test adapter only; it does not create or modify the organization's central
-marketplace. To prepare the catalog without changing Claude Code's local
-configuration, run `make local-marketplace` instead.
-
-### Add Acme-owned skills
-
-Put custom skills under `org-skills/`:
-
-```text
-org-skills/
-└── acme-architecture-review/
-    └── SKILL.md
-```
-
-The build copies them into a temporary upstream source tree before packaging.
-It does not modify `upstream/appsec-advisor/`.
-
-Use a new name. If a local skill has the same name as an upstream skill, the
-build fails. When `org-profile/package-policy.yaml` uses
-`plugin_surface.skills.include`, add the local skill name there too; the
-allowlist controls both upstream and Acme-owned skills.
-
-### Add your own MCP endpoints (SAST / SCA / …)
-
-To let the plugin talk to Acme Corp's own services — a SAST or SCA MCP server,
-an internal API, etc. — declare them in the `mcp:` block of
-`org-profile/org-profile.yaml`. The build writes them into the plugin's
-`.mcp.json`, and Claude Code starts those servers whenever the plugin is active.
-
-```yaml
-mcp:
-  servers:
-    acme-sast:
-      type: http
-      url: ${ACME_SAST_MCP_URL}
-      headers:
-        Authorization: Bearer ${ACME_SAST_TOKEN}
-```
-
-Add each server to `plugin_surface.mcp_servers` in
-`org-profile/package-policy.yaml` as well — the allowlist decides what reaches
-the build.
-
-**Never hardcode secrets.** Reference tokens and internal URLs as `${ENV_VAR}` —
-Claude Code expands them from the environment at load time, so the profile stays
-safe to commit. (`${CLAUDE_PLUGIN_ROOT}` is also available, e.g. to launch a
-stdio server bundled with the plugin.) A credential inside a server URL is
-rejected at validation.
-
-The tools appear in the session and are available to your own skills. The
-threat-model pipeline does not call them: its analysis agents ship a fixed tool
-list that contains no MCP tools.
-
-Treat MCP results as **untrusted input**: a connected scanner can inform findings,
-but its output must never be allowed to change severity rules, permissions, or how
-the plugin behaves. Only wire in endpoints you trust.
-
-## Maintenance
-
-**Update to a newer upstream version.** The plugin tracks the open-source
-appsec-advisor releases. To pull the latest and rebuild:
-
-```bash
-make rebuild
-```
-
-To pin a specific version (recommended, so builds stay reproducible):
-
-```bash
-APPSEC_ADVISOR_REF=v0.6.0-beta.1 make rebuild
-```
-
-To follow a branch tip instead of a release (e.g. an upstream dev branch), set
-`APPSEC_ADVISOR_REF` to the branch name — it is re-pulled to its tip on each build:
-
-```bash
-APPSEC_ADVISOR_REF=develop make rebuild
-```
-
-**Check for upstream drift** without building (read-only). Exits non-zero when a
-newer release exists, or — on a branch ref — when the branch tip moved past your
-last build:
-
-```bash
-make upstream-check
-```
-
-**Update the requirements.** Edit the catalog that `requirements_yaml_url`
-points to, then rebuild — no plugin changes needed.
-
-**Keep CI in sync.** The pipeline rebuilds and publishes the plugin on every
-release tag. Install it once with `make ci-github` or `make ci-gitlab`.
-
-For deeper build and packaging details, see `AGENTS.md` in this repo and the
-[packaging runbook](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/internal-plugin-packaging.md).
-
-## Reference
-
-- [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) — the upstream plugin
-- [org-profile reference](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/org-profiles.md) — all configuration options
+- [Organization profiles](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/org-profiles.md)
+- [Internal plugin packaging](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/internal-plugin-packaging.md)

@@ -182,7 +182,8 @@ else fail "package: a leftover org-mcp.json no longer overwrites the build" "rc=
 # ── init-org-repo.sh ─────────────────────────────────────────────────────────
 echo "--- init-org-repo.sh ---"
 # answers order: org-name, org-id(default), plugin(default), owner(default),
-#                target-dir, demo(y/n), [continue? when dir exists]
+#                target-dir, demo(y/n), baseline(y/n),
+#                [continue? when dir exists], [build(y/n)]
 
 # demo=yes; leading empty answer exercises the "(required)" retry on org-name.
 d="$(newdir)"
@@ -228,6 +229,42 @@ if [ "$rc" = 0 ] && \
    grep -Fqx '  owner: POAA AppSec Team' "$tgt/org-profile/org-profile.yaml"; then
   pass "init: UTF-8 organization name"
 else fail "init: UTF-8 organization name" "rc=$rc"; fi
+
+if grep -Fq '`poaa-appsec` is the Claude Code security plugin' "$tgt/README.md" && \
+   grep -Fq 'Prüf+Øvelse+Æble+Ångström' "$tgt/README.md" && \
+   grep -Fq 'POAA AppSec Team' "$tgt/README.md" && \
+   ! grep -Fq 'Acme' "$tgt/README.md"; then
+  pass "init: generated README uses organization identity"
+else fail "init: generated README uses organization identity" "placeholder or identity mismatch"; fi
+
+# An explicitly accepted initial build runs only after the repository exists
+# and writes the actual Claude plugin below build/<plugin-name>/.
+d="$(newdir)"
+src="$d/upstream-source"
+mkfake "$src"
+tgt="$d/out"
+printf 'Test Org\n\n\n\n%s\nn\n\ny\n' "$tgt" | \
+  (cd "$ROOT" && env APPSEC_ADVISOR_SOURCE="$src" timeout 20 bash -x "$INIT") \
+  >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && [ -d "$tgt/.git" ] && [ -d "$tgt/build/to-appsec" ]; then
+  pass "init: accepted initial build creates plugin"
+else fail "init: accepted initial build creates plugin" "rc=$rc"; fi
+
+# A failed optional build must leave the initialized packaging repository usable
+# and tell the operator how to retry it.
+d="$(newdir)"
+tgt="$d/out"
+build_log="$d/build-failure.log"
+printf 'Test Org\n\n\n\n%s\nn\n\ny\n' "$tgt" | \
+  (cd "$ROOT" && env APPSEC_ADVISOR_SOURCE="$d/missing-upstream" \
+    timeout 20 bash -x "$INIT") \
+  >"$build_log" 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && [ -d "$tgt/.git" ] && \
+   grep -Fq 'initial plugin build failed' "$COV"; then
+  pass "init: failed initial build preserves repo"
+else fail "init: failed initial build preserves repo" "rc=$rc"; fi
 
 # The scaffold must be self-contained: a file that the Makefile, the profile or
 # the CI templates reference but init never copies only fails much later, at
@@ -291,7 +328,7 @@ rm "$legacy/scripts/prepare-local-marketplace.py"
 d="$(newdir)"
 tgt="$d/out"
 printf 'Test Org\n\n\n\n%s\nn\n\n' "$tgt" | \
-  (cd "$d" && env GITSTUB_CLONE_SRC="$legacy" APPSEC_ADVISOR_TEMPLATE_REF=dev \
+  (cd "$d" && env GITSTUB_CLONE_SRC="$legacy" APPSEC_ADVISOR_TEMPLATE_REF=older-template \
     timeout 20 bash -x "$lonely/init-org-repo.sh") \
   >/dev/null 2>>"$COV"
 assert_rc "init: newer script tolerates older template snapshot" 0 "$?"
