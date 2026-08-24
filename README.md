@@ -12,13 +12,26 @@ workflow.
 
 ## Quick Start
 
-**Prerequisites:** `git`, `python3` (3.10+), `make`
+**Prerequisites:** Bash 3.2+, `git`, `python3` (3.10+), `make`, `sed`, and
+`mktemp`. A local plugin build also needs the Python modules `PyYAML` and
+`jsonschema`; the initializer checks these before starting the optional build
+and CI installs its reviewed versions from `ci-requirements.lock`.
 
 **1. Create your packaging repo**
 
 Run the init script — it asks for your org name and plugin name, creates a
 package version, configures optional startup status and an internal information
-URL, creates a ready-to-use git repo, and offers to build the plugin immediately:
+URL, creates a ready-to-use git repo, and offers to build the plugin immediately.
+The generated profile explicitly pins `aisec-0.1.7`, the currently published
+baseline from
+[`appsec-foundry/ai-secure-coding-baseline`](https://github.com/appsec-foundry/ai-secure-coding-baseline)
+instead of the older baseline bundled with the pinned plugin core. A later
+published version is reported by `make baseline-check`.
+
+The script checks its prerequisites before asking questions and explains how to
+recover when a command, supported Python version, Git author identity, or local
+Python build module is missing. It creates only a local repository and commit;
+it does not push or install the plugin. Start it with:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh)

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests for the generated local marketplace catalog."""
 
+import argparse
 import importlib.util
 import json
 from pathlib import Path
@@ -18,6 +19,12 @@ SPEC.loader.exec_module(marketplace)
 
 
 class LocalMarketplaceTests(unittest.TestCase):
+    def test_rejects_unsafe_or_non_kebab_names(self) -> None:
+        for value in ("", "Acme", "../acme", "acme_appsec"):
+            with self.subTest(value=value):
+                with self.assertRaises(argparse.ArgumentTypeError):
+                    marketplace.valid_name(value)
+
     def test_writes_catalog_for_packaged_plugin(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             build_root = Path(directory)

@@ -2,6 +2,15 @@
 # Creates a fresh org packaging repo for appsec-advisor.
 # Usage: bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh)
 # Or locally: scripts/init-org-repo.sh
+if [ -z "${BASH_VERSION:-}" ]; then
+  echo "ERROR: this initializer requires Bash; run it with: bash scripts/init-org-repo.sh" >&2
+  exit 2
+fi
+if [ "${BASH_VERSINFO[0]}" -lt 3 ] || \
+   { [ "${BASH_VERSINFO[0]}" -eq 3 ] && [ "${BASH_VERSINFO[1]}" -lt 2 ]; }; then
+  echo "ERROR: Bash 3.2 or newer is required; found ${BASH_VERSION}." >&2
+  exit 2
+fi
 set -euo pipefail
 
 TMPDIR_CLONE=""
@@ -18,6 +27,93 @@ cleanup() {
 trap cleanup EXIT
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+check_prerequisites() {
+  local dependency missing=""
+  for dependency in git python3 make sed mktemp; do
+    if ! command -v "${dependency}" >/dev/null 2>&1; then
+      missing="${missing} ${dependency}"
+    fi
+  done
+  if [ -n "${missing}" ]; then
+    echo "ERROR: missing required commands:${missing}" >&2
+    echo "Install them and rerun this setup. Required: git, Python 3.10+, make, sed, and mktemp." >&2
+    exit 2
+  fi
+
+  if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)'; then
+    echo "ERROR: Python 3.10 or newer is required; found $(python3 --version 2>&1)." >&2
+    exit 2
+  fi
+}
+
+check_build_python_modules() {
+  local missing
+  if ! missing="$(python3 -c '
+import importlib.util
+
+required = {"yaml": "PyYAML", "jsonschema": "jsonschema"}
+print(" ".join(package for module, package in required.items() if importlib.util.find_spec(module) is None))
+')"; then
+    echo "ERROR: could not inspect the Python environment required for the optional plugin build." >&2
+    echo "Activate a working Python 3.10+ environment, then run: make package" >&2
+    return 1
+  fi
+  if [ -n "${missing}" ]; then
+    echo "ERROR: the optional plugin build needs these Python packages: ${missing}" >&2
+    echo "Create or activate a Python 3.10+ environment containing them, then run: make package" >&2
+    echo "CI installs the reviewed versions from ci-requirements.lock." >&2
+    return 1
+  fi
+}
+
+valid_organization_id() {
+  case "$1" in
+    ""|[!a-z0-9]*|*[!a-z0-9._-]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+valid_plugin_name() {
+  case "$1" in
+    ""|[!a-z0-9]*|*[!a-z0-9-]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+uppercase_ascii() {
+  PYTHONUTF8=1 python3 - "$1" <<'PY'
+import sys
+
+print(sys.argv[1].upper())
+PY
+}
+
+check_template_layout() {
+  local relative missing=""
+  for relative in \
+    Makefile \
+    .gitignore \
+    AGENTS.md \
+    README.example.md \
+    scripts/fetch-upstream.sh \
+    scripts/upstream-check.sh \
+    scripts/package-local.sh \
+    org-profile/org-profile.yaml \
+    org-profile/package-policy.yaml \
+    org-profile/hooks/guard.py \
+    ci-templates/github/workflows/package.yml \
+    ci-templates/gitlab-ci.yml; do
+    if [ ! -f "${TEMPLATE_BASE}/${relative}" ]; then
+      missing="${missing} ${relative}"
+    fi
+  done
+  if [ -n "${missing}" ]; then
+    echo "ERROR: packaging template is incomplete; missing:${missing}" >&2
+    echo "Use a complete template checkout or verify APPSEC_ADVISOR_TEMPLATE_REF." >&2
+    exit 2
+  fi
+}
 
 normalize_utf8() {
   PYTHONUTF8=1 python3 -c '
@@ -356,7 +452,12 @@ echo ""
 echo "appsec-advisor — org packaging repo setup"
 echo "────────────────────────────────────────────"
 echo "This script creates a ready-to-use packaging repo for appsec-advisor."
-echo "You will need: git, python3 (3.10+), make"
+echo "It asks for organization settings, creates a local Git commit, and can build"
+echo "the first plugin package. It does not push or install anything."
+echo ""
+echo "==> Checking prerequisites …"
+check_prerequisites
+echo "Prerequisites OK: git, Python 3.10+, make, sed, mktemp"
 echo ""
 
 # ── Gather input ─────────────────────────────────────────────────────────────
@@ -386,14 +487,34 @@ if [ -n "${APPSEC_REINIT_TARGET:-}" ]; then
     echo "ERROR: existing INTERNAL_REPOSITORY_URL must be an HTTPS URL without credentials or shell metacharacters" >&2
     exit 2
   fi
-  OWNER_PREFIX="${ORG_ID^^}"
+  if ! valid_organization_id "${ORG_ID}"; then
+    echo "ERROR: existing organization id must start with a lowercase letter or digit and contain only lowercase letters, digits, '.', '_' and '-': ${ORG_ID}" >&2
+    exit 2
+  fi
+  if ! valid_plugin_name "${PLUGIN_NAME}"; then
+    echo "ERROR: existing plugin name must start with a lowercase letter or digit and contain only lowercase letters, digits and '-': ${PLUGIN_NAME}" >&2
+    exit 2
+  fi
+  OWNER_PREFIX="$(uppercase_ascii "${ORG_ID}")"
 else
   ORG_NAME=$(ask "Organization name (e.g. Acme Corp)")
   ORG_ID=$(initials "${ORG_NAME}")
-  ORG_ID=$(ask "Organization id (short lowercase abbreviation, e.g. 'acme', 'hl' — used in plugin name)" "${ORG_ID}")
-  PLUGIN_NAME=$(ask "Plugin name (Claude Code command prefix)" "${ORG_ID}-appsec")
+  while true; do
+    ORG_ID=$(ask "Organization id (short lowercase abbreviation, e.g. 'acme', 'hl' — used in plugin name)" "${ORG_ID}")
+    if valid_organization_id "${ORG_ID}"; then
+      break
+    fi
+    echo "  (start with a lowercase letter or digit; use only lowercase letters, digits, '.', '_' and '-')" >&2
+  done
+  while true; do
+    PLUGIN_NAME=$(ask "Plugin name (Claude Code command prefix)" "${ORG_ID}-appsec")
+    if valid_plugin_name "${PLUGIN_NAME}"; then
+      break
+    fi
+    echo "  (start with a lowercase letter or digit; use only lowercase letters, digits and '-')" >&2
+  done
   PACKAGE_VERSION=$(ask_package_version)
-  OWNER_PREFIX="${ORG_ID^^}"
+  OWNER_PREFIX="$(uppercase_ascii "${ORG_ID}")"
   OWNER=$(ask "Team owner (e.g. AppSec Team)" "${OWNER_PREFIX} AppSec Team")
   TARGET_DIR=$(ask "Target directory" "./${ORG_ID}-appsec-advisor")
 
@@ -418,6 +539,18 @@ else
   INTERNAL_REPOSITORY_URL=$(ask_optional_https_url "Internal packaging repository URL")
 fi
 
+if python3 - "${TARGET_DIR}" <<'PY'
+from pathlib import Path
+import sys
+
+target = Path(sys.argv[1]).resolve(strict=False)
+raise SystemExit(0 if target == Path(target.anchor) else 1)
+PY
+then
+  echo "ERROR: refusing to use a filesystem root as the target directory: ${TARGET_DIR}" >&2
+  exit 2
+fi
+
 echo ""
 
 # ── Source files ──────────────────────────────────────────────────────────────
@@ -432,11 +565,16 @@ TEMPLATE_REF="${APPSEC_ADVISOR_TEMPLATE_REF:-main}"
 if [ ! -f "${TEMPLATE_BASE}/Makefile" ]; then
   TMPDIR_CLONE="$(mktemp -d)"
   echo "==> Cloning template from GitHub …"
-  git clone --depth 1 --branch "${TEMPLATE_REF}" \
-    "https://github.com/appsec-foundry/appsec-advisor-packaging-template.git" \
-    "${TMPDIR_CLONE}"
+  if ! git clone --depth 1 --branch "${TEMPLATE_REF}" \
+      "https://github.com/appsec-foundry/appsec-advisor-packaging-template.git" \
+      "${TMPDIR_CLONE}"; then
+    echo "ERROR: could not fetch packaging template ref '${TEMPLATE_REF}'." >&2
+    echo "Check network access and APPSEC_ADVISOR_TEMPLATE_REF, then retry." >&2
+    exit 2
+  fi
   TEMPLATE_BASE="${TMPDIR_CLONE}"
 fi
+check_template_layout
 
 # ── Create repo ───────────────────────────────────────────────────────────────
 
@@ -448,6 +586,9 @@ if [ "${REINIT_MODE}" = true ]; then
   fi
   REINIT=true
   echo "==> Re-initializing existing packaging repository: ${TARGET_DIR}"
+elif [ -e "${TARGET_DIR}" ] && [ ! -d "${TARGET_DIR}" ]; then
+  echo "ERROR: target exists but is not a directory: ${TARGET_DIR}" >&2
+  exit 2
 elif [ -e "${TARGET_DIR}" ]; then
   echo ""
   echo "Warning: '${TARGET_DIR}' already exists."
@@ -461,6 +602,12 @@ elif [ -e "${TARGET_DIR}" ]; then
     *) echo "Aborted."; exit 1 ;;
   esac
   echo ""
+fi
+
+if [ "${REINIT}" != true ] && ! git var GIT_AUTHOR_IDENT >/dev/null 2>&1; then
+  echo "ERROR: Git author identity is not configured; the initializer creates an initial commit." >&2
+  echo "Configure user.name and user.email (globally or for this environment), then rerun." >&2
+  exit 2
 fi
 
 if [ "${REINIT}" = true ]; then
@@ -716,12 +863,16 @@ else
 fi
 
 if [ "${BASELINE_ENABLED}" = false ]; then
-  sed -i '/^compatibility:/i baseline:\n  enabled: false\n' \
-    "${PROFILE_CANDIDATE}"
+  PROFILE_EDITED="${CANDIDATE_DIR}/org-profile-baseline.yaml"
+  sed '/^baseline:/,/^[^ ]/ s/^  enabled: true$/  enabled: false/' \
+    "${PROFILE_CANDIDATE}" > "${PROFILE_EDITED}"
+  mv "${PROFILE_EDITED}" "${PROFILE_CANDIDATE}"
 fi
 if [ "${STATUSLINE_ENABLED}" = false ]; then
-  sed -i '/^banner:/,/^[^ ]/ s/^  enabled: true$/  enabled: false/' \
-    "${PROFILE_CANDIDATE}"
+  PROFILE_EDITED="${CANDIDATE_DIR}/org-profile-banner.yaml"
+  sed '/^banner:/,/^[^ ]/ s/^  enabled: true$/  enabled: false/' \
+    "${PROFILE_CANDIDATE}" > "${PROFILE_EDITED}"
+  mv "${PROFILE_EDITED}" "${PROFILE_CANDIDATE}"
 fi
 refresh_user_file \
   "${PROFILE_CANDIDATE}" \
@@ -809,18 +960,24 @@ chmod +x "${TARGET_DIR}/scripts/package-local.sh"
 
 # ── Render CI files with correct plugin name ──────────────────────────────────
 
-sed -i \
-  -e "s/acme-appsec/${E_PLUGIN}/g" \
-  -e "s/Acme Corp/${E_ORG_NAME}/g" \
-  -e "s/0\.1\.0/${E_PACKAGE_VERSION}/g" \
+for CI_FILE in \
   "${TARGET_DIR}/ci-templates/github/workflows/package.yml" \
-  "${TARGET_DIR}/ci-templates/gitlab-ci.yml"
+  "${TARGET_DIR}/ci-templates/gitlab-ci.yml"; do
+  CI_EDITED="${CI_FILE}.new"
+  sed \
+    -e "s/acme-appsec/${E_PLUGIN}/g" \
+    -e "s/Acme Corp/${E_ORG_NAME}/g" \
+    -e "s/0\.1\.0/${E_PACKAGE_VERSION}/g" \
+    "${CI_FILE}" > "${CI_EDITED}"
+  mv "${CI_EDITED}" "${CI_FILE}"
+done
 
 # ── Init git repo ─────────────────────────────────────────────────────────────
 
 cd "${TARGET_DIR}"
 if [ ! -e .git ]; then
-  git init -q -b main
+  git init -q
+  git symbolic-ref HEAD refs/heads/main
 fi
 if [ -n "${INTERNAL_REPOSITORY_URL}" ]; then
   if EXISTING_ORIGIN=$(git remote get-url origin 2>/dev/null); then
@@ -838,7 +995,11 @@ else
   if git diff --cached --quiet; then
     echo "(no changes to commit)"
   else
-    git commit -q -m "init: ${PLUGIN_NAME} packaging repo for ${ORG_NAME}"
+    if ! git commit -q -m "init: ${PLUGIN_NAME} packaging repo for ${ORG_NAME}"; then
+      echo "ERROR: the repository was created and files were staged, but the initial Git commit failed." >&2
+      echo "Review the Git error above, then commit the staged files manually." >&2
+      exit 2
+    fi
   fi
 fi
 
@@ -859,7 +1020,10 @@ if [ "${_build_answered}" = true ]; then
     *)
       echo ""
       echo "==> Building plugin …"
-      if make package; then
+      if ! check_build_python_modules; then
+        BUILD_STATE=failed
+        echo "WARNING: The packaging repo is ready, but the initial plugin build was skipped." >&2
+      elif make package; then
         BUILD_STATE=succeeded
       else
         BUILD_STATE=failed

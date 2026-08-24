@@ -49,6 +49,18 @@ if sub == "rev-parse":
     out(os.environ.get("GITSTUB_LOCAL_SHA", SHA))
     sys.exit(0)
 
+if sub == "var" and rest == ["GIT_AUTHOR_IDENT"]:
+    if os.environ.get("GITSTUB_IDENTITY_MISSING") == "1":
+        sys.exit(1)
+    out("Test User <test@example.test> 0 +0000")
+    sys.exit(0)
+
+if sub == "diff" and rest == ["--cached", "--quiet"]:
+    sys.exit(1 if os.environ.get("GITSTUB_HAS_STAGED_CHANGES") == "1" else 0)
+
+if sub == "commit":
+    sys.exit(1 if os.environ.get("GITSTUB_FAIL_COMMIT") == "1" else 0)
+
 if sub == "clone":
     # Last positional is the destination; create it so later checks find a dir.
     dest = rest[-1]

@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).parents[1]
@@ -84,6 +85,139 @@ class BaselineUpstreamCheckTests(unittest.TestCase):
     def test_remote_check_rejects_plain_http_before_fetching(self) -> None:
         with self.assertRaisesRegex(checker.BaselineCheckError, "HTTPS"):
             checker._fetch("http://security.example.test/baseline.md", {}, self.core)
+
+    def test_remote_check_rejects_credentials_and_invalid_allowlist(self) -> None:
+        with self.assertRaisesRegex(checker.BaselineCheckError, "no credentials"):
+            checker._fetch(
+                "https://user:password@security.example.test/baseline.md",
+                {},
+                self.core,
+            )
+        with self.assertRaisesRegex(checker.BaselineCheckError, "must contain host"):
+            checker._profile_allowlist(
+                {"policy": {"url_allowlist": ["raw.githubusercontent.com", 123]}}
+            )
+
+    def test_legacy_default_is_checked_against_appsec_foundry_source(self) -> None:
+        core = json.loads(self.core.read_text(encoding="utf-8"))
+        core["baseline"]["url"] = checker.LEGACY_BASELINE_URL
+        self.core.write_text(json.dumps(core), encoding="utf-8")
+        document = b"baseline-id: aisec-0.1.7\n"
+        with mock.patch.object(checker, "_fetch", return_value=document) as fetch:
+            self.assertEqual(checker.check(self.profile, self.core), 0)
+        fetch.assert_called_once_with(
+            checker.CURRENT_BASELINE_URL, mock.ANY, self.core
+        )
+
+    def test_https_fetch_is_bounded_and_uses_the_url_guard(self) -> None:
+        class Verdict:
+            ok = True
+            reason = ""
+
+        guard = mock.Mock()
+        guard.validate_target_url.return_value = Verdict()
+
+        response = mock.MagicMock()
+        response.headers = {"Content-Length": "31"}
+        response.read.return_value = b"baseline-id: aisec-0.1.7\n"
+        response.__enter__.return_value = response
+        opener = mock.Mock()
+        opener.open.return_value = response
+
+        with mock.patch.object(checker, "_load_url_guard", return_value=guard):
+            with mock.patch.object(
+                checker.urllib.request, "build_opener", return_value=opener
+            ):
+                document = checker._fetch(
+                    checker.CURRENT_BASELINE_URL,
+                    {"policy": {"url_allowlist": ["raw.githubusercontent.com"]}},
+                    self.core,
+                )
+
+        self.assertEqual(document, b"baseline-id: aisec-0.1.7\n")
+        guard.validate_target_url.assert_called_once_with(
+            checker.CURRENT_BASELINE_URL, check_ip_safety=False
+        )
+        request = opener.open.call_args.args[0]
+        self.assertEqual(request.full_url, checker.CURRENT_BASELINE_URL)
+        self.assertEqual(
+            opener.open.call_args.kwargs["timeout"], checker.FETCH_TIMEOUT_SECONDS
+        )
+        response.read.assert_called_once_with(checker.MAX_FETCH_BYTES + 1)
+
+    def test_redirect_handler_rejects_plain_http_and_blocked_targets(self) -> None:
+        class Verdict:
+            def __init__(self, ok: bool, reason: str = "") -> None:
+                self.ok = ok
+                self.reason = reason
+
+        guard = mock.Mock()
+        guard.validate_target_url.return_value = Verdict(True)
+        response = mock.MagicMock()
+        response.headers = {}
+        response.read.return_value = b"baseline-id: aisec-0.1.7\n"
+        response.__enter__.return_value = response
+        opener = mock.Mock()
+        opener.open.return_value = response
+
+        with mock.patch.object(checker, "_load_url_guard", return_value=guard):
+            with mock.patch.object(
+                checker.urllib.request, "build_opener", return_value=opener
+            ) as build_opener:
+                checker._fetch(checker.CURRENT_BASELINE_URL, {}, self.core)
+
+        handler = build_opener.call_args.args[0]
+        with self.assertRaisesRegex(checker.urllib.error.HTTPError, "HTTPS"):
+            handler.redirect_request(
+                None, None, 302, "Found", {}, "http://example.test/baseline.md"
+            )
+
+        guard.validate_target_url.return_value = Verdict(False, "not allowlisted")
+        with self.assertRaisesRegex(checker.urllib.error.HTTPError, "not allowlisted"):
+            handler.redirect_request(
+                None,
+                None,
+                302,
+                "Found",
+                {},
+                "https://example.test/baseline.md",
+            )
+
+    def test_initial_url_guard_rejection_stops_before_network_open(self) -> None:
+        class Verdict:
+            ok = False
+            reason = "not allowlisted"
+
+        guard = mock.Mock()
+        guard.validate_target_url.return_value = Verdict()
+        with mock.patch.object(checker, "_load_url_guard", return_value=guard):
+            with mock.patch.object(checker.urllib.request, "build_opener") as opener:
+                with self.assertRaisesRegex(checker.BaselineCheckError, "blocked"):
+                    checker._fetch(checker.CURRENT_BASELINE_URL, {}, self.core)
+        opener.assert_not_called()
+
+    def test_https_fetch_rejects_oversized_response_before_reading(self) -> None:
+        class Verdict:
+            ok = True
+            reason = ""
+
+        guard = mock.Mock()
+        guard.validate_target_url.return_value = Verdict()
+        response = mock.MagicMock()
+        response.headers = {"Content-Length": str(checker.MAX_FETCH_BYTES + 1)}
+        response.__enter__.return_value = response
+        opener = mock.Mock()
+        opener.open.return_value = response
+
+        with mock.patch.object(checker, "_load_url_guard", return_value=guard):
+            with mock.patch.object(
+                checker.urllib.request, "build_opener", return_value=opener
+            ):
+                with self.assertRaisesRegex(checker.BaselineCheckError, "exceeds"):
+                    checker._fetch(
+                        checker.CURRENT_BASELINE_URL, {}, self.core
+                    )
+        response.read.assert_not_called()
 
 
 if __name__ == "__main__":

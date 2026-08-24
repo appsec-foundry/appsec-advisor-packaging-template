@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Refresh a scaffolded packaging repository from the current template while
 # asking before replacing differing organization-owned files.
+if [ -z "${BASH_VERSION:-}" ]; then
+  echo "ERROR: reinitialization requires Bash; run it through: make reinit" >&2
+  exit 2
+fi
 set -euo pipefail
 
 REPO_ROOT="$(pwd)"
@@ -17,12 +21,30 @@ cleanup() {
 }
 trap cleanup EXIT
 
+missing_dependencies=""
+for dependency in git python3 mktemp; do
+  if ! command -v "${dependency}" >/dev/null 2>&1; then
+    missing_dependencies="${missing_dependencies} ${dependency}"
+  fi
+done
+if [ -n "${missing_dependencies}" ]; then
+  echo "ERROR: reinitialization is missing required commands:${missing_dependencies}" >&2
+  exit 2
+fi
+if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)'; then
+  echo "ERROR: Python 3.10 or newer is required for reinitialization; found $(python3 --version 2>&1)." >&2
+  exit 2
+fi
+
 if [ ! -f "${REPO_ROOT}/Makefile" ] || [ ! -f "${REPO_ROOT}/org-profile/org-profile.yaml" ]; then
   echo "ERROR: make reinit must run from a scaffolded packaging repository root" >&2
   exit 2
 fi
 
-mapfile -d '' -t SETTINGS < <(PYTHONUTF8=1 python3 - "${REPO_ROOT}" <<'PY'
+SETTINGS=()
+while IFS= read -r -d '' setting; do
+  SETTINGS[${#SETTINGS[@]}]="${setting}"
+done < <(PYTHONUTF8=1 python3 - "${REPO_ROOT}" <<'PY'
 from pathlib import Path
 import json
 import os

@@ -81,7 +81,37 @@ def test_unknown_upstream_validator_fails_before_manifest_change() -> None:
         assert "appsec_advisor_core_version" not in manifest
 
 
+def test_core_version_mismatch_fails_before_file_changes() -> None:
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        plugin_tree(root)
+        validator_before = (root / "scripts" / "validate_org_profile.py").read_text()
+
+        try:
+            MODULE.finalize(root, "3.4.0", "0.7.0")
+        except MODULE.FinalizeError as error:
+            assert "does not match" in str(error)
+        else:
+            raise AssertionError("mismatched core version was accepted")
+
+        manifest = json.loads((root / ".claude-plugin" / "plugin.json").read_text())
+        assert manifest["version"] == "0.6.0-beta.1"
+        assert (root / "scripts" / "validate_org_profile.py").read_text() == validator_before
+
+
+def test_missing_manifest_has_contextual_error() -> None:
+    with tempfile.TemporaryDirectory() as temporary:
+        try:
+            MODULE.finalize(Path(temporary), "3.4.0", "0.6.0-beta.1")
+        except MODULE.FinalizeError as error:
+            assert "required file is missing" in str(error)
+        else:
+            raise AssertionError("missing manifest was accepted")
+
+
 if __name__ == "__main__":
     test_visible_and_core_versions_are_separate()
     test_unknown_upstream_validator_fails_before_manifest_change()
+    test_core_version_mismatch_fails_before_file_changes()
+    test_missing_manifest_has_contextual_error()
     print("finalize-package-version tests: OK")

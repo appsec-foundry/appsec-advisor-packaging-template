@@ -23,6 +23,11 @@ APPSEC_ADVISOR_SOURCE=/home/mrohr/appsec-advisor make package
 
 ## Neues Packaging-Repository erzeugen
 
+Voraussetzungen sind Bash 3.2+, Git, Python 3.10+, Make, `sed` und `mktemp`.
+Für den optionalen lokalen Erst-Build werden außerdem die Python-Module
+`PyYAML` und `jsonschema` benötigt. Das Init-Skript prüft diese Voraussetzungen
+und meldet fehlende Komponenten vor dem jeweiligen Arbeitsschritt.
+
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh)
 ```

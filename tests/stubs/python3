@@ -20,6 +20,14 @@ args = sys.argv[1:]
 script = args[0] if args else ""
 fail = os.environ.get("PYSTUB_FAIL", "")
 
+if args[:1] == ["-c"]:
+    source = args[1] if len(args) > 1 else ""
+    if os.environ.get("PYSTUB_PYTHON_TOO_OLD") == "1" and "sys.version_info" in source:
+        sys.exit(1)
+    if os.environ.get("PYSTUB_MISSING_BUILD_MODULES") and "importlib.util" in source:
+        print(os.environ["PYSTUB_MISSING_BUILD_MODULES"])
+        sys.exit(0)
+
 if script.endswith("package_internal_plugin.py"):
     # Create the expected build output dir so a following smoke step has a target.
     name = None
@@ -68,6 +76,29 @@ if script.endswith("package_internal_plugin.py"):
                 },
                 file,
             )
+        baseline = {
+            "enabled": True,
+            "id": "aisec-0.1",
+            "name": "AI Secure Coding Baseline",
+            "url": (
+                "https://raw.githubusercontent.com/matthiasrohr/"
+                "ai-secure-coding-baseline/main/secure-coding-baseline.md"
+            ),
+        }
+        profile_path = os.path.join(org_profile or "", "org-profile.yaml")
+        if os.path.isfile(profile_path):
+            import yaml
+
+            with open(profile_path, encoding="utf-8") as file:
+                profile = yaml.safe_load(file) or {}
+            override = profile.get("baseline")
+            if isinstance(override, dict):
+                if any(key in override for key in ("id", "url", "git", "file")):
+                    baseline.pop("url", None)
+                    baseline.pop("name", None)
+                for key in ("enabled", "id", "name", "url"):
+                    if key in override:
+                        baseline[key] = override[key]
         with open(os.path.join(root, "config.json"), "w", encoding="utf-8") as file:
             json.dump(
                 {
@@ -76,15 +107,7 @@ if script.endswith("package_internal_plugin.py"):
                         "enabled": True,
                         "url": info_url or None,
                     },
-                    "baseline": {
-                        "enabled": True,
-                        "id": "aisec-0.1",
-                        "name": "AI Secure Coding Baseline",
-                        "url": (
-                            "https://raw.githubusercontent.com/matthiasrohr/"
-                            "ai-secure-coding-baseline/main/secure-coding-baseline.md"
-                        ),
-                    },
+                    "baseline": baseline,
                 },
                 file,
             )

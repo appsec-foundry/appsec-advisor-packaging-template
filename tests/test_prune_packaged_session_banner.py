@@ -66,6 +66,22 @@ class PrunePackagedSessionBannerTests(unittest.TestCase):
             pruner.prune(self.root)
         self.assertTrue((self.root / "scripts" / "session_banner.py").is_file())
 
+    def test_rejects_malformed_surface_before_removing_script(self) -> None:
+        (self.root / ".claude-plugin" / "package-surface.json").write_text(
+            json.dumps({"hooks": {"included": [123]}}), encoding="utf-8"
+        )
+        with self.assertRaisesRegex(pruner.SessionBannerPruneError, "contain names"):
+            pruner.prune(self.root)
+        self.assertTrue((self.root / "scripts" / "session_banner.py").is_file())
+
+    def test_refuses_symlinked_script(self) -> None:
+        self.write_surface([])
+        script = self.root / "scripts" / "session_banner.py"
+        script.unlink()
+        script.symlink_to(self.root / "outside.py")
+        with self.assertRaisesRegex(pruner.SessionBannerPruneError, "symlinked"):
+            pruner.prune(self.root)
+
 
 if __name__ == "__main__":
     unittest.main()

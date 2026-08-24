@@ -30,6 +30,7 @@ MARKETPLACE_TEST="$HERE/test_local_marketplace.py"
 PACKAGED_HELP_TEST="$HERE/test_packaged_help.py"
 PACKAGED_README_TEST="$HERE/test_packaged_readme.py"
 SESSION_BANNER_PRUNE_TEST="$HERE/test_prune_packaged_session_banner.py"
+ARCHIVE_TEST="$HERE/test_archive_built_plugin.py"
 BASELINE_UPSTREAM_TEST="$HERE/test_baseline_upstream_check.py"
 PACKAGE_VERSION_TEST="$HERE/test_finalize_package_version.py"
 PACKAGED_ORIGINS_TEST="$HERE/test_rewrite_packaged_origins.py"
@@ -41,6 +42,7 @@ PACKAGED_ORIGINS_TEST="$HERE/test_rewrite_packaged_origins.py"
 /usr/bin/python3 -B "$PACKAGED_HELP_TEST"
 /usr/bin/python3 -B "$PACKAGED_README_TEST"
 /usr/bin/python3 -B "$SESSION_BANNER_PRUNE_TEST"
+/usr/bin/python3 -B "$ARCHIVE_TEST"
 /usr/bin/python3 -B "$BASELINE_UPSTREAM_TEST"
 /usr/bin/python3 -B "$PACKAGE_VERSION_TEST"
 /usr/bin/python3 -B "$PACKAGED_ORIGINS_TEST"
@@ -161,6 +163,10 @@ if [ "$rc" = 0 ] && [ -f "$d/dist/acme-appsec-0.1.0.tgz" ] && \
    tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/config.json | \
      grep -Fq 'https://raw.githubusercontent.com/appsec-foundry/ai-secure-coding-baseline/main/secure-coding-baseline.md' && \
    tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/config.json | \
+     grep -Fq '"id": "aisec-0.1.7"' && \
+   tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/config.json | \
+     grep -Fq '"name": "AI Secure Coding Baseline"' && \
+   tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/config.json | \
      grep -Fq '.claude-plugin/package-surface.json' && \
    tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/config.json | \
      grep -Fq 'org-profile/package-policy.yaml' && \
@@ -254,6 +260,105 @@ echo "--- init-org-repo.sh ---"
 #                internal-repository-url(optional),
 #                [continue? when dir exists], [build(y/n)]
 
+d="$(newdir)"
+shell_log="$d/wrong-shell.log"
+(cd "$ROOT" && /bin/sh "$INIT") </dev/null >"$shell_log" 2>&1
+rc=$?
+if [ "$rc" = 2 ] && grep -Fq 'initializer requires Bash' "$shell_log"; then
+  pass "init: wrong shell reports the required invocation"
+else fail "init: wrong shell reports the required invocation" "rc=$rc"; fi
+
+d="$(newdir)"
+prereq_log="$d/missing-prerequisites.log"
+(cd "$ROOT" && env PATH="$d/no-tools" /bin/bash -x "$INIT") \
+  </dev/null >"$prereq_log" 2>&1
+rc=$?
+cat "$prereq_log" >>"$COV"
+if [ "$rc" = 2 ] && \
+   grep -Fq 'ERROR: missing required commands: git python3 make sed mktemp' "$prereq_log"; then
+  pass "init: missing commands fail early with an actionable error"
+else fail "init: missing commands fail early with an actionable error" "rc=$rc"; fi
+
+d="$(newdir)"
+prereq_log="$d/old-python.log"
+(cd "$ROOT" && env PYSTUB_PYTHON_TOO_OLD=1 timeout 20 bash -x "$INIT") \
+  </dev/null >"$prereq_log" 2>&1
+rc=$?
+cat "$prereq_log" >>"$COV"
+if [ "$rc" = 2 ] && grep -Fq 'Python 3.10 or newer is required' "$prereq_log"; then
+  pass "init: unsupported Python version fails before prompting"
+else fail "init: unsupported Python version fails before prompting" "rc=$rc"; fi
+
+d="$(newdir)"
+prereq_log="$d/git-identity.log"
+tgt="$d/out"
+printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\n' "$tgt" | \
+  (cd "$ROOT" && env GITSTUB_IDENTITY_MISSING=1 timeout 20 bash -x "$INIT") \
+  >"$prereq_log" 2>&1
+rc=$?
+cat "$prereq_log" >>"$COV"
+if [ "$rc" = 2 ] && [ ! -e "$tgt" ] && \
+   grep -Fq 'Git author identity is not configured' "$prereq_log"; then
+  pass "init: missing Git identity fails before creating the target"
+else fail "init: missing Git identity fails before creating the target" "rc=$rc"; fi
+
+d="$(newdir)"
+target_log="$d/root-target.log"
+printf 'Test Org\n\n\n\n\n/\nn\n\n\n\n' | \
+  (cd "$ROOT" && timeout 20 bash -x "$INIT") >"$target_log" 2>&1
+rc=$?
+cat "$target_log" >>"$COV"
+if [ "$rc" = 2 ] && grep -Fq 'refusing to use a filesystem root' "$target_log"; then
+  pass "init: filesystem root target is rejected clearly"
+else fail "init: filesystem root target is rejected clearly" "rc=$rc"; fi
+
+d="$(newdir)"
+tgt="$d/existing-file"
+printf 'not a directory\n' >"$tgt"
+target_log="$d/file-target.log"
+printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\n' "$tgt" | \
+  (cd "$ROOT" && timeout 20 bash -x "$INIT") >"$target_log" 2>&1
+rc=$?
+cat "$target_log" >>"$COV"
+if [ "$rc" = 2 ] && grep -Fq 'target exists but is not a directory' "$target_log"; then
+  pass "init: non-directory target is rejected clearly"
+else fail "init: non-directory target is rejected clearly" "rc=$rc"; fi
+
+d="$(newdir)"
+mkdir -p "$d/reinit"
+reinit_log="$d/invalid-reinit-id.log"
+(cd "$ROOT" && env \
+  APPSEC_REINIT_TARGET="$d/reinit" APPSEC_REINIT_ORG_NAME='Test Org' \
+  APPSEC_REINIT_ORG_ID='Bad ID' APPSEC_REINIT_PLUGIN_NAME='test-appsec' \
+  APPSEC_REINIT_PACKAGE_VERSION='1.0.0' APPSEC_REINIT_OWNER='Test Team' \
+  APPSEC_REINIT_DEMO=false APPSEC_REINIT_BASELINE=true \
+  timeout 20 bash -x "$INIT") >"$reinit_log" 2>&1
+rc=$?
+cat "$reinit_log" >>"$COV"
+if [ "$rc" = 2 ] && grep -Fq 'existing organization id must start' "$reinit_log"; then
+  pass "init: invalid recovered organization id has a clear error"
+else fail "init: invalid recovered organization id has a clear error" "rc=$rc"; fi
+
+if ! grep -Eq 'sed -i|\$\{[^}]+\^\^|mapfile' "$INIT" "$REINIT"; then
+  pass "init: avoids known GNU sed and Bash 4-only constructs"
+else fail "init: avoids known GNU sed and Bash 4-only constructs" "non-portable construct found"; fi
+
+d="$(newdir)"
+mkdir -p "$d/incomplete/scripts"
+cp "$INIT" "$d/incomplete/scripts/init-org-repo.sh"
+printf 'placeholder\n' >"$d/incomplete/Makefile"
+tgt="$d/out"
+template_log="$d/incomplete-template.log"
+printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\n' "$tgt" | \
+  (cd "$d" && timeout 20 bash -x "$d/incomplete/scripts/init-org-repo.sh") \
+  >"$template_log" 2>&1
+rc=$?
+cat "$template_log" >>"$COV"
+if [ "$rc" = 2 ] && [ ! -e "$tgt" ] && \
+   grep -Fq 'packaging template is incomplete; missing:' "$template_log"; then
+  pass "init: incomplete template has a contextual error before target creation"
+else fail "init: incomplete template has a contextual error before target creation" "rc=$rc"; fi
+
 if grep -Fqx '      - session-banner' "$ROOT/org-profile/package-policy.yaml"; then
   pass "policy: session banner is included"
 else fail "policy: session banner is included" "missing hook id"; fi
@@ -267,6 +372,10 @@ rc=$?
 if [ "$rc" = 0 ] && [ -f "$tgt/org-profile/requirements.yaml" ] && \
    [ -f "$tgt/org-skills/README.md" ] && \
    [ -f "$tgt/ci-requirements.lock" ] && \
+   grep -Fqx '  id: aisec-0.1.7' "$tgt/org-profile/org-profile.yaml" && \
+   grep -Fqx '  name: AI Secure Coding Baseline' "$tgt/org-profile/org-profile.yaml" && \
+   grep -Fqx '  url: https://raw.githubusercontent.com/appsec-foundry/ai-secure-coding-baseline/main/secure-coding-baseline.md' \
+     "$tgt/org-profile/org-profile.yaml" && \
    grep -Fq -- '--require-hashes -r ci-requirements.lock' \
      "$tgt/ci-templates/github/workflows/package.yml" && \
    grep -Fq -- '--require-hashes -r ci-requirements.lock' \
@@ -281,7 +390,9 @@ tgt="$d/out"
 printf 'Test Org\n\n\n\n\n%s\nn\nn\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
 rc=$?
-if [ "$rc" = 0 ] && grep -Fqx '  enabled: false' "$tgt/org-profile/org-profile.yaml"; then
+if [ "$rc" = 0 ] && \
+   [ "$(grep -c '^baseline:$' "$tgt/org-profile/org-profile.yaml")" = 1 ] && \
+   grep -A1 '^baseline:$' "$tgt/org-profile/org-profile.yaml" | grep -Fqx '  enabled: false'; then
   pass "init: baseline=no"
 else fail "init: baseline=no" "rc=$rc"; fi
 
@@ -337,7 +448,7 @@ tgt="$d/out"
 {
   printf 'Pr\303uef Org\n'
   printf 'Prüf: Øvelse # Lab\n'
-  printf 'pol\n\n01.2.3\n1.2.3-internal.1\n\n%s\nn\n\n\nhttp://insecure.example/repo\nhttps://git.example.test/pol-appsec\nn\n' "$tgt"
+  printf 'Bad ID\npol\nBad_Name\n\n01.2.3\n1.2.3-internal.1\n\n%s\nn\n\n\nhttp://insecure.example/repo\nhttps://git.example.test/pol-appsec\nn\n' "$tgt"
 } | (cd "$ROOT" && env LC_ALL=C timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
 rc=$?
@@ -346,6 +457,8 @@ if [ "$rc" = 0 ] && \
      "$tgt/org-profile/org-profile.yaml" && \
    grep -Fqx '  name: "Prüf: Øvelse # Lab"' "$tgt/org-profile/org-profile.yaml" && \
    grep -Fqx '  owner: "POL AppSec Team"' "$tgt/org-profile/org-profile.yaml" && \
+   grep -Fq "start with a lowercase letter or digit; use only lowercase letters, digits, '.', '_' and '-'" "$COV" && \
+   grep -Fq "start with a lowercase letter or digit; use only lowercase letters, digits and '-'" "$COV" && \
    grep -Fqx 'PACKAGE_VERSION ?= 1.2.3-internal.1' "$tgt/Makefile" && \
    grep -Fqx 'INTERNAL_REPOSITORY_URL ?= https://git.example.test/pol-appsec' \
      "$tgt/Makefile"; then
@@ -417,6 +530,66 @@ if [ "$rc" = 0 ] && [ -d "$tgt/.git" ] && \
    grep -Fq '  5. Load the plugin' "$build_log"; then
   pass "init: failed initial build preserves repo"
 else fail "init: failed initial build preserves repo" "rc=$rc"; fi
+
+# Missing optional build modules are diagnosed before the package scripts can
+# fail with an import traceback. The initialized repository remains usable.
+d="$(newdir)"
+tgt="$d/out"
+build_log="$d/build-dependencies.log"
+printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\ny\n' "$tgt" | \
+  (cd "$ROOT" && env PYSTUB_MISSING_BUILD_MODULES='PyYAML jsonschema' \
+    timeout 20 bash -x "$INIT") >"$build_log" 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && [ -d "$tgt/.git" ] && [ ! -d "$tgt/build" ] && \
+   grep -Fq 'optional plugin build needs these Python packages: PyYAML jsonschema' "$COV" && \
+   grep -Fq 'CI installs the reviewed versions from ci-requirements.lock' "$COV"; then
+  pass "init: missing Python build modules have a clear recovery path"
+else fail "init: missing Python build modules have a clear recovery path" "rc=$rc"; fi
+
+# A Git hook or signing failure must explain that the scaffold and staged files
+# remain available instead of ending with only the raw Git error.
+d="$(newdir)"
+tgt="$d/out"
+commit_log="$d/commit-failure.log"
+printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\n' "$tgt" | \
+  (cd "$ROOT" && env GITSTUB_HAS_STAGED_CHANGES=1 GITSTUB_FAIL_COMMIT=1 \
+    timeout 20 bash -x "$INIT") >"$commit_log" 2>&1
+rc=$?
+cat "$commit_log" >>"$COV"
+if [ "$rc" = 2 ] && [ -d "$tgt/.git" ] && \
+   grep -Fq 'repository was created and files were staged' "$commit_log"; then
+  pass "init: failed initial commit preserves scaffold with recovery guidance"
+else fail "init: failed initial commit preserves scaffold with recovery guidance" "rc=$rc"; fi
+
+d="$(newdir)"
+reinit_prereq_log="$d/reinit-wrong-shell.log"
+(cd "$ROOT" && /bin/sh "$REINIT") </dev/null >"$reinit_prereq_log" 2>&1
+rc=$?
+if [ "$rc" = 2 ] && grep -Fq 'reinitialization requires Bash' "$reinit_prereq_log"; then
+  pass "reinit: wrong shell reports the supported invocation"
+else fail "reinit: wrong shell reports the supported invocation" "rc=$rc"; fi
+
+d="$(newdir)"
+reinit_prereq_log="$d/reinit-missing-tools.log"
+(cd "$ROOT" && env PATH="$d/no-tools" /bin/bash -x "$REINIT") \
+  </dev/null >"$reinit_prereq_log" 2>&1
+rc=$?
+cat "$reinit_prereq_log" >>"$COV"
+if [ "$rc" = 2 ] && \
+   grep -Fq 'reinitialization is missing required commands: git python3 mktemp' "$reinit_prereq_log"; then
+  pass "reinit: missing commands fail with a contextual error"
+else fail "reinit: missing commands fail with a contextual error" "rc=$rc"; fi
+
+d="$(newdir)"
+reinit_prereq_log="$d/reinit-old-python.log"
+(cd "$ROOT" && env PYSTUB_PYTHON_TOO_OLD=1 timeout 20 bash -x "$REINIT") \
+  </dev/null >"$reinit_prereq_log" 2>&1
+rc=$?
+cat "$reinit_prereq_log" >>"$COV"
+if [ "$rc" = 2 ] && \
+   grep -Fq 'Python 3.10 or newer is required for reinitialization' "$reinit_prereq_log"; then
+  pass "reinit: unsupported Python version fails clearly"
+else fail "reinit: unsupported Python version fails clearly" "rc=$rc"; fi
 
 # Declining the optional initial build keeps it as a required next step.
 d="$(newdir)"

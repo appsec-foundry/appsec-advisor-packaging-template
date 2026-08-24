@@ -130,8 +130,9 @@ to tickets unless the support channel is approved for that data.
 
 ## For AppSec maintainers
 
-The setup script normally creates the first package. Rebuild after changing the
-profile, package policy, hooks, or organization skills:
+The setup script normally creates the first package with the baseline version
+pinned in `org-profile/org-profile.yaml`. Rebuild after changing the profile,
+package policy, hooks, or organization skills:
 
 ```bash
 make package

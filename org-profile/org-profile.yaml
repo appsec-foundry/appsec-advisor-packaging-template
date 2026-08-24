@@ -20,6 +20,15 @@ banner:
   # The internal information URL shown by packaged help and README output is
   # INTERNAL_REPOSITORY_URL in the Makefile, not part of the startup status.
 
+# Pin the currently published AI Secure Coding Baseline explicitly instead of
+# inheriting the older baseline bundled with the pinned appsec-advisor core.
+# `make baseline-check` reports when the document publishes a newer id.
+baseline:
+  enabled: true
+  id: aisec-0.1.7
+  name: AI Secure Coding Baseline
+  url: https://raw.githubusercontent.com/appsec-foundry/ai-secure-coding-baseline/main/secure-coding-baseline.md
+
 compatibility:
   core: ">=0.6 <0.7"
 
