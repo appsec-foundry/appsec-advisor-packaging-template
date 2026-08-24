@@ -8,12 +8,13 @@ endif
 APPSEC_ADVISOR_DEST ?= upstream/appsec-advisor
 APPSEC_ADVISOR_SOURCE ?= $(APPSEC_ADVISOR_DEST)
 INTERNAL_NAME ?= acme-appsec
-# Version is derived by scripts/package-local.sh as <upstream>+<org-id>.<org-rev>
-# (e.g. 0.6.0-beta.1+acme.1). Bump ORG_REV for org-only changes (org-profile/,
-# org-skills/, package-policy.yaml); it resets to 1 whenever
-# APPSEC_ADVISOR_REF moves. Set VERSION to override the whole string.
-ORG_REV ?= 1
+# Organization-owned version shown in the plugin banner, help, manifest and
+# archive name. Bump it when publishing a new internal package release.
+PACKAGE_VERSION ?= 0.1.0
+# Backward-compatible one-off override; normally leave this empty and edit
+# PACKAGE_VERSION instead.
 VERSION ?=
+export PACKAGE_VERSION VERSION
 LOCAL_MARKETPLACE_NAME ?= $(INTERNAL_NAME)-local
 LOCAL_MARKETPLACE_SCOPE ?= local
 APPSEC_ADVISOR_TEMPLATE_URL ?= https://github.com/appsec-foundry/appsec-advisor-packaging-template.git
@@ -67,10 +68,10 @@ validate: $(FETCH_TARGET) ## Validate org-profile.yaml against the upstream sche
 	python3 "$(APPSEC_ADVISOR_SOURCE)/scripts/validate_org_profile.py" org-profile/org-profile.yaml
 
 package: $(FETCH_TARGET) ## Fetch + build + smoke-test the plugin into build/<name>/
-	APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" APPSEC_ADVISOR_SOURCE="$(APPSEC_ADVISOR_SOURCE)" INTERNAL_NAME="$(INTERNAL_NAME)" ORG_REV="$(ORG_REV)" VERSION="$(VERSION)" scripts/package-local.sh
+	APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" APPSEC_ADVISOR_SOURCE="$(APPSEC_ADVISOR_SOURCE)" INTERNAL_NAME="$(INTERNAL_NAME)" scripts/package-local.sh
 
 package-archive: $(FETCH_TARGET) ## Like package, plus a dist/*.tgz + .sha256 archive
-	APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" APPSEC_ADVISOR_SOURCE="$(APPSEC_ADVISOR_SOURCE)" INTERNAL_NAME="$(INTERNAL_NAME)" ORG_REV="$(ORG_REV)" VERSION="$(VERSION)" ARCHIVE=1 scripts/package-local.sh
+	APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" APPSEC_ADVISOR_SOURCE="$(APPSEC_ADVISOR_SOURCE)" INTERNAL_NAME="$(INTERNAL_NAME)" ARCHIVE=1 scripts/package-local.sh
 
 local-marketplace: package ## Prepare build/ as a local Claude Code marketplace
 	python3 scripts/prepare-local-marketplace.py --build-root build --plugin-name "$(INTERNAL_NAME)" --marketplace-name "$(LOCAL_MARKETPLACE_NAME)"

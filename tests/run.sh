@@ -28,12 +28,14 @@ REINIT="$ROOT/scripts/reinit-org-repo.sh"
 GUARD_TEST="$HERE/test_guard.py"
 MARKETPLACE_TEST="$HERE/test_local_marketplace.py"
 PACKAGED_HELP_TEST="$HERE/test_packaged_help.py"
+PACKAGE_VERSION_TEST="$HERE/test_finalize_package_version.py"
 
 # -B: importing guard.py must not leave __pycache__ in org-profile/hooks/,
 # which the packager would copy and the smoke test rejects.
 /usr/bin/python3 -B "$GUARD_TEST"
 /usr/bin/python3 -B "$MARKETPLACE_TEST"
 /usr/bin/python3 -B "$PACKAGED_HELP_TEST"
+/usr/bin/python3 -B "$PACKAGE_VERSION_TEST"
 
 COV="$(mktemp)"
 WORKROOT="$(mktemp -d)"
@@ -46,11 +48,26 @@ fail() { FAIL=$((FAIL + 1)); printf '  FAIL  %s  (%s)\n' "$1" "$2"; }
 assert_rc() { if [ "$2" = "$3" ]; then pass "$1"; else fail "$1" "rc=$3 want $2"; fi; }
 newdir() { mktemp -d "$WORKROOT/d.XXXXXX"; }
 mkfake() { # a minimal appsec-advisor checkout
-  mkdir -p "$1/scripts" "$1/skills"
+  mkdir -p "$1/.claude-plugin" "$1/scripts" "$1/skills"
+  printf '%s\n' '{"name":"appsec-advisor","version":"0.6.0-beta.1"}' \
+    >"$1/.claude-plugin/plugin.json"
   local f
-  for f in package_internal_plugin smoke_test_package validate_org_profile; do
+  for f in package_internal_plugin smoke_test_package; do
     printf '# stub\n' >"$1/scripts/$f.py"
   done
+  printf '%s\n' \
+    'import json' \
+    'from pathlib import Path' \
+    'PLUGIN_ROOT = Path(__file__).resolve().parent.parent' \
+    'def _read_plugin_version() -> str:' \
+    '    meta = PLUGIN_ROOT / ".claude-plugin" / "plugin.json"' \
+    '    if not meta.exists():' \
+    '        return "0.0.0"' \
+    '    try:' \
+    '        return json.loads(meta.read_text()).get("version", "0.0.0")' \
+    '    except (json.JSONDecodeError, OSError):' \
+    '        return "0.0.0"' \
+    >"$1/scripts/validate_org_profile.py"
 }
 
 # ── fetch-upstream.sh ────────────────────────────────────────────────────────
@@ -128,11 +145,21 @@ mkfake "$d/src"
 (cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" ARCHIVE=1 INTERNAL_NAME=acme-appsec \
   timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
 rc=$?
-if [ "$rc" = 0 ] && [ -f "$d/dist/acme-appsec-"*.tgz ] && \
-   tar -xOf "$d/dist/acme-appsec-"*.tgz acme-appsec/skills/help/SKILL.md | \
+if [ "$rc" = 0 ] && [ -f "$d/dist/acme-appsec-0.1.0.tgz" ] && \
+   tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/.claude-plugin/plugin.json | \
+     grep -Fq '"appsec_advisor_core_version": "0.6.0-beta.1"' && \
+   tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/skills/help/SKILL.md | \
+     grep -Fq 'acme-appsec 0.1.0' && \
+   tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/skills/help/SKILL.md | \
      grep -Fq '/acme-appsec:create-threat-model'; then
-  pass "package: ARCHIVE=1 contains generated help"
-else fail "package: ARCHIVE=1 contains generated help" "rc=$rc"; fi
+  pass "package: organization version is used in archive and generated help"
+else fail "package: organization version is used in archive and generated help" "rc=$rc"; fi
+
+d="$(newdir)"
+mkfake "$d/src"
+(cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" PACKAGE_VERSION=01.2.3 \
+  INTERNAL_NAME=acme-appsec timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
+assert_rc "package: invalid organization version is rejected" 2 "$?"
 
 d="$(newdir)"
 mkfake "$d/src"
@@ -203,7 +230,8 @@ else fail "package: a leftover org-mcp.json no longer overwrites the build" "rc=
 
 # ── init-org-repo.sh ─────────────────────────────────────────────────────────
 echo "--- init-org-repo.sh ---"
-# answers order: org-name, org-id(default), plugin(default), owner(default),
+# answers order: org-name, org-id(default), plugin(default), package-version,
+#                owner(default),
 #                target-dir, demo(y/n), baseline(y/n),
 #                [continue? when dir exists], [build(y/n)]
 
@@ -214,7 +242,7 @@ else fail "policy: session banner is included" "missing hook id"; fi
 # demo=yes; leading empty answer exercises the "(required)" retry on org-name.
 d="$(newdir)"
 tgt="$d/out"
-printf '\nTest Org\n\n\n\n%s\ny\n\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
+printf '\nTest Org\n\n\n\n\n%s\ny\n\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
 rc=$?
 if [ "$rc" = 0 ] && [ -f "$tgt/org-profile/requirements.yaml" ] && [ -f "$tgt/org-skills/README.md" ]; then
@@ -225,7 +253,7 @@ else fail "init: demo=yes" "rc=$rc"; fi
 # profile setting, while accepting it leaves the plugin's bundled default active.
 d="$(newdir)"
 tgt="$d/out"
-printf 'Test Org\n\n\n\n%s\nn\nn\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
+printf 'Test Org\n\n\n\n\n%s\nn\nn\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
 rc=$?
 if [ "$rc" = 0 ] && grep -Fqx '  enabled: false' "$tgt/org-profile/org-profile.yaml"; then
@@ -234,7 +262,7 @@ else fail "init: baseline=no" "rc=$rc"; fi
 
 d="$(newdir)"
 tgt="$d/out"
-printf 'Test Org\n\n\n\n%s\nn\n\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
+printf 'Test Org\n\n\n\n\n%s\nn\n\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
 rc=$?
 if [ "$rc" = 0 ] && [ ! -f "$tgt/org-profile/requirements.yaml" ]; then
@@ -245,7 +273,7 @@ else fail "init: demo=no" "rc=$rc"; fi
 # Preserve the display name while deriving an ASCII-safe technical id.
 d="$(newdir)"
 tgt="$d/out"
-printf 'Prüf+Øvelse+Æble+Ångström\n\n\n\n%s\nn\n\n' "$tgt" | \
+printf 'Prüf+Øvelse+Æble+Ångström\n\n\n\n\n%s\nn\n\n' "$tgt" | \
   (cd "$ROOT" && env LC_ALL=C timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
 rc=$?
@@ -268,7 +296,7 @@ tgt="$d/out"
 {
   printf 'Pr\303uef Org\n'
   printf 'Prüf: Øvelse # Lab\n'
-  printf 'pol\n\n\n%s\nn\n\nn\n' "$tgt"
+  printf 'pol\n\n01.2.3\n1.2.3-internal.1\n\n%s\nn\n\nn\n' "$tgt"
 } | (cd "$ROOT" && env LC_ALL=C timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
 rc=$?
@@ -276,9 +304,10 @@ if [ "$rc" = 0 ] && \
    /usr/bin/python3 -c 'from pathlib import Path; Path(__import__("sys").argv[1]).read_text(encoding="utf-8")' \
      "$tgt/org-profile/org-profile.yaml" && \
    grep -Fqx '  name: "Prüf: Øvelse # Lab"' "$tgt/org-profile/org-profile.yaml" && \
-   grep -Fqx '  owner: "POL AppSec Team"' "$tgt/org-profile/org-profile.yaml"; then
-  pass "init: invalid UTF-8 is retried and YAML metacharacters are quoted"
-else fail "init: invalid UTF-8 is retried and YAML metacharacters are quoted" "rc=$rc"; fi
+   grep -Fqx '  owner: "POL AppSec Team"' "$tgt/org-profile/org-profile.yaml" && \
+   grep -Fqx 'PACKAGE_VERSION ?= 1.2.3-internal.1' "$tgt/Makefile"; then
+  pass "init: invalid UTF-8 and package version are retried safely"
+else fail "init: invalid UTF-8 and package version are retried safely" "rc=$rc"; fi
 
 if grep -Fq '`poaa-appsec` is the Claude Code security plugin' "$unicode_tgt/README.md" && \
    grep -Fq 'Prüf+Øvelse+Æble+Ångström' "$unicode_tgt/README.md" && \
@@ -294,11 +323,18 @@ src="$d/upstream-source"
 mkfake "$src"
 tgt="$d/out"
 build_log="$d/build-success.log"
-printf 'Test Org\n\n\n\n%s\nn\n\ny\n' "$tgt" | \
+printf 'Test Org\n\n\n2.3.0-internal.1\n\n%s\nn\n\ny\n' "$tgt" | \
   (cd "$ROOT" && env APPSEC_ADVISOR_SOURCE="$src" timeout 20 bash -x "$INIT") \
   >"$build_log" 2>>"$COV"
 rc=$?
 if [ "$rc" = 0 ] && [ -d "$tgt/.git" ] && [ -d "$tgt/build/to-appsec" ] && \
+   grep -Fqx 'PACKAGE_VERSION ?= 2.3.0-internal.1' "$tgt/Makefile" && \
+   grep -Fq "vars.PACKAGE_VERSION || '2.3.0-internal.1'" \
+     "$tgt/ci-templates/github/workflows/package.yml" && \
+   grep -Fqx '  PACKAGE_VERSION: "2.3.0-internal.1"' \
+     "$tgt/ci-templates/gitlab-ci.yml" && \
+   grep -Fq '"version": "2.3.0-internal.1"' "$tgt/build/to-appsec/.claude-plugin/plugin.json" && \
+   grep -Fq 'to-appsec 2.3.0-internal.1' "$tgt/build/to-appsec/skills/help/SKILL.md" && \
    grep -Fq '  4. Load the plugin' "$build_log" && \
    ! grep -Fq '  4. Build the plugin' "$build_log" && \
    ! grep -Fq '  4. Rebuild' "$build_log"; then
@@ -310,7 +346,7 @@ else fail "init: accepted initial build creates plugin" "rc=$rc"; fi
 d="$(newdir)"
 tgt="$d/out"
 build_log="$d/build-failure.log"
-printf 'Test Org\n\n\n\n%s\nn\n\ny\n' "$tgt" | \
+printf 'Test Org\n\n\n\n\n%s\nn\n\ny\n' "$tgt" | \
   (cd "$ROOT" && env APPSEC_ADVISOR_SOURCE="$d/missing-upstream" \
     timeout 20 bash -x "$INIT") \
   >"$build_log" 2>>"$COV"
@@ -326,15 +362,17 @@ else fail "init: failed initial build preserves repo" "rc=$rc"; fi
 d="$(newdir)"
 tgt="$d/out"
 build_log="$d/build-skipped.log"
-printf 'Test Org\n\n\n\n%s\nn\n\nn\n' "$tgt" | \
+printf 'Test Org\n\n\n\n\n%s\nn\n\nn\n' "$tgt" | \
   (cd "$ROOT" && timeout 20 bash -x "$INIT") >"$build_log" 2>>"$COV"
 rc=$?
 if [ "$rc" = 0 ] && \
    grep -Fq '  4. Build the plugin: make package' "$build_log" && \
    grep -Fq '  5. Load the plugin' "$build_log" && \
-   grep -Fq 'Optional: customize the available skills' "$build_log" && \
+   grep -Fq 'Further steps (optional):' "$build_log" && \
+   grep -Fq '  - Customize the available skills:' "$build_log" && \
    grep -Fq 'add organization skills or restrict bundled skills; see README.md#customize-skills' "$build_log" && \
-   grep -Fq 'Optional: distribute the tested plugin through an internal Claude Code Marketplace' "$build_log" && \
+   grep -Fq '  - Distribute the tested plugin through an internal Claude Code Marketplace' "$build_log" && \
+   ! grep -Eq '^  [0-9]+\. Optional:' "$build_log" && \
    ! grep -Fq 'Set up CI' "$build_log"; then
   pass "init: skipped build remains a next step"
 else fail "init: skipped build remains a next step" "rc=$rc"; fi
@@ -345,6 +383,8 @@ self_contained_tgt="$tgt"
 profile_before="$(cksum "$self_contained_tgt/org-profile/org-profile.yaml")"
 readme_before="$(cksum "$self_contained_tgt/README.md")"
 printf 'stale infrastructure\n' >"$self_contained_tgt/scripts/package-local.sh"
+sed -i 's/^PACKAGE_VERSION ?= 0.1.0$/PACKAGE_VERSION ?= 2.4.0/' \
+  "$self_contained_tgt/Makefile"
 sed -i '/^      - help$/d; /^      - session-banner$/d' \
   "$self_contained_tgt/org-profile/package-policy.yaml"
 printf '\n# retained organization policy marker\n' >> \
@@ -358,6 +398,7 @@ if [ "$rc" = 0 ] && \
    [ "$profile_before" = "$(cksum "$self_contained_tgt/org-profile/org-profile.yaml")" ] && \
    [ "$readme_before" = "$(cksum "$self_contained_tgt/README.md")" ] && \
    grep -Fqx 'INTERNAL_NAME ?= to-appsec' "$self_contained_tgt/Makefile" && \
+   grep -Fqx 'PACKAGE_VERSION ?= 2.4.0' "$self_contained_tgt/Makefile" && \
    grep -Fq 'render-packaged-help.py' "$self_contained_tgt/scripts/package-local.sh" && \
    [ "$(grep -Fxc '      - help' "$self_contained_tgt/org-profile/package-policy.yaml")" = 1 ] && \
    [ "$(grep -Fxc '      - session-banner' "$self_contained_tgt/org-profile/package-policy.yaml")" = 1 ] && \
@@ -387,6 +428,21 @@ if [ "$rc" = 0 ] && \
    grep -Fq 'enabled help, session-banner' "$exclude_log"; then
   pass "reinit: required entries are enabled in an exclude policy"
 else fail "reinit: required entries are enabled in an exclude policy" "rc=$rc"; fi
+
+# A reinit wrapper produced before PACKAGE_VERSION existed does not pass that
+# setting. The newer initializer must accept it and establish the new default.
+d="$(newdir)"
+tgt="$d/out"
+mkdir -p "$tgt"
+(cd "$ROOT" && env APPSEC_REINIT_TARGET="$tgt" \
+  APPSEC_REINIT_ORG_NAME='Legacy Test Org' APPSEC_REINIT_ORG_ID=lto \
+  APPSEC_REINIT_PLUGIN_NAME=lto-appsec APPSEC_REINIT_OWNER='LTO AppSec Team' \
+  APPSEC_REINIT_DEMO=false APPSEC_REINIT_BASELINE=true APPSEC_REINIT_BUILD=0 \
+  timeout 20 bash -x "$INIT") >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && grep -Fqx 'PACKAGE_VERSION ?= 0.1.0' "$tgt/Makefile"; then
+  pass "init: legacy reinit wrapper receives the organization version default"
+else fail "init: legacy reinit wrapper receives the organization version default" "rc=$rc"; fi
 
 d="$(newdir)"
 (cd "$d" && timeout 20 bash -x "$REINIT") >/dev/null 2>>"$COV"
@@ -419,7 +475,7 @@ tgt="$d/out"
 mkdir -p "$tgt/org-profile"
 printf 'name: Pr\303uef\n' >"$tgt/org-profile/org-profile.yaml"
 repair_log="$d/repair.log"
-printf 'Test Org\n\n\n\n%s\nn\n\ny\ny\nn\n' "$tgt" | \
+printf 'Test Org\n\n\n\n\n%s\nn\n\ny\ny\nn\n' "$tgt" | \
   (cd "$ROOT" && timeout 20 bash -x "$INIT") >"$repair_log" 2>>"$COV"
 rc=$?
 if [ "$rc" = 0 ] && \
@@ -437,7 +493,7 @@ tgt="$d/out"
 mkdir -p "$tgt/org-profile"
 printf 'name: Pr\303uef\n' >"$tgt/org-profile/org-profile.yaml"
 invalid_before="$(cksum "$tgt/org-profile/org-profile.yaml")"
-printf 'Test Org\n\n\n\n%s\nn\n\ny\nn\n' "$tgt" | \
+printf 'Test Org\n\n\n\n\n%s\nn\n\ny\nn\n' "$tgt" | \
   (cd "$ROOT" && timeout 20 bash -x "$INIT") >/dev/null 2>>"$COV"
 rc=$?
 if [ "$rc" = 2 ] && \
@@ -455,7 +511,7 @@ mkdir -p "$tgt/org-profile" "$d/outside"
 printf 'name: Pr\303uef\n' >"$tgt/org-profile/org-profile.yaml"
 invalid_before="$(cksum "$tgt/org-profile/org-profile.yaml")"
 ln -s "$d/outside" "$tgt/.reinit-backups"
-printf 'Test Org\n\n\n\n%s\nn\n\ny\ny\n' "$tgt" | \
+printf 'Test Org\n\n\n\n\n%s\nn\n\ny\ny\n' "$tgt" | \
   (cd "$ROOT" && timeout 20 bash -x "$INIT") >/dev/null 2>>"$COV"
 rc=$?
 if [ "$rc" = 2 ] && \
@@ -486,7 +542,7 @@ else fail "init: scaffold is self-contained" "missing:$missing"; fi
 d="$(newdir)"
 tgt="$d/out"
 mkdir -p "$tgt"
-printf 'Test Org\n\n\n\n%s\nn\n\ny\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
+printf 'Test Org\n\n\n\n\n%s\nn\n\ny\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
 rc=$?
 if [ "$rc" = 0 ] && [ -d "$tgt/.git" ]; then
@@ -496,7 +552,7 @@ else fail "init: partial existing dir is initialized and completed" "rc=$rc"; fi
 d="$(newdir)"
 tgt="$d/out"
 mkdir -p "$tgt"
-printf 'Test Org\n\n\n\n%s\nn\n\nn\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
+printf 'Test Org\n\n\n\n\n%s\nn\n\nn\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
 assert_rc "init: existing dir, abort" 1 "$?"
 
@@ -518,7 +574,7 @@ mkdir -p "$lonely"
 cp "$INIT" "$lonely/init-org-repo.sh"
 d="$(newdir)"
 tgt="$d/out"
-printf '\nTest Org\n\n\n\n%s\ny\n\n' "$tgt" | \
+printf '\nTest Org\n\n\n\n\n%s\ny\n\n' "$tgt" | \
   (cd "$d" && env GITSTUB_CLONE_SRC="$clean" timeout 20 bash -x "$lonely/init-org-repo.sh") \
   >/dev/null 2>>"$COV"
 assert_rc "init: clone fallback" 0 "$?"
@@ -531,7 +587,7 @@ cp -r "$clean" "$legacy"
 rm "$legacy/scripts/prepare-local-marketplace.py"
 d="$(newdir)"
 tgt="$d/out"
-printf 'Test Org\n\n\n\n%s\nn\n\n' "$tgt" | \
+printf 'Test Org\n\n\n\n\n%s\nn\n\n' "$tgt" | \
   (cd "$d" && env GITSTUB_CLONE_SRC="$legacy" APPSEC_ADVISOR_TEMPLATE_REF=older-template \
     timeout 20 bash -x "$lonely/init-org-repo.sh") \
   >/dev/null 2>>"$COV"

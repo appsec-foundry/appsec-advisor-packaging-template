@@ -68,16 +68,22 @@ for line in lines:
 makefile = (root / "Makefile").read_text(encoding="utf-8")
 match = re.search(r"^INTERNAL_NAME\s*\?=\s*([a-z0-9][a-z0-9-]*)\s*$", makefile, re.MULTILINE)
 plugin_name = match.group(1) if match else ""
+match = re.search(r"^PACKAGE_VERSION\s*\?=\s*([^\s#]+)\s*$", makefile, re.MULTILINE)
+package_version = match.group(1) if match else ""
+if not package_version:
+    match = re.search(r"^VERSION\s*\?=\s*([^\s#]+)\s*$", makefile, re.MULTILINE)
+    package_version = match.group(1) if match else "0.1.0"
 values = [
     organization.get("name", ""),
     organization.get("id", ""),
     plugin_name,
+    package_version,
     organization.get("owner", ""),
     "true" if (root / "org-profile" / "requirements.yaml").is_file() else "false",
     "true" if baseline_enabled else "false",
 ]
-if any(not value for value in values[:4]):
-    print("ERROR: cannot recover organization name/id/owner or INTERNAL_NAME from this repository", file=sys.stderr)
+if any(not value for value in values[:5]):
+    print("ERROR: cannot recover organization name/id/owner, INTERNAL_NAME or PACKAGE_VERSION from this repository", file=sys.stderr)
     raise SystemExit(2)
 if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*", values[1]):
     print("ERROR: existing organization id is not safe for reinitialization", file=sys.stderr)
@@ -87,7 +93,7 @@ for value in values:
 PY
 )
 
-if [ "${#SETTINGS[@]}" -ne 6 ]; then
+if [ "${#SETTINGS[@]}" -ne 7 ]; then
   echo "ERROR: failed to read existing packaging settings" >&2
   exit 2
 fi
@@ -108,8 +114,9 @@ APPSEC_REINIT_TARGET="${REPO_ROOT}" \
 APPSEC_REINIT_ORG_NAME="${SETTINGS[0]}" \
 APPSEC_REINIT_ORG_ID="${SETTINGS[1]}" \
 APPSEC_REINIT_PLUGIN_NAME="${SETTINGS[2]}" \
-APPSEC_REINIT_OWNER="${SETTINGS[3]}" \
-APPSEC_REINIT_DEMO="${SETTINGS[4]}" \
-APPSEC_REINIT_BASELINE="${SETTINGS[5]}" \
+APPSEC_REINIT_PACKAGE_VERSION="${SETTINGS[3]}" \
+APPSEC_REINIT_OWNER="${SETTINGS[4]}" \
+APPSEC_REINIT_DEMO="${SETTINGS[5]}" \
+APPSEC_REINIT_BASELINE="${SETTINGS[6]}" \
 APPSEC_REINIT_BUILD="${REINIT_BUILD}" \
   "${TEMPLATE_SOURCE}/scripts/init-org-repo.sh"

@@ -122,29 +122,28 @@ make local-marketplace                # build + generate a local marketplace cat
 make install-local                    # register that catalog and install the plugin at local scope
 make reinit                           # reapply template main with existing settings, then package
 REINIT_BUILD=0 make reinit            # reapply template without packaging afterwards
-ARCHIVE=1 ORG_REV=3 make package-archive  # produce .tgz + .sha256
+ARCHIVE=1 PACKAGE_VERSION=1.2.0 make package-archive # produce .tgz + .sha256
 ```
 
 ### Package versioning
 
-`package-local.sh` derives the version from the upstream origin plus an
-organization revision counter:
+`PACKAGE_VERSION` is the organization-owned plugin version. It defaults to
+`0.1.0` and appears in the session banner, packaged help, `plugin.json`, and
+archive filename:
 
 ```
-<upstream-version>+<org-id>.<org-rev>     e.g. 0.6.0-beta.1+acme.3
+Acme AppSec Advisor 1.2.0 · /acme-appsec:help
 ```
 
-The left half is the tag of the upstream checkout (`git describe --tags
---exact-match`, `v` stripped). On a branch tip it is derived from the nearest
-tag as `<tag>-dev.g<shortsha>`; only a branch with no reachable tag falls back
-to `0.0.0-<ref>.g<shortsha>`. The right half is SemVer build metadata: `ORG_ID` (default: the first segment of
-`INTERNAL_NAME`) and `ORG_REV` (default `1`).
-
-Bump rule: increment `ORG_REV` when only organization content changes
-(`org-profile/`, `org-skills/`, `package-policy.yaml`); when
-`APPSEC_ADVISOR_REF` moves, the left half changes and `ORG_REV` restarts at 1.
-In CI the pipeline sets `ORG_REV` to the repository tag on a tag pipeline, else
-to the commit SHA. An explicitly set `VERSION` overrides the whole string.
+Bump `PACKAGE_VERSION` when publishing a new internal package release. It must
+be valid SemVer, for example `1.2.0` or `1.2.0-internal.1`. The upstream release
+remains independently pinned by `APPSEC_ADVISOR_REF`; changing upstream no
+longer changes the organization package version. In CI, a packaging-repository
+tag such as `v1.2.0` becomes the package version. An explicitly set `VERSION`
+still overrides `PACKAGE_VERSION` for a one-off backward-compatible build.
+The finished manifest records the pinned implementation separately as
+`appsec_advisor_core_version`, so `compatibility.core` continues to validate the
+upstream core rather than the organization release number.
 
 ### Following upstream: release or branch
 
@@ -190,5 +189,5 @@ organization's central Marketplace.
 | `APPSEC_ADVISOR_URL` | upstream GitHub | Upstream repository or an internal fork |
 | `APPSEC_ADVISOR_REF` | `v0.6.0-beta.1` | Pinned upstream release |
 | `INTERNAL_NAME` | `acme-appsec` | Plugin name and command namespace |
-| `ORG_REV` | repository tag or commit SHA | Organization revision in the derived version |
-| `VERSION` | derived | Overrides the derived version entirely |
+| `PACKAGE_VERSION` | `0.1.0` | Organization-owned plugin release; a `v*` packaging tag overrides it in CI |
+| `VERSION` | empty | Optional one-off override of `PACKAGE_VERSION` |

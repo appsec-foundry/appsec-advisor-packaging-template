@@ -14,6 +14,7 @@ permissions:
 
 env:
   INTERNAL_NAME: ${{ vars.INTERNAL_NAME || 'acme-appsec' }}
+  PACKAGE_VERSION: ${{ vars.PACKAGE_VERSION || '0.1.0' }}
   APPSEC_ADVISOR_URL: ${{ vars.APPSEC_ADVISOR_URL || 'https://github.com/appsec-foundry/appsec-advisor.git' }}
   APPSEC_ADVISOR_REF: ${{ vars.APPSEC_ADVISOR_REF }}
   PYTHONDONTWRITEBYTECODE: "1"
@@ -56,30 +57,28 @@ jobs:
       - name: Install build dependencies
         run: pip install --quiet pyyaml jsonschema packaging
 
-      # The package version is derived by package-local.sh as
-      # <upstream>+<org-id>.<org-rev>. ORG_REV identifies the org-side revision:
-      # the repo tag on tag builds, else the commit. A VERSION repository
-      # variable overrides the whole string.
-      - name: Resolve org revision
-        id: rev
+      # A v* packaging-repository tag becomes the organization package version.
+      # Branch builds use PACKAGE_VERSION; VERSION remains a one-off override.
+      - name: Resolve package version
+        id: version
         run: |
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            echo "org_rev=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            echo "package_version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           else
-            echo "org_rev=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+            echo "package_version=${PACKAGE_VERSION}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Package and smoke-test plugin
         env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.package_version }}
           VERSION: ${{ vars.VERSION }}
-          ORG_REV: ${{ steps.rev.outputs.org_rev }}
           ARCHIVE: "1"
         run: make package-archive
 
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.INTERNAL_NAME }}-${{ steps.rev.outputs.org_rev }}
+          name: ${{ env.INTERNAL_NAME }}-${{ steps.version.outputs.package_version }}
           path: |
             dist/${{ env.INTERNAL_NAME }}-*.tgz
             dist/${{ env.INTERNAL_NAME }}-*.tgz.sha256

@@ -42,6 +42,42 @@ ask() {
   done
 }
 
+valid_package_version() {
+  PYTHONUTF8=1 python3 - "$1" <<'PY'
+import re
+import sys
+
+version = sys.argv[1]
+identifier = r"[0-9A-Za-z-]+"
+pattern = re.compile(
+    rf"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
+    rf"(?:-({identifier}(?:\.{identifier})*))?"
+    rf"(?:\+({identifier}(?:\.{identifier})*))?$"
+)
+match = pattern.fullmatch(version)
+if not match:
+    raise SystemExit(2)
+prerelease = match.group(4)
+if prerelease and any(
+    part.isdigit() and len(part) > 1 and part.startswith("0")
+    for part in prerelease.split(".")
+):
+    raise SystemExit(2)
+PY
+}
+
+ask_package_version() {
+  local version
+  while true; do
+    version="$(ask "Plugin package version (shown in the banner)" "0.1.0")"
+    if valid_package_version "${version}"; then
+      printf '%s\n' "${version}"
+      return 0
+    fi
+    echo "  (enter a valid SemVer such as 1.2.0 or 1.2.0-internal.1)" >&2
+  done
+}
+
 initials() {
   PYTHONUTF8=1 python3 - "$1" <<'PY'
 import sys
@@ -242,6 +278,13 @@ if [ -n "${APPSEC_REINIT_TARGET:-}" ]; then
   ORG_NAME="$(printf '%s' "${APPSEC_REINIT_ORG_NAME:?}" | normalize_utf8)"
   ORG_ID="${APPSEC_REINIT_ORG_ID:?}"
   PLUGIN_NAME="${APPSEC_REINIT_PLUGIN_NAME:?}"
+  # Reinit wrappers generated before organization-owned versions existed do
+  # not pass this value. Give those existing repositories the new default.
+  PACKAGE_VERSION="${APPSEC_REINIT_PACKAGE_VERSION:-0.1.0}"
+  valid_package_version "${PACKAGE_VERSION}" || {
+    echo "ERROR: existing plugin package version is not valid SemVer: ${PACKAGE_VERSION}" >&2
+    exit 2
+  }
   OWNER="$(printf '%s' "${APPSEC_REINIT_OWNER:?}" | normalize_utf8)"
   DEMO_CONTENT="${APPSEC_REINIT_DEMO:?}"
   BASELINE_ENABLED="${APPSEC_REINIT_BASELINE:?}"
@@ -251,6 +294,7 @@ else
   ORG_ID=$(initials "${ORG_NAME}")
   ORG_ID=$(ask "Organization id (short lowercase abbreviation, e.g. 'acme', 'hl' — used in plugin name)" "${ORG_ID}")
   PLUGIN_NAME=$(ask "Plugin name (Claude Code command prefix)" "${ORG_ID}-appsec")
+  PACKAGE_VERSION=$(ask_package_version)
   OWNER_PREFIX="${ORG_ID^^}"
   OWNER=$(ask "Team owner (e.g. AppSec Team)" "${OWNER_PREFIX} AppSec Team")
   TARGET_DIR=$(ask "Target directory" "./${ORG_ID}-appsec-advisor")
@@ -335,7 +379,11 @@ if [ -f "${TEMPLATE_BASE}/scripts/prepare-local-marketplace.py" ]; then
      "${TARGET_DIR}/scripts/prepare-local-marketplace.py"
   chmod +x "${TARGET_DIR}/scripts/prepare-local-marketplace.py"
 fi
-for helper in render-packaged-help.py archive-built-plugin.py reinit-org-repo.sh; do
+for helper in \
+  render-packaged-help.py \
+  archive-built-plugin.py \
+  finalize-package-version.py \
+  reinit-org-repo.sh; do
   if [ -f "${TEMPLATE_BASE}/scripts/${helper}" ]; then
     helper_tmp="${TARGET_DIR}/scripts/.${helper}.new"
     cp "${TEMPLATE_BASE}/scripts/${helper}" "${helper_tmp}"
@@ -376,7 +424,10 @@ fi
 # ── Render Makefile ───────────────────────────────────────────────────────────
 
 E_PLUGIN=$(sed_escape "${PLUGIN_NAME}")
-sed "s/acme-appsec/${E_PLUGIN}/g" \
+E_PACKAGE_VERSION=$(sed_escape "${PACKAGE_VERSION}")
+sed \
+  -e "s/acme-appsec/${E_PLUGIN}/g" \
+  -e "s/^PACKAGE_VERSION ?= 0.1.0$/PACKAGE_VERSION ?= ${E_PACKAGE_VERSION}/" \
   "${TEMPLATE_BASE}/Makefile" > "${TARGET_DIR}/Makefile"
 
 # ── Render org-profile.yaml ───────────────────────────────────────────────────
@@ -513,6 +564,7 @@ chmod +x "${TARGET_DIR}/scripts/package-local.sh"
 sed -i \
   -e "s/acme-appsec/${E_PLUGIN}/g" \
   -e "s/Acme Corp/${E_ORG_NAME}/g" \
+  -e "s/0\.1\.0/${E_PACKAGE_VERSION}/g" \
   "${TARGET_DIR}/ci-templates/github/workflows/package.yml" \
   "${TARGET_DIR}/ci-templates/gitlab-ci.yml"
 
@@ -609,6 +661,8 @@ fi
 echo "  ${LOAD_STEP}. Load the plugin from any project you want to analyze:"
 echo "       cd /path/to/your/project"
 echo "       claude --plugin-dir ${PACKAGING_ROOT}/build/${PLUGIN_NAME}"
-echo "  $((LOAD_STEP + 1)). Optional: customize the available skills:"
+echo ""
+echo "Further steps (optional):"
+echo "  - Customize the available skills:"
 echo "       add organization skills or restrict bundled skills; see README.md#customize-skills"
-echo "  $((LOAD_STEP + 2)). Optional: distribute the tested plugin through an internal Claude Code Marketplace"
+echo "  - Distribute the tested plugin through an internal Claude Code Marketplace"

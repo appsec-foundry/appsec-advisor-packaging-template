@@ -17,7 +17,8 @@ workflow.
 **1. Create your packaging repo**
 
 Run the init script — it asks for your org name and plugin name, creates a
-ready-to-use git repo, and offers to build the plugin immediately:
+package version, creates a ready-to-use git repo, and offers to build the plugin
+immediately:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh)
@@ -32,6 +33,10 @@ Open `org-profile/org-profile.yaml` in your new repo. If you used the init scrip
 - Point `requirements.source.requirements_yaml_url` to your internal requirements catalog, or remove that block if you don't have one yet.
 
 If you used the GitHub Template instead, also replace `organization.id`, `.name`, `.profile_version`, and `.owner` with your values.
+
+Set `PACKAGE_VERSION` in the generated `Makefile` to your internal plugin
+release. It defaults to `0.1.0` and is independent of `APPSEC_ADVISOR_REF`,
+which continues to pin the upstream implementation.
 
 **3. Set up CI for your platform** — run one of:
 
@@ -78,6 +83,7 @@ Beyond the quick start, these files are yours to edit:
 
 | File | Purpose |
 |---|---|
+| `Makefile` → `PACKAGE_VERSION` | Organization-owned plugin version shown to users |
 | `org-profile/org-profile.yaml` | Presets, banner branding, cost guardrails, requirements source, output formats |
 | `org-profile/context/organization.md` | Short org context injected into analyses (max 50 KB) |
 | `org-profile/actors/*.yaml` | Custom threat actors for threat models — edit or delete |
@@ -143,7 +149,7 @@ APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package
 APPSEC_ADVISOR_REF=main make package
 
 # Build a distributable archive (.tgz + .sha256)
-ARCHIVE=1 VERSION=1.0.0 make package-archive
+ARCHIVE=1 PACKAGE_VERSION=1.0.0 make package-archive
 
 # Use an existing local upstream checkout
 APPSEC_ADVISOR_SOURCE=/path/to/local/appsec-advisor make package
@@ -170,7 +176,8 @@ Run `make ci-github` or `make ci-gitlab` to install the CI pipeline (see Quick S
 | `APPSEC_ADVISOR_URL` | upstream GitHub | Upstream repo or internal fork |
 | `APPSEC_ADVISOR_REF` | `v0.6.0-beta.1` | Pinned upstream release; explicitly set it to override |
 | `INTERNAL_NAME` | `acme-appsec` | Plugin name and Claude Code command namespace |
-| `VERSION` | derived from git tag or commit SHA | Version of the produced package |
+| `PACKAGE_VERSION` | `0.1.0` | Organization-owned version shown in the banner, help, manifest and archive name |
+| `VERSION` | empty | Optional one-off override of `PACKAGE_VERSION` |
 
 ## Related Projects
 

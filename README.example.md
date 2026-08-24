@@ -132,7 +132,11 @@ and [organization profile reference](https://github.com/appsec-foundry/appsec-ad
 for the full configuration syntax.
 
 The plugin is written to `build/acme-appsec/` and smoke-tested as part of the
-build. Before publishing a release, run:
+build. `PACKAGE_VERSION` in the `Makefile` is the internal release number shown
+in the session banner and packaged help; it is intentionally independent of the
+upstream version selected by `APPSEC_ADVISOR_REF`. The package retains that
+upstream core version separately for compatibility checks. Before publishing a
+release, run:
 
 ```bash
 make release-check
@@ -142,6 +146,7 @@ Configuration owned by the Acme AppSec Team:
 
 | Path | Purpose |
 |---|---|
+| `Makefile` → `PACKAGE_VERSION` | Internal plugin release shown in the banner, help and package filename |
 | `org-profile/org-profile.yaml` | Presets, requirements, guardrails, organization hooks, and optional MCP servers |
 | `org-profile/context/organization.md` | Organization context supplied to analyses as untrusted reference data |
 | `org-profile/actors/*.yaml` | Threat actors specific to Acme Corp |

@@ -5,9 +5,8 @@ SOURCE="${APPSEC_ADVISOR_SOURCE:-}"
 DEST="${APPSEC_ADVISOR_DEST:-upstream/appsec-advisor}"
 UPSTREAM_URL="${APPSEC_ADVISOR_URL:-https://github.com/appsec-foundry/appsec-advisor.git}"
 INTERNAL_NAME="${INTERNAL_NAME:-acme-appsec}"
+PACKAGE_VERSION="${PACKAGE_VERSION:-0.1.0}"
 VERSION="${VERSION:-}"
-ORG_ID="${ORG_ID:-${INTERNAL_NAME%%-*}}"
-ORG_REV="${ORG_REV:-1}"
 ARCHIVE="${ARCHIVE:-0}"
 DESCRIPTION="${DESCRIPTION:-Internal packaged build of appsec-advisor with Acme Corp defaults.}"
 ORG_SKILLS_DIR="${ORG_SKILLS_DIR:-org-skills}"
@@ -71,33 +70,49 @@ overlay_org_skills() {
   SOURCE="${TEMP_SOURCE}"
 }
 
-# Derive the package version from the upstream checkout plus an org revision:
-#   <upstream-version>+<org-id>.<org-rev>     e.g. 0.6.0-beta.1+acme.3
-# The left half is SemVer build metadata's only job here: keep the lineage of a
-# build visible, since package-surface.json records upstream_url but not the ref.
-# Off a branch tip, derive a development version from its nearest release tag.
-# This retains compatibility with the profile's supported core range.
-# An explicit VERSION always wins (CI override, one-off builds).
-semver_safe() {
-  printf '%s' "$1" | tr -c '0-9A-Za-z-' '-'
+validate_version() {
+  PYTHONUTF8=1 python3 - "$1" <<'PY'
+import re
+import sys
+
+version = sys.argv[1]
+identifier = r"[0-9A-Za-z-]+"
+pattern = re.compile(
+    rf"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
+    rf"(?:-({identifier}(?:\.{identifier})*))?"
+    rf"(?:\+({identifier}(?:\.{identifier})*))?$"
+)
+match = pattern.fullmatch(version)
+if match:
+    prerelease = match.group(4)
+    if prerelease and any(
+        part.isdigit() and len(part) > 1 and part.startswith("0")
+        for part in prerelease.split(".")
+    ):
+        raise SystemExit(2)
+    raise SystemExit(0)
+raise SystemExit(2)
+PY
 }
 
-derive_version() {
-  local source="$1"
-  local upstream base sha
-  upstream="$(git -C "${source}" describe --tags --exact-match 2>/dev/null || true)"
-  upstream="${upstream#v}"
-  if [ -z "${upstream}" ]; then
-    sha="$(git -C "${source}" rev-parse --short HEAD 2>/dev/null || true)"
-    base="$(git -C "${source}" describe --tags --abbrev=0 2>/dev/null || true)"
-    base="${base#v}"
-    if [ -n "${base}" ]; then
-      upstream="${base}-dev${sha:+.g${sha}}"
-    else
-      upstream="0.0.0-$(semver_safe "${APPSEC_ADVISOR_REF:-unknown}")${sha:+.g${sha}}"
-    fi
-  fi
-  printf '%s+%s.%s' "${upstream}" "$(semver_safe "${ORG_ID}")" "$(semver_safe "${ORG_REV}")"
+read_core_version() {
+  PYTHONUTF8=1 python3 - "$1/.claude-plugin/plugin.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    version = data.get("version")
+except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+    print(f"ERROR: cannot read upstream plugin version from {path}: {exc}", file=sys.stderr)
+    raise SystemExit(2)
+if not isinstance(version, str) or not version:
+    print(f"ERROR: upstream plugin manifest has no version: {path}", file=sys.stderr)
+    raise SystemExit(2)
+print(version)
+PY
 }
 
 # MCP servers are declared in org-profile.yaml under `mcp:` and written by the
@@ -117,9 +132,18 @@ if [ ! -f "${SOURCE}/scripts/package_internal_plugin.py" ]; then
 fi
 
 if [ -z "${VERSION}" ]; then
-  VERSION="$(derive_version "${SOURCE}")"
-  echo "==> Derived VERSION=${VERSION}"
+  VERSION="${PACKAGE_VERSION}"
 fi
+if ! validate_version "${VERSION}"; then
+  echo "ERROR: package version must be valid SemVer (for example 1.2.0 or 1.2.0-internal.1): ${VERSION}" >&2
+  exit 2
+fi
+CORE_VERSION="$(read_core_version "${SOURCE}")"
+if ! validate_version "${CORE_VERSION}"; then
+  echo "ERROR: upstream plugin version is not valid SemVer: ${CORE_VERSION}" >&2
+  exit 2
+fi
+echo "==> Package VERSION=${VERSION} (appsec-advisor core ${CORE_VERSION})"
 
 overlay_org_skills "${ORG_SKILLS_DIR}" "${SOURCE}"
 
@@ -137,11 +161,25 @@ python3 "${SOURCE}/scripts/package_internal_plugin.py" \
   --source "${SOURCE}" \
   --org-profile org-profile \
   --name "${INTERNAL_NAME}" \
-  --version "${VERSION}" \
+  --version "${CORE_VERSION}" \
   --description "${DESCRIPTION}" \
   --upstream-url "${UPSTREAM_URL}" \
   --readme "build/${INTERNAL_NAME}/README.md" \
   --skip-archive
+
+# Upstream currently uses plugin.json.version both as the user-facing package
+# identity and for compatibility.core checks. Preserve its version separately,
+# then make the organization-owned version authoritative for Claude Code,
+# generated help, the session banner, Marketplace metadata and archives.
+python3 "${SCRIPT_DIR}/finalize-package-version.py" \
+  --plugin-root "build/${INTERNAL_NAME}" \
+  --package-version "${VERSION}" \
+  --core-version "${CORE_VERSION}"
+
+# Prove that runtime profile resolution still checks compatibility against the
+# upstream core after the visible manifest version has changed.
+python3 "build/${INTERNAL_NAME}/scripts/validate_org_profile.py" \
+  "build/${INTERNAL_NAME}/org-profile/org-profile.yaml"
 
 # The package-specific help is derived only after the upstream packager has
 # written its authoritative package-surface.json. The upstream source tree is

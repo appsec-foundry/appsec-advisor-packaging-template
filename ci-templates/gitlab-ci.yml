@@ -4,9 +4,10 @@ stages:
 
 variables:
   INTERNAL_NAME: "acme-appsec"
+  PACKAGE_VERSION: "0.1.0"
   APPSEC_ADVISOR_URL: "https://github.com/appsec-foundry/appsec-advisor.git"
-  # The package version is derived by package-local.sh as <upstream>+<org-id>.<org-rev>
-  # (ORG_REV is set per-pipeline below). Set a VERSION CI/CD variable to override it.
+  # PACKAGE_VERSION is organization-owned. A v* pipeline tag overrides it below;
+  # VERSION remains available as a one-off CI/CD override.
   PYTHONDONTWRITEBYTECODE: "1"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
@@ -41,12 +42,11 @@ package:
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
   script:
-    # Org revision: the repo tag on tag pipelines (v1.2.0 -> 1.2.0), else the commit.
-    - export ORG_REV="${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}"
-    - export ORG_REV="${ORG_REV#v}"
+    # A packaging-repository tag defines the organization package release.
+    - if [ -n "${CI_COMMIT_TAG}" ]; then export PACKAGE_VERSION="${CI_COMMIT_TAG#v}"; fi
     - make package-archive
   artifacts:
-    name: "${INTERNAL_NAME}-${CI_COMMIT_SHORT_SHA}"
+    name: "${INTERNAL_NAME}-${PACKAGE_VERSION}"
     paths:
       - "dist/${INTERNAL_NAME}-*.tgz"
       - "dist/${INTERNAL_NAME}-*.tgz.sha256"
