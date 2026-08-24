@@ -609,4 +609,6 @@ fi
 echo "  ${LOAD_STEP}. Load the plugin from any project you want to analyze:"
 echo "       cd /path/to/your/project"
 echo "       claude --plugin-dir ${PACKAGING_ROOT}/build/${PLUGIN_NAME}"
-echo "  $((LOAD_STEP + 1)). Set up CI: make ci-github  or  make ci-gitlab"
+echo "  $((LOAD_STEP + 1)). Optional: customize the available skills:"
+echo "       add organization skills or restrict bundled skills; see README.md#customize-skills"
+echo "  $((LOAD_STEP + 2)). Optional: distribute the tested plugin through an internal Claude Code Marketplace"

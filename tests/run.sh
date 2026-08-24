@@ -331,7 +331,11 @@ printf 'Test Org\n\n\n\n%s\nn\n\nn\n' "$tgt" | \
 rc=$?
 if [ "$rc" = 0 ] && \
    grep -Fq '  4. Build the plugin: make package' "$build_log" && \
-   grep -Fq '  5. Load the plugin' "$build_log"; then
+   grep -Fq '  5. Load the plugin' "$build_log" && \
+   grep -Fq 'Optional: customize the available skills' "$build_log" && \
+   grep -Fq 'add organization skills or restrict bundled skills; see README.md#customize-skills' "$build_log" && \
+   grep -Fq 'Optional: distribute the tested plugin through an internal Claude Code Marketplace' "$build_log" && \
+   ! grep -Fq 'Set up CI' "$build_log"; then
   pass "init: skipped build remains a next step"
 else fail "init: skipped build remains a next step" "rc=$rc"; fi
 self_contained_tgt="$tgt"

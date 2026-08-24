@@ -118,6 +118,19 @@ any existing local changes. For legacy repositories, reinitialization also
 ensures the package policy enables `help` and, when the session banner is
 enabled, its `session-banner` hook.
 
+### Customize skills
+
+Add an organization-owned skill under `org-skills/<skill-id>/SKILL.md` and
+include its id in `org-profile/package-policy.yaml`. The same policy controls
+which bundled skills are present in the package: use its `include` or `exclude`
+selection to remove a command entirely. To keep a command installed but block
+it at runtime with an explanation, configure `skill_toggles` in
+`org-profile/org-profile.yaml` instead.
+
+See the upstream [internal packaging guide](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/internal-plugin-packaging.md)
+and [organization profile reference](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/org-profiles.md)
+for the full configuration syntax.
+
 The plugin is written to `build/acme-appsec/` and smoke-tested as part of the
 build. Before publishing a release, run:
 
