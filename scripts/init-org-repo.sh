@@ -24,7 +24,20 @@ ask() {
 }
 
 initials() {
-  echo "$1" | tr '[:upper:]' '[:lower:]' | tr -s '+&/., -' ' ' | sed 's/^ //;s/ $//' | awk '{for(i=1;i<=NF;i++) printf substr($i,1,1)}'
+  PYTHONUTF8=1 python3 - "$1" <<'PY'
+import sys
+import unicodedata
+
+latin_fallbacks = str.maketrans({
+    "ø": "o", "æ": "ae", "œ": "oe", "ð": "d", "þ": "th",
+    "ł": "l", "đ": "d", "ħ": "h", "ı": "i", "ŋ": "n", "ŧ": "t",
+})
+name = sys.argv[1].casefold().translate(latin_fallbacks)
+name = unicodedata.normalize("NFKD", name)
+ascii_name = name.encode("ascii", "ignore").decode("ascii")
+words = ascii_name.translate(str.maketrans({c: " " for c in "+&/., -"})).split()
+print("".join(word[0] for word in words))
+PY
 }
 
 # Escape a string for safe use as a sed replacement (escapes & \ and /).
@@ -47,7 +60,7 @@ ORG_NAME=$(ask "Organization name (e.g. Acme Corp)")
 ORG_ID=$(initials "${ORG_NAME}")
 ORG_ID=$(ask "Organization id (short lowercase abbreviation, e.g. 'acme', 'hl' — used in plugin name)" "${ORG_ID}")
 PLUGIN_NAME=$(ask "Plugin name (Claude Code command prefix)" "${ORG_ID}-appsec")
-OWNER_PREFIX=$(echo "${ORG_NAME}" | awk '{print $1}')
+OWNER_PREFIX="${ORG_ID^^}"
 OWNER=$(ask "Team owner (e.g. AppSec Team)" "${OWNER_PREFIX} AppSec Team")
 TARGET_DIR=$(ask "Target directory" "./${ORG_ID}-appsec-advisor")
 

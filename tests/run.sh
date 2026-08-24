@@ -214,6 +214,21 @@ if [ "$rc" = 0 ] && [ ! -f "$tgt/org-profile/requirements.yaml" ]; then
   pass "init: demo=no"
 else fail "init: demo=no" "rc=$rc"; fi
 
+# Organization names are UTF-8 input even when the caller's locale is not.
+# Preserve the display name while deriving an ASCII-safe technical id.
+d="$(newdir)"
+tgt="$d/out"
+printf 'Prüf+Øvelse+Æble+Ångström\n\n\n\n%s\nn\n\n' "$tgt" | \
+  (cd "$ROOT" && env LC_ALL=C timeout 20 bash -x "$INIT") \
+  >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && \
+   grep -Fqx '  id: poaa' "$tgt/org-profile/org-profile.yaml" && \
+   grep -Fqx '  name: Prüf+Øvelse+Æble+Ångström' "$tgt/org-profile/org-profile.yaml" && \
+   grep -Fqx '  owner: POAA AppSec Team' "$tgt/org-profile/org-profile.yaml"; then
+  pass "init: UTF-8 organization name"
+else fail "init: UTF-8 organization name" "rc=$rc"; fi
+
 # The scaffold must be self-contained: a file that the Makefile, the profile or
 # the CI templates reference but init never copies only fails much later, at
 # 'make package' / 'make upstream-check' time in the user's repo.
