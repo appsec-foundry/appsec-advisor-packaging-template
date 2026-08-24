@@ -6,20 +6,40 @@ set -euo pipefail
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
+normalize_utf8() {
+  PYTHONUTF8=1 python3 -c '
+import sys
+import unicodedata
+
+try:
+    value = sys.stdin.buffer.read().decode("utf-8")
+except UnicodeDecodeError:
+    raise SystemExit(2)
+sys.stdout.write(unicodedata.normalize("NFC", value))
+'
+}
+
 ask() {
   local prompt="$1" default="${2:-}"
-  local reply
-  if [ -n "${default}" ]; then
-    read -r -p "${prompt} [${default}]: " reply
-    echo "${reply:-${default}}"
-  else
-    while true; do
+  local reply value normalized
+  while true; do
+    if [ -n "${default}" ]; then
+      read -r -p "${prompt} [${default}]: " reply
+      value="${reply:-${default}}"
+    else
       read -r -p "${prompt}: " reply
-      [ -n "${reply}" ] && break
-      echo "  (required)" >&2
-    done
-    echo "${reply}"
-  fi
+      if [ -z "${reply}" ]; then
+        echo "  (required)" >&2
+        continue
+      fi
+      value="${reply}"
+    fi
+    if normalized=$(printf '%s' "${value}" | normalize_utf8); then
+      printf '%s\n' "${normalized}"
+      return 0
+    fi
+    echo "  (invalid UTF-8 input — please enter the value again)" >&2
+  done
 }
 
 initials() {
@@ -42,6 +62,37 @@ PY
 # Escape a string for safe use as a sed replacement (escapes & \ and /).
 sed_escape() {
   printf '%s' "$1" | sed 's/[&/\]/\\&/g'
+}
+
+# JSON string syntax is valid YAML string syntax. Encoding profile values this
+# way preserves Unicode and prevents characters such as ':' or '#' from
+# changing the YAML structure.
+yaml_quote() {
+  PYTHONUTF8=1 python3 -c '
+import json
+import sys
+
+value = sys.stdin.buffer.read().decode("utf-8")
+sys.stdout.write(json.dumps(value, ensure_ascii=False))
+'
+}
+
+validate_utf8_file() {
+  PYTHONUTF8=1 python3 - "$1" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+try:
+    path.read_bytes().decode("utf-8")
+except UnicodeDecodeError as error:
+    print(
+        f"ERROR: {path} is not valid UTF-8 at byte {error.start}. "
+        "Repair or replace this user-owned file before building.",
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
+PY
 }
 
 # ── Intro ─────────────────────────────────────────────────────────────────────
@@ -182,28 +233,30 @@ TODAY="$(date +%Y.%m.1)"
 E_ORG_ID=$(sed_escape "${ORG_ID}")
 E_ORG_NAME=$(sed_escape "${ORG_NAME}")
 E_OWNER=$(sed_escape "${OWNER}")
-E_LABEL=$(sed_escape "${ORG_NAME} AppSec Requirements")
-E_BANNER_HEADLINE=$(sed_escape "${OWNER_PREFIX} AppSec Advisor")
+E_ORG_NAME_YAML=$(sed_escape "$(printf '%s' "${ORG_NAME}" | yaml_quote)")
+E_OWNER_YAML=$(sed_escape "$(printf '%s' "${OWNER}" | yaml_quote)")
+E_LABEL_YAML=$(sed_escape "$(printf '%s' "${ORG_NAME} AppSec Requirements" | yaml_quote)")
+E_BANNER_HEADLINE_YAML=$(sed_escape "$(printf '%s' "${OWNER_PREFIX} AppSec Advisor" | yaml_quote)")
 
 if ! keep_if_reinit "${TARGET_DIR}/org-profile/org-profile.yaml"; then
   if [ "${DEMO_CONTENT}" = true ]; then
     sed \
       -e "s/id: acme/id: ${E_ORG_ID}/" \
-      -e "s/name: Acme Corp/name: ${E_ORG_NAME}/" \
+      -e "s/name: Acme Corp/name: ${E_ORG_NAME_YAML}/" \
       -e "s/profile_version: \"2026.06.1\"/profile_version: \"${TODAY}\"/" \
-      -e "s/owner: Acme AppSec Team/owner: ${E_OWNER}/" \
-      -e "s/headline: \"ACME AppSec Advisor\"/headline: \"${E_BANNER_HEADLINE}\"/" \
+      -e "s/owner: Acme AppSec Team/owner: ${E_OWNER_YAML}/" \
+      -e "s/headline: \"ACME AppSec Advisor\"/headline: ${E_BANNER_HEADLINE_YAML}/" \
       -e "s|requirements_yaml_url: \"https://security.example.internal/appsec-requirements.yaml\"|requirements_yaml_url: \"org-profile/requirements.yaml\"|" \
       -e "s|human_source_url: \"https://security.example.internal/appsec/requirements\"|human_source_url: \"# TODO: add URL to hosted requirements catalog\"|" \
-      -e "s/label: \"Acme Corp AppSec Requirements\"/label: \"${E_LABEL}\"/" \
+      -e "s/label: \"Acme Corp AppSec Requirements\"/label: ${E_LABEL_YAML}/" \
       "${TEMPLATE_BASE}/org-profile/org-profile.yaml" > "${TARGET_DIR}/org-profile/org-profile.yaml"
   else
     sed \
       -e "s/id: acme/id: ${E_ORG_ID}/" \
-      -e "s/name: Acme Corp/name: ${E_ORG_NAME}/" \
+      -e "s/name: Acme Corp/name: ${E_ORG_NAME_YAML}/" \
       -e "s/profile_version: \"2026.06.1\"/profile_version: \"${TODAY}\"/" \
-      -e "s/owner: Acme AppSec Team/owner: ${E_OWNER}/" \
-      -e "s/headline: \"ACME AppSec Advisor\"/headline: \"${E_BANNER_HEADLINE}\"/" \
+      -e "s/owner: Acme AppSec Team/owner: ${E_OWNER_YAML}/" \
+      -e "s/headline: \"ACME AppSec Advisor\"/headline: ${E_BANNER_HEADLINE_YAML}/" \
       -e "s|requirements_yaml_url: \"https://security.example.internal/appsec-requirements.yaml\"|requirements_yaml_url: \"# TODO: add URL to hosted requirements catalog\"|" \
       -e "/human_source_url:/d" \
       -e "/label: \"Acme Corp AppSec Requirements\"/d" \
@@ -215,6 +268,11 @@ if ! keep_if_reinit "${TARGET_DIR}/org-profile/org-profile.yaml"; then
       "${TARGET_DIR}/org-profile/org-profile.yaml"
   fi
 fi
+
+# Reinitialization deliberately keeps the user-owned profile. Validate it here
+# so a file damaged by an older initializer fails with an actionable message
+# before the upstream packager produces a Python traceback.
+validate_utf8_file "${TARGET_DIR}/org-profile/org-profile.yaml"
 
 # ── Render organization.md ────────────────────────────────────────────────────
 
@@ -286,7 +344,7 @@ else
   fi
 fi
 
-BUILD_SUCCEEDED=false
+BUILD_STATE=skipped
 if read -r -p "Build the plugin now? [Y/n]: " _build_reply; then
   case "${_build_reply}" in
     [nN]*) ;;
@@ -294,8 +352,9 @@ if read -r -p "Build the plugin now? [Y/n]: " _build_reply; then
       echo ""
       echo "==> Building plugin …"
       if make package; then
-        BUILD_SUCCEEDED=true
+        BUILD_STATE=succeeded
       else
+        BUILD_STATE=failed
         echo "" >&2
         echo "WARNING: The packaging repo is ready, but the initial plugin build failed." >&2
         echo "         Fix the reported build error, then run: make package" >&2
@@ -307,7 +366,7 @@ fi
 PACKAGING_ROOT="$(pwd)"
 echo ""
 echo "Done. Your packaging repo is ready at: ${PACKAGING_ROOT}"
-if [ "${BUILD_SUCCEEDED}" = true ]; then
+if [ "${BUILD_STATE}" = succeeded ]; then
 echo "The built plugin is ready at: ${PACKAGING_ROOT}/build/${PLUGIN_NAME}"
 fi
 echo ""
@@ -320,12 +379,17 @@ else
 echo "  2. Edit org-profile/org-profile.yaml — set requirements_yaml_url to your requirements catalog"
 fi
 echo "  3. Edit org-profile/context/organization.md — describe your org for analyses"
-if [ "${BUILD_SUCCEEDED}" = true ]; then
-echo "  4. Rebuild after configuration changes: make package"
-else
+LOAD_STEP=4
+if [ "${BUILD_STATE}" = failed ]; then
+echo "  4. Retry the plugin build: make package"
+LOAD_STEP=5
+elif [ "${BUILD_STATE}" = skipped ]; then
 echo "  4. Build the plugin: make package"
+LOAD_STEP=5
+else
+echo "     The initial build is complete; run make package again only after changing configuration."
 fi
-echo "  5. Load the plugin from any project you want to analyze:"
+echo "  ${LOAD_STEP}. Load the plugin from any project you want to analyze:"
 echo "       cd /path/to/your/project"
 echo "       claude --plugin-dir ${PACKAGING_ROOT}/build/${PLUGIN_NAME}"
-echo "  6. Set up CI: make ci-github  or  make ci-gitlab"
+echo "  $((LOAD_STEP + 1)). Set up CI: make ci-github  or  make ci-gitlab"

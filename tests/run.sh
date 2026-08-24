@@ -250,18 +250,39 @@ printf 'Prüf+Øvelse+Æble+Ångström\n\n\n\n%s\nn\n\n' "$tgt" | \
 rc=$?
 if [ "$rc" = 0 ] && \
    grep -Fqx '  id: poaa' "$tgt/org-profile/org-profile.yaml" && \
-   grep -Fqx '  name: Prüf+Øvelse+Æble+Ångström' "$tgt/org-profile/org-profile.yaml" && \
-   grep -Fqx '  owner: POAA AppSec Team' "$tgt/org-profile/org-profile.yaml" && \
+   grep -Fqx '  name: "Prüf+Øvelse+Æble+Ångström"' "$tgt/org-profile/org-profile.yaml" && \
+   grep -Fqx '  owner: "POAA AppSec Team"' "$tgt/org-profile/org-profile.yaml" && \
    grep -Fqx '  headline: "POAA AppSec Advisor"' "$tgt/org-profile/org-profile.yaml" && \
    grep -Fqx '  url: "https://github.com/appsec-foundry/appsec-advisor"' \
      "$tgt/org-profile/org-profile.yaml"; then
   pass "init: UTF-8 organization name"
 else fail "init: UTF-8 organization name" "rc=$rc"; fi
+unicode_tgt="$tgt"
 
-if grep -Fq '`poaa-appsec` is the Claude Code security plugin' "$tgt/README.md" && \
-   grep -Fq 'Prüf+Øvelse+Æble+Ångström' "$tgt/README.md" && \
-   grep -Fq 'POAA AppSec Team' "$tgt/README.md" && \
-   ! grep -Fq 'Acme' "$tgt/README.md"; then
+# Reject malformed terminal bytes instead of writing a profile that fails much
+# later during packaging. The second answer also proves YAML metacharacters are
+# preserved as data rather than changing the generated document structure.
+d="$(newdir)"
+tgt="$d/out"
+{
+  printf 'Pr\303uef Org\n'
+  printf 'Prüf: Øvelse # Lab\n'
+  printf 'pol\n\n\n%s\nn\n\nn\n' "$tgt"
+} | (cd "$ROOT" && env LC_ALL=C timeout 20 bash -x "$INIT") \
+  >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && \
+   /usr/bin/python3 -c 'from pathlib import Path; Path(__import__("sys").argv[1]).read_text(encoding="utf-8")' \
+     "$tgt/org-profile/org-profile.yaml" && \
+   grep -Fqx '  name: "Prüf: Øvelse # Lab"' "$tgt/org-profile/org-profile.yaml" && \
+   grep -Fqx '  owner: "POL AppSec Team"' "$tgt/org-profile/org-profile.yaml"; then
+  pass "init: invalid UTF-8 is retried and YAML metacharacters are quoted"
+else fail "init: invalid UTF-8 is retried and YAML metacharacters are quoted" "rc=$rc"; fi
+
+if grep -Fq '`poaa-appsec` is the Claude Code security plugin' "$unicode_tgt/README.md" && \
+   grep -Fq 'Prüf+Øvelse+Æble+Ångström' "$unicode_tgt/README.md" && \
+   grep -Fq 'POAA AppSec Team' "$unicode_tgt/README.md" && \
+   ! grep -Fq 'Acme' "$unicode_tgt/README.md"; then
   pass "init: generated README uses organization identity"
 else fail "init: generated README uses organization identity" "placeholder or identity mismatch"; fi
 
@@ -271,11 +292,15 @@ d="$(newdir)"
 src="$d/upstream-source"
 mkfake "$src"
 tgt="$d/out"
+build_log="$d/build-success.log"
 printf 'Test Org\n\n\n\n%s\nn\n\ny\n' "$tgt" | \
   (cd "$ROOT" && env APPSEC_ADVISOR_SOURCE="$src" timeout 20 bash -x "$INIT") \
-  >/dev/null 2>>"$COV"
+  >"$build_log" 2>>"$COV"
 rc=$?
-if [ "$rc" = 0 ] && [ -d "$tgt/.git" ] && [ -d "$tgt/build/to-appsec" ]; then
+if [ "$rc" = 0 ] && [ -d "$tgt/.git" ] && [ -d "$tgt/build/to-appsec" ] && \
+   grep -Fq '  4. Load the plugin' "$build_log" && \
+   ! grep -Fq '  4. Build the plugin' "$build_log" && \
+   ! grep -Fq '  4. Rebuild' "$build_log"; then
   pass "init: accepted initial build creates plugin"
 else fail "init: accepted initial build creates plugin" "rc=$rc"; fi
 
@@ -290,9 +315,38 @@ printf 'Test Org\n\n\n\n%s\nn\n\ny\n' "$tgt" | \
   >"$build_log" 2>>"$COV"
 rc=$?
 if [ "$rc" = 0 ] && [ -d "$tgt/.git" ] && \
-   grep -Fq 'initial plugin build failed' "$COV"; then
+   grep -Fq 'initial plugin build failed' "$COV" && \
+   grep -Fq '  4. Retry the plugin build: make package' "$build_log" && \
+   grep -Fq '  5. Load the plugin' "$build_log"; then
   pass "init: failed initial build preserves repo"
 else fail "init: failed initial build preserves repo" "rc=$rc"; fi
+
+# Declining the optional initial build keeps it as a required next step.
+d="$(newdir)"
+tgt="$d/out"
+build_log="$d/build-skipped.log"
+printf 'Test Org\n\n\n\n%s\nn\n\nn\n' "$tgt" | \
+  (cd "$ROOT" && timeout 20 bash -x "$INIT") >"$build_log" 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && \
+   grep -Fq '  4. Build the plugin: make package' "$build_log" && \
+   grep -Fq '  5. Load the plugin' "$build_log"; then
+  pass "init: skipped build remains a next step"
+else fail "init: skipped build remains a next step" "rc=$rc"; fi
+self_contained_tgt="$tgt"
+
+# Reinitialization keeps user-owned profile content, but must reject legacy
+# invalid bytes before reaching the packager and its less useful traceback.
+d="$(newdir)"
+tgt="$d/out"
+mkdir -p "$tgt/org-profile"
+printf 'name: Pr\303uef\n' >"$tgt/org-profile/org-profile.yaml"
+printf 'Test Org\n\n\n\n%s\nn\n\ny\n' "$tgt" | \
+  (cd "$ROOT" && timeout 20 bash -x "$INIT") >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 2 ] && grep -Fq 'is not valid UTF-8 at byte' "$COV"; then
+  pass "init: reinit rejects a kept profile with invalid UTF-8"
+else fail "init: reinit rejects a kept profile with invalid UTF-8" "rc=$rc"; fi
 
 # The scaffold must be self-contained: a file that the Makefile, the profile or
 # the CI templates reference but init never copies only fails much later, at
@@ -302,12 +356,12 @@ for f in scripts/fetch-upstream.sh scripts/upstream-check.sh scripts/package-loc
          scripts/prepare-local-marketplace.py scripts/render-packaged-help.py \
          scripts/archive-built-plugin.py \
          org-profile/package-policy.yaml org-profile/org-profile.yaml Makefile; do
-  [ -f "$tgt/$f" ] || missing="$missing $f"
+  [ -f "$self_contained_tgt/$f" ] || missing="$missing $f"
 done
 # every hook script declared in the rendered profile has to exist too
 for h in $(sed -n 's|.*org-profile/hooks/\([A-Za-z0-9_.-]*\).*|\1|p' \
-             "$tgt/org-profile/org-profile.yaml" 2>/dev/null); do
-  [ -f "$tgt/org-profile/hooks/$h" ] || missing="$missing org-profile/hooks/$h"
+             "$self_contained_tgt/org-profile/org-profile.yaml" 2>/dev/null); do
+  [ -f "$self_contained_tgt/org-profile/hooks/$h" ] || missing="$missing org-profile/hooks/$h"
 done
 if [ -z "$missing" ]; then pass "init: scaffold is self-contained"
 else fail "init: scaffold is self-contained" "missing:$missing"; fi
