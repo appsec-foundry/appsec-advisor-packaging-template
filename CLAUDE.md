@@ -44,10 +44,10 @@ Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstre
 `package-local.sh` derives the version from upstream lineage plus an org revision counter — `VERSION` is only an override:
 
 ```
-<upstream-version>+<org-id>.<org-rev>     e.g. 0.5.1-beta+acme.3
+<upstream-version>+<org-id>.<org-rev>     e.g. 0.6.0-beta.1+acme.3
 ```
 
-Left half: the upstream checkout's tag (`git describe --tags --exact-match`, `v` stripped). Off a branch tip it derives from the nearest tag as `<tag>-dev.g<shortsha>` (for example `0.5.1-beta-dev.gabc1234`); without a reachable tag it falls back to `0.0.0-<ref>.g<shortsha>`. Right half is SemVer build metadata: `ORG_ID` (defaults to the first segment of `INTERNAL_NAME`) and `ORG_REV` (defaults to `1`).
+Left half: the upstream checkout's tag (`git describe --tags --exact-match`, `v` stripped). Off a branch tip it derives from the nearest tag as `<tag>-dev.g<shortsha>` (for example `0.6.0-beta.1-dev.gabc1234`); without a reachable tag it falls back to `0.0.0-<ref>.g<shortsha>`. Right half is SemVer build metadata: `ORG_ID` (defaults to the first segment of `INTERNAL_NAME`) and `ORG_REV` (defaults to `1`).
 
 Bump rule: increment `ORG_REV` for org-only changes (`org-profile/`, `org-skills/`, `package-policy.yaml`); when `APPSEC_ADVISOR_REF` moves, the left half changes and `ORG_REV` restarts at 1. Both CI templates set `ORG_REV` to the repo tag on tag pipelines, else the commit sha, and glob `dist/<name>-*.tgz` for artifacts rather than reconstructing the version string.
 

@@ -71,7 +71,7 @@ overlay_org_skills() {
 }
 
 # Derive the package version from the upstream checkout plus an org revision:
-#   <upstream-version>+<org-id>.<org-rev>     e.g. 0.5.1-beta+acme.3
+#   <upstream-version>+<org-id>.<org-rev>     e.g. 0.6.0-beta.1+acme.3
 # The left half is SemVer build metadata's only job here: keep the lineage of a
 # build visible, since package-surface.json records upstream_url but not the ref.
 # Off a branch tip, derive a development version from its nearest release tag.

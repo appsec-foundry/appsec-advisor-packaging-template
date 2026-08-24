@@ -40,8 +40,8 @@ Almost everything runs through `org-profile.yaml`:
 | `hooks` | Your own Claude Code hooks |
 | `mcp` | Your own MCP servers, for example an internal SAST endpoint |
 
-These blocks exist upstream but only take effect **from a release after
-`v0.5.1-beta`**. Before that, validation rejects them:
+These blocks require at least **`v0.6.0-beta.1`**, the release the `main`
+branch pins. Against an older upstream ref, validation rejects them:
 
 | Block | What it does |
 |---|---|
@@ -80,8 +80,8 @@ to your own skills — the threat-model pipeline does not query it.
   read. It was copied over the finished `.mcp.json` *after* packaging and
   silently replaced what the profile had produced, including the selection from
   `plugin_surface.mcp_servers`. Upstream now has a `skills:` block too, but it
-  only becomes usable with a release after `v0.5.1-beta`; until then
-  `org-skills/` is the way.
+  is available from `v0.6.0-beta.1`; `org-skills/` remains the mechanism this
+  template packages with.
 - `org-profile.yaml` is validated against the upstream schema at build time
   (`make validate`). Structural changes must stay schema-conformant
   (`api_version: appsec-advisor.org-profile/v2`).
@@ -124,7 +124,7 @@ ARCHIVE=1 ORG_REV=3 make package-archive  # produce .tgz + .sha256
 organization revision counter:
 
 ```
-<upstream-version>+<org-id>.<org-rev>     e.g. 0.5.1-beta+acme.3
+<upstream-version>+<org-id>.<org-rev>     e.g. 0.6.0-beta.1+acme.3
 ```
 
 The left half is the tag of the upstream checkout (`git describe --tags
