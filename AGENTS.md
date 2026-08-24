@@ -118,10 +118,10 @@ make                                  # (or `make help`) lists every target with
 make lint                             # shellcheck over scripts/ + tests/run.sh (skipped when shellcheck is absent)
 make test                             # shell test suite + coverage gate (skipped when tests/ is absent, e.g. in a scaffolded repo)
 make check                            # offline gate: lint + test (no network, no upstream fetch)
-make release-check                    # release gate: check + drift-check (advisory) + validate + package
+make release-check                    # release gate: check + check-updates (advisory) + validate + package
 make upstream-check                   # read-only drift check: has the build ref moved, is there a newer v* release
 make baseline-check                   # read-only drift check: does the configured baseline id match its published document
-make drift-check                      # run both upstream drift checks
+make check-updates                    # check both upstream sources for available updates
 make package                          # fetch upstream + build the package + smoke-test it
 APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package # pin a specific release
 make validate                         # validate org-profile.yaml only

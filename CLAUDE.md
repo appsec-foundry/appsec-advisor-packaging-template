@@ -23,7 +23,7 @@ make               # (or `make help`) list all targets with descriptions
 make lint          # shellcheck scripts/ + tests/run.sh (skips gracefully if shellcheck absent)
 make test          # shell-script test suite + coverage gate (skips if tests/ absent, e.g. scaffolded repos)
 make check         # offline gate: lint + test (no network, no upstream fetch)
-make release-check # release-boundary gate: check + upstream-check (advisory) + validate + package (builds a clean plugin against upstream)
+make release-check # release-boundary gate: check + check-updates (advisory) + validate + package (builds a clean plugin against upstream)
 make upstream-check # read-only drift check: reports if the build ref moved (new commit) or a newer v* release exists. Exit 0=current, 1=drift, 2=error. Does not touch upstream/
 make validate      # validate org-profile.yaml against upstream schema only
 make package       # fetch + build + smoke test → build/<name>/

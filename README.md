@@ -179,8 +179,8 @@ make upstream-check
 # Compare the configured baseline id with its published document
 make baseline-check
 
-# Run both read-only upstream checks
-make drift-check
+# Check both upstream sources for available updates
+make check-updates
 
 # Pin a specific upstream release
 APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package

@@ -185,7 +185,7 @@ make release-check
 
 Use `make upstream-check` for the appsec-advisor core only, `make
 baseline-check` for the configured secure-coding baseline, or `make
-drift-check` for both. These checks are read-only and require network access;
+check-updates` for both. These checks are read-only and require network access;
 `make check` remains the offline test gate.
 
 ### Configuration map

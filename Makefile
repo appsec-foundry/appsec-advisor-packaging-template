@@ -34,7 +34,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint check release-check fetch-upstream upstream-check baseline-check drift-check validate package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean distclean rebuild reinit test
+.PHONY: help lint check release-check fetch-upstream upstream-check baseline-check check-updates drift-check validate package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean distclean rebuild reinit test
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -57,7 +57,7 @@ check: lint test ## Offline gate: lint + test (no network, no upstream fetch)
 
 release-check: ## Release-boundary gate: check + validate + build a clean plugin against upstream
 	@$(MAKE) --no-print-directory check
-	@$(MAKE) --no-print-directory drift-check || echo "  ^ upstream drift or check error (advisory) — not blocking release-check"
+	@$(MAKE) --no-print-directory check-updates || echo "  ^ update available or check error (advisory) — not blocking release-check"
 	@$(MAKE) --no-print-directory validate
 	@$(MAKE) --no-print-directory package
 
@@ -67,7 +67,7 @@ upstream-check: ## Read-only drift check for the appsec-advisor ref and releases
 baseline-check: ## Read-only drift check for the configured secure-coding baseline
 	python3 scripts/baseline-upstream-check.py --profile org-profile/org-profile.yaml --core-config "$(APPSEC_ADVISOR_SOURCE)/config.json"
 
-drift-check: ## Check appsec-advisor and secure-coding baseline upstream drift
+check-updates: ## Check appsec-advisor and secure-coding baseline for updates
 	@status=0; \
 	APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" scripts/upstream-check.sh || status=$$?; \
 	echo; \
@@ -80,6 +80,9 @@ drift-check: ## Check appsec-advisor and secure-coding baseline upstream drift
 		echo "DRIFT: at least one upstream source has changed"; exit 1; \
 	fi; \
 	echo "OK: appsec-advisor and baseline are current"
+
+drift-check: ## Deprecated alias for check-updates
+	@$(MAKE) --no-print-directory check-updates
 
 fetch-upstream: ## Clone/checkout upstream appsec-advisor at APPSEC_ADVISOR_REF
 	APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" scripts/fetch-upstream.sh
