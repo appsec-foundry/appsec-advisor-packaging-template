@@ -381,18 +381,58 @@ if [ "$rc" = 2 ] && grep -Fq 'template source does not contain scripts/init-org-
   pass "reinit: rejects an invalid template source"
 else fail "reinit: rejects an invalid template source" "rc=$rc"; fi
 
-# Reinitialization keeps user-owned profile content, but must reject legacy
-# invalid bytes before reaching the packager and its less useful traceback.
+# An interactive reinitialization can recover a legacy profile with invalid
+# UTF-8 by backing it up before rendering a fresh profile from the entered data.
 d="$(newdir)"
 tgt="$d/out"
 mkdir -p "$tgt/org-profile"
 printf 'name: Pr\303uef\n' >"$tgt/org-profile/org-profile.yaml"
-printf 'Test Org\n\n\n\n%s\nn\n\ny\n' "$tgt" | \
+repair_log="$d/repair.log"
+printf 'Test Org\n\n\n\n%s\nn\n\ny\ny\nn\n' "$tgt" | \
+  (cd "$ROOT" && timeout 20 bash -x "$INIT") >"$repair_log" 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && \
+   [ -f "$tgt/.reinit-backups/org-profile.yaml.invalid-utf8.bak" ] && \
+   [ "$(stat -c %a "$tgt/.reinit-backups")" = 700 ] && \
+   grep -Fq 'name: "Test Org"' "$tgt/org-profile/org-profile.yaml" && \
+   grep -Fq 'backed up:' "$repair_log"; then
+  pass "init: reinit backs up and replaces an invalid UTF-8 profile"
+else fail "init: reinit backs up and replaces an invalid UTF-8 profile" "rc=$rc"; fi
+
+# Declining recovery preserves the invalid file byte-for-byte and fails before
+# packaging rather than silently guessing what the damaged text meant.
+d="$(newdir)"
+tgt="$d/out"
+mkdir -p "$tgt/org-profile"
+printf 'name: Pr\303uef\n' >"$tgt/org-profile/org-profile.yaml"
+invalid_before="$(cksum "$tgt/org-profile/org-profile.yaml")"
+printf 'Test Org\n\n\n\n%s\nn\n\ny\nn\n' "$tgt" | \
   (cd "$ROOT" && timeout 20 bash -x "$INIT") >/dev/null 2>>"$COV"
 rc=$?
-if [ "$rc" = 2 ] && grep -Fq 'is not valid UTF-8 at byte' "$COV"; then
-  pass "init: reinit rejects a kept profile with invalid UTF-8"
-else fail "init: reinit rejects a kept profile with invalid UTF-8" "rc=$rc"; fi
+if [ "$rc" = 2 ] && \
+   [ "$invalid_before" = "$(cksum "$tgt/org-profile/org-profile.yaml")" ] && \
+   [ ! -e "$tgt/.reinit-backups" ] && \
+   grep -Fq 'is not valid UTF-8 at byte' "$COV"; then
+  pass "init: declined UTF-8 recovery leaves the profile unchanged"
+else fail "init: declined UTF-8 recovery leaves the profile unchanged" "rc=$rc"; fi
+
+# Recovery must not follow a pre-existing backup-directory symlink outside the
+# scaffold when moving the retained user profile.
+d="$(newdir)"
+tgt="$d/out"
+mkdir -p "$tgt/org-profile" "$d/outside"
+printf 'name: Pr\303uef\n' >"$tgt/org-profile/org-profile.yaml"
+invalid_before="$(cksum "$tgt/org-profile/org-profile.yaml")"
+ln -s "$d/outside" "$tgt/.reinit-backups"
+printf 'Test Org\n\n\n\n%s\nn\n\ny\ny\n' "$tgt" | \
+  (cd "$ROOT" && timeout 20 bash -x "$INIT") >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 2 ] && \
+   [ "$invalid_before" = "$(cksum "$tgt/org-profile/org-profile.yaml")" ] && \
+   [ -z "$(find "$d/outside" -mindepth 1 -print -quit)" ] && \
+   grep -Fq 'recovery backup path is not a regular directory' "$COV"; then
+  pass "init: UTF-8 recovery rejects a backup-directory symlink"
+else fail "init: UTF-8 recovery rejects a backup-directory symlink" "rc=$rc"; fi
 
 # The scaffold must be self-contained: a file that the Makefile, the profile or
 # the CI templates reference but init never copies only fails much later, at

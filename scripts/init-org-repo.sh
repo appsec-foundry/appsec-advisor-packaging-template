@@ -78,7 +78,7 @@ sys.stdout.write(json.dumps(value, ensure_ascii=False))
 }
 
 validate_utf8_file() {
-  PYTHONUTF8=1 python3 - "$1" <<'PY'
+  PYTHONUTF8=1 python3 - "$1" "${2:-report}" <<'PY'
 from pathlib import Path
 import sys
 
@@ -86,11 +86,12 @@ path = Path(sys.argv[1])
 try:
     path.read_bytes().decode("utf-8")
 except UnicodeDecodeError as error:
-    print(
-        f"ERROR: {path} is not valid UTF-8 at byte {error.start}. "
-        "Repair or replace this user-owned file before building.",
-        file=sys.stderr,
-    )
+    if sys.argv[2] != "quiet":
+        print(
+            f"ERROR: {path} is not valid UTF-8 at byte {error.start}. "
+            "Repair or replace this user-owned file before building.",
+            file=sys.stderr,
+        )
     raise SystemExit(2)
 PY
 }
@@ -260,6 +261,41 @@ E_OWNER_YAML=$(sed_escape "$(printf '%s' "${OWNER}" | yaml_quote)")
 E_LABEL_YAML=$(sed_escape "$(printf '%s' "${ORG_NAME} AppSec Requirements" | yaml_quote)")
 E_BANNER_HEADLINE_YAML=$(sed_escape "$(printf '%s' "${OWNER_PREFIX} AppSec Advisor" | yaml_quote)")
 
+PROFILE_PATH="${TARGET_DIR}/org-profile/org-profile.yaml"
+if [ "${REINIT}" = true ] && [ -f "${PROFILE_PATH}" ] && \
+   ! validate_utf8_file "${PROFILE_PATH}" quiet; then
+  if [ "${REINIT_MODE}" = true ]; then
+    validate_utf8_file "${PROFILE_PATH}"
+  fi
+
+  echo "WARNING: The existing organization profile contains invalid UTF-8." >&2
+  echo "         It may have been created by an older initializer." >&2
+  read -r -p "Back it up and generate a fresh profile from the values entered above? [y/N]: " _profile_repair_reply || _profile_repair_reply=""
+  case "${_profile_repair_reply}" in
+    [yY]*)
+      PROFILE_BACKUP_DIR="${TARGET_DIR}/.reinit-backups"
+      if [ -L "${PROFILE_BACKUP_DIR}" ] || \
+         { [ -e "${PROFILE_BACKUP_DIR}" ] && [ ! -d "${PROFILE_BACKUP_DIR}" ]; }; then
+        echo "ERROR: recovery backup path is not a regular directory: ${PROFILE_BACKUP_DIR}" >&2
+        exit 2
+      fi
+      mkdir -p "${PROFILE_BACKUP_DIR}"
+      chmod 700 "${PROFILE_BACKUP_DIR}"
+      PROFILE_BACKUP="${PROFILE_BACKUP_DIR}/org-profile.yaml.invalid-utf8.bak"
+      PROFILE_BACKUP_INDEX=1
+      while [ -e "${PROFILE_BACKUP}" ]; do
+        PROFILE_BACKUP="${PROFILE_BACKUP_DIR}/org-profile.yaml.invalid-utf8.bak.${PROFILE_BACKUP_INDEX}"
+        PROFILE_BACKUP_INDEX=$((PROFILE_BACKUP_INDEX + 1))
+      done
+      mv -- "${PROFILE_PATH}" "${PROFILE_BACKUP}"
+      echo "  backed up: ${PROFILE_BACKUP}"
+      ;;
+    *)
+      validate_utf8_file "${PROFILE_PATH}"
+      ;;
+  esac
+fi
+
 if ! keep_if_reinit "${TARGET_DIR}/org-profile/org-profile.yaml"; then
   if [ "${DEMO_CONTENT}" = true ]; then
     sed \
@@ -291,9 +327,8 @@ if ! keep_if_reinit "${TARGET_DIR}/org-profile/org-profile.yaml"; then
   fi
 fi
 
-# Reinitialization deliberately keeps the user-owned profile. Validate it here
-# so a file damaged by an older initializer fails with an actionable message
-# before the upstream packager produces a Python traceback.
+# Validate both newly rendered profiles and existing profiles retained during
+# reinitialization before the upstream packager can produce a Python traceback.
 validate_utf8_file "${TARGET_DIR}/org-profile/org-profile.yaml"
 
 # ── Render organization.md ────────────────────────────────────────────────────
