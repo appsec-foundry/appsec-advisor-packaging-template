@@ -71,7 +71,8 @@ to your own skills — the threat-model pipeline does not query it.
 - The packaged `help` skill is generated from the final
   `.claude-plugin/package-surface.json` and `config.json` after upstream
   packaging. It lists only included public skills and marks runtime-disabled
-  ones. Keep `help` in the skill allowlist; do not edit the upstream help.
+  ones. `banner.url` becomes its “More information” link. Keep `help` in the
+  skill allowlist; do not edit the upstream help.
 - **Org hooks run on Claude Code's event layer only.** The `hooks:` block bundles
   your scripts from `org-profile/hooks/` into the built `hooks/hooks.json` and
   records them in `package-surface.json` under `hooks.org`. They never reach the

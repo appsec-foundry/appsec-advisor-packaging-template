@@ -67,7 +67,8 @@ is disabled, Claude Code shows the reason rather than running it.
 The `/acme-appsec:help` reference is generated during packaging from the final
 allowlist and runtime toggles. It therefore lists the package people actually
 have, including organization-owned skills, instead of the larger upstream
-command set.
+command set. Its “More information” link comes from `banner.url` in
+`org-profile/org-profile.yaml`.
 
 ## Headless and CI use
 

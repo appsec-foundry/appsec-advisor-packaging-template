@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import tempfile
 from typing import Any
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -137,6 +138,37 @@ def _disabled_skills(config: dict[str, Any], included: set[str]) -> dict[str, st
     return disabled
 
 
+def _info_url(config: dict[str, Any]) -> str | None:
+    banner = config.get("banner")
+    if banner is None:
+        return None
+    if not isinstance(banner, dict):
+        raise HelpRenderError("config.json banner must be an object")
+    value = banner.get("url")
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value or len(value) > 2048:
+        raise HelpRenderError("config.json banner.url must be a non-empty URL or null")
+    if any(
+        character.isspace() or not character.isprintable() or character in "`<>"
+        for character in value
+    ):
+        raise HelpRenderError(
+            "config.json banner.url contains unsafe whitespace or delimiters"
+        )
+    parsed = urlsplit(value)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise HelpRenderError(
+            "config.json banner.url must be an http(s) URL without credentials"
+        )
+    return value
+
+
 def render_help(plugin_root: Path) -> Path:
     plugin_root = plugin_root.resolve()
     metadata_root = plugin_root / ".claude-plugin"
@@ -168,6 +200,7 @@ def render_help(plugin_root: Path) -> Path:
 
     public_skills = included - INTERNAL_SKILLS
     disabled = _disabled_skills(config, included)
+    info_url = _info_url(config)
     descriptions = {
         name: _skill_description(plugin_root / "skills" / name / "SKILL.md", name)
         for name in public_skills
@@ -198,6 +231,8 @@ def render_help(plugin_root: Path) -> Path:
             "Only commands included in this organization package are listed.",
         ]
     )
+    if info_url:
+        reference_lines.extend(["", "More information", f"  {info_url}"])
 
     output = "\n".join(
         [

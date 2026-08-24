@@ -251,7 +251,10 @@ rc=$?
 if [ "$rc" = 0 ] && \
    grep -Fqx '  id: poaa' "$tgt/org-profile/org-profile.yaml" && \
    grep -Fqx '  name: Prüf+Øvelse+Æble+Ångström' "$tgt/org-profile/org-profile.yaml" && \
-   grep -Fqx '  owner: POAA AppSec Team' "$tgt/org-profile/org-profile.yaml"; then
+   grep -Fqx '  owner: POAA AppSec Team' "$tgt/org-profile/org-profile.yaml" && \
+   grep -Fqx '  headline: "POAA AppSec Advisor"' "$tgt/org-profile/org-profile.yaml" && \
+   grep -Fqx '  url: "https://github.com/appsec-foundry/appsec-advisor"' \
+     "$tgt/org-profile/org-profile.yaml"; then
   pass "init: UTF-8 organization name"
 else fail "init: UTF-8 organization name" "rc=$rc"; fi
 

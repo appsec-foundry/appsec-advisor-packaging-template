@@ -78,7 +78,7 @@ Beyond the quick start, these files are yours to edit:
 
 | File | Purpose |
 |---|---|
-| `org-profile/org-profile.yaml` | Presets, cost guardrails, requirements source, output formats |
+| `org-profile/org-profile.yaml` | Presets, banner branding, cost guardrails, requirements source, output formats |
 | `org-profile/context/organization.md` | Short org context injected into analyses (max 50 KB) |
 | `org-profile/actors/*.yaml` | Custom threat actors for threat models — edit or delete |
 | `org-profile/package-policy.yaml` | Allowlist of which skills and hooks to include |

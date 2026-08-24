@@ -56,12 +56,17 @@ class PackagedHelpTests(unittest.TestCase):
         self.write_json(
             "config.json",
             {
+                "banner": {
+                    "enabled": True,
+                    "headline": "PRUF AppSec Advisor",
+                    "url": "https://security.example.test/appsec",
+                },
                 "skill_toggles": {
                     "verify-requirements": {
                         "enabled": False,
                         "reason": "Prüf+Øvelse policy is not active yet.",
                     }
-                }
+                },
             },
         )
         self.write_skill("help", "Generic upstream help.")
@@ -97,6 +102,8 @@ class PackagedHelpTests(unittest.TestCase):
         self.assertIn("/pruf-appsec:verify-requirements", rendered)
         self.assertIn("[disabled]", rendered)
         self.assertIn("Reason: Prüf+Øvelse policy is not active yet.", rendered)
+        self.assertIn("More information", rendered)
+        self.assertIn("https://security.example.test/appsec", rendered)
         self.assertNotIn("publish-threat-model", rendered)
         self.assertNotIn("report-error", rendered)
         self.assertNotIn("internal-threat-analysis-kernel", rendered)
@@ -137,6 +144,31 @@ class PackagedHelpTests(unittest.TestCase):
         with self.assertRaisesRegex(
             help_renderer.HelpRenderError, "must include the help"
         ):
+            help_renderer.render_help(self.root)
+
+    def test_rejects_info_url_with_embedded_credentials(self) -> None:
+        config_path = self.root / "config.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        config["banner"]["url"] = "https://user:secret@security.example.test/appsec"
+        config_path.write_text(json.dumps(config), encoding="utf-8")
+        original_help = (self.root / "skills" / "help" / "SKILL.md").read_bytes()
+
+        with self.assertRaisesRegex(
+            help_renderer.HelpRenderError, "without credentials"
+        ):
+            help_renderer.render_help(self.root)
+        self.assertEqual(
+            original_help,
+            (self.root / "skills" / "help" / "SKILL.md").read_bytes(),
+        )
+
+    def test_rejects_info_url_that_can_break_the_reference_block(self) -> None:
+        config_path = self.root / "config.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        config["banner"]["url"] = "https://security.example.test/```/escape"
+        config_path.write_text(json.dumps(config), encoding="utf-8")
+
+        with self.assertRaisesRegex(help_renderer.HelpRenderError, "unsafe"):
             help_renderer.render_help(self.root)
 
     def test_archive_contains_the_rendered_help_and_valid_checksum(self) -> None:

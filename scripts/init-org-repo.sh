@@ -183,6 +183,7 @@ E_ORG_ID=$(sed_escape "${ORG_ID}")
 E_ORG_NAME=$(sed_escape "${ORG_NAME}")
 E_OWNER=$(sed_escape "${OWNER}")
 E_LABEL=$(sed_escape "${ORG_NAME} AppSec Requirements")
+E_BANNER_HEADLINE=$(sed_escape "${OWNER_PREFIX} AppSec Advisor")
 
 if ! keep_if_reinit "${TARGET_DIR}/org-profile/org-profile.yaml"; then
   if [ "${DEMO_CONTENT}" = true ]; then
@@ -191,6 +192,7 @@ if ! keep_if_reinit "${TARGET_DIR}/org-profile/org-profile.yaml"; then
       -e "s/name: Acme Corp/name: ${E_ORG_NAME}/" \
       -e "s/profile_version: \"2026.06.1\"/profile_version: \"${TODAY}\"/" \
       -e "s/owner: Acme AppSec Team/owner: ${E_OWNER}/" \
+      -e "s/headline: \"ACME AppSec Advisor\"/headline: \"${E_BANNER_HEADLINE}\"/" \
       -e "s|requirements_yaml_url: \"https://security.example.internal/appsec-requirements.yaml\"|requirements_yaml_url: \"org-profile/requirements.yaml\"|" \
       -e "s|human_source_url: \"https://security.example.internal/appsec/requirements\"|human_source_url: \"# TODO: add URL to hosted requirements catalog\"|" \
       -e "s/label: \"Acme Corp AppSec Requirements\"/label: \"${E_LABEL}\"/" \
@@ -201,6 +203,7 @@ if ! keep_if_reinit "${TARGET_DIR}/org-profile/org-profile.yaml"; then
       -e "s/name: Acme Corp/name: ${E_ORG_NAME}/" \
       -e "s/profile_version: \"2026.06.1\"/profile_version: \"${TODAY}\"/" \
       -e "s/owner: Acme AppSec Team/owner: ${E_OWNER}/" \
+      -e "s/headline: \"ACME AppSec Advisor\"/headline: \"${E_BANNER_HEADLINE}\"/" \
       -e "s|requirements_yaml_url: \"https://security.example.internal/appsec-requirements.yaml\"|requirements_yaml_url: \"# TODO: add URL to hosted requirements catalog\"|" \
       -e "/human_source_url:/d" \
       -e "/label: \"Acme Corp AppSec Requirements\"/d" \

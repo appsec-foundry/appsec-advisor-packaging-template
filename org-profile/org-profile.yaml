@@ -11,6 +11,14 @@ organization:
   profile_version: "2026.06.1"
   owner: Acme AppSec Team
 
+# Session-start branding. The remaining lines always report live repository and
+# baseline state and are intentionally not configurable.
+banner:
+  enabled: true
+  headline: "ACME AppSec Advisor"
+  # Shown by the packaged help skill, not in the compact session-start banner.
+  url: "https://github.com/appsec-foundry/appsec-advisor"
+
 compatibility:
   core: ">=0.6 <0.7"
 
