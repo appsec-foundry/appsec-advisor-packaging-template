@@ -264,7 +264,13 @@ tgt="$d/out"
 printf '\nTest Org\n\n\n\n\n%s\ny\n\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
 rc=$?
-if [ "$rc" = 0 ] && [ -f "$tgt/org-profile/requirements.yaml" ] && [ -f "$tgt/org-skills/README.md" ]; then
+if [ "$rc" = 0 ] && [ -f "$tgt/org-profile/requirements.yaml" ] && \
+   [ -f "$tgt/org-skills/README.md" ] && \
+   [ -f "$tgt/ci-requirements.lock" ] && \
+   grep -Fq -- '--require-hashes -r ci-requirements.lock' \
+     "$tgt/ci-templates/github/workflows/package.yml" && \
+   grep -Fq -- '--require-hashes -r ci-requirements.lock' \
+     "$tgt/ci-templates/gitlab-ci.yml"; then
   pass "init: demo=yes"
 else fail "init: demo=yes" "rc=$rc"; fi
 
@@ -666,7 +672,8 @@ for f in scripts/fetch-upstream.sh scripts/upstream-check.sh scripts/package-loc
          scripts/baseline-upstream-check.py \
          scripts/archive-built-plugin.py scripts/finalize-package-version.py \
          scripts/rewrite-packaged-origins.py scripts/reinit-org-repo.sh \
-         org-profile/package-policy.yaml org-profile/org-profile.yaml Makefile; do
+         org-profile/package-policy.yaml org-profile/org-profile.yaml \
+         ci-requirements.lock Makefile; do
   [ -f "$self_contained_tgt/$f" ] || missing="$missing $f"
 done
 # every hook script declared in the rendered profile has to exist too
@@ -694,25 +701,13 @@ printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\nn\n' "$tgt" | (cd "$ROOT" && timeout 20 b
   >/dev/null 2>>"$COV"
 assert_rc "init: existing dir, abort" 1 "$?"
 
-# clone fallback: run a copy with no sibling Makefile; git stub "clones" by
-# copying a clean export (tracked files only — no stray device-file dotfiles).
+# Clone fallback: run a copy with no sibling Makefile. Export tracked and new,
+# non-ignored working-tree files so the test covers changes before commit while
+# excluding local caches and generated output.
 clean="$WORKROOT/export"
 mkdir -p "$clean"
-("$REAL_GIT" -C "$ROOT" archive HEAD) | tar -x -C "$clean"
-# Include newly added source files before they have been committed; once
-# tracked, this simply refreshes the archived copy with the working-tree file.
-cp "$ROOT/scripts/prepare-local-marketplace.py" \
-  "$clean/scripts/prepare-local-marketplace.py"
-cp "$ROOT/scripts/render-packaged-help.py" "$clean/scripts/render-packaged-help.py"
-cp "$ROOT/scripts/render-packaged-readme.py" "$clean/scripts/render-packaged-readme.py"
-cp "$ROOT/scripts/prune-packaged-session-banner.py" \
-  "$clean/scripts/prune-packaged-session-banner.py"
-cp "$ROOT/scripts/baseline-upstream-check.py" "$clean/scripts/baseline-upstream-check.py"
-cp "$ROOT/scripts/archive-built-plugin.py" "$clean/scripts/archive-built-plugin.py"
-cp "$ROOT/scripts/rewrite-packaged-origins.py" \
-  "$clean/scripts/rewrite-packaged-origins.py"
-cp "$ROOT/scripts/reinit-org-repo.sh" "$clean/scripts/reinit-org-repo.sh"
-cp "$ROOT/Makefile" "$clean/Makefile"
+(cd "$ROOT" && "$REAL_GIT" ls-files --cached --others --exclude-standard -z | \
+  tar --null -T - -cf -) | tar -x -C "$clean"
 lonely="$WORKROOT/lonely"
 mkdir -p "$lonely"
 cp "$INIT" "$lonely/init-org-repo.sh"

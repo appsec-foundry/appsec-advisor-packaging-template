@@ -15,7 +15,7 @@ default:
   image: python:3.11-slim
   before_script:
     - apt-get update -qq && apt-get install -y -qq --no-install-recommends git
-    - pip install --quiet pyyaml jsonschema packaging
+    - python -m pip install --quiet --require-hashes -r ci-requirements.lock
 
 # shellcheck the build glue. Non-blocking until the scripts are verified
 # clean — drop allow_failure to make lint findings fail the pipeline.

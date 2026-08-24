@@ -34,7 +34,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint check release-check fetch-upstream upstream-check baseline-check check-updates drift-check validate package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean distclean rebuild reinit test
+.PHONY: help lint check release-check fetch-upstream upstream-check baseline-check check-updates drift-check validate package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean rebuild reinit test
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -107,11 +107,8 @@ install-local: local-marketplace ## Register the local marketplace and install t
 smoke: $(FETCH_TARGET) ## Smoke-test an already-built package
 	python3 "$(APPSEC_ADVISOR_SOURCE)/scripts/smoke_test_package.py" "build/$(INTERNAL_NAME)" --name "$(INTERNAL_NAME)"
 
-clean: ## Remove generated dirs (upstream/ build/ dist/)
-	rm -rf upstream/ build/ dist/
-
-distclean: clean ## clean, then strip template build glue from a scaffolded repo
-	rm -rf ci-templates/ scripts/ AGENTS.md README.md Makefile
+clean: ## Remove generated dirs, coverage output and local tool caches
+	rm -rf upstream/ build/ dist/ .ruff_cache/ scripts/__pycache__/ tests/__pycache__/ org-profile/hooks/__pycache__/ coverage.lcov
 
 rebuild: clean package ## clean then package
 

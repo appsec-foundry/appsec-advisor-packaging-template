@@ -598,6 +598,9 @@ cp "${TEMPLATE_BASE}/ci-templates/github/workflows/package.yml" \
    "${TARGET_DIR}/ci-templates/github/workflows/package.yml"
 cp "${TEMPLATE_BASE}/ci-templates/gitlab-ci.yml" \
    "${TARGET_DIR}/ci-templates/gitlab-ci.yml"
+if [ -f "${TEMPLATE_BASE}/ci-requirements.lock" ]; then
+  cp "${TEMPLATE_BASE}/ci-requirements.lock" "${TARGET_DIR}/ci-requirements.lock"
+fi
 
 cp "${TEMPLATE_BASE}/.gitignore" "${TARGET_DIR}/.gitignore"
 if [ -f "${TEMPLATE_BASE}/org-skills/README.md" ]; then

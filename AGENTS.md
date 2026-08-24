@@ -19,6 +19,7 @@ cloned to `upstream/appsec-advisor` at build time.
 | `org-skills/<skill-id>/SKILL.md` | Your own skills, packaged alongside the upstream ones |
 | `Makefile` / `scripts/` | Build and fetch logic |
 | `.github/workflows/package.yml` / `.gitlab-ci.yml` | CI configuration |
+| `ci-requirements.lock` | Hashed, binary-only Python dependencies used by both CI templates |
 
 **Do not touch:** `upstream/` and `build/` — both are generated.
 

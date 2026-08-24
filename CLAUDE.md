@@ -6,11 +6,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A **packaging template** for building an internal `appsec-advisor` Claude Code plugin with org-specific defaults. It contains **only org configuration and build glue — no application code.** The actual plugin code lives upstream at `https://github.com/appsec-foundry/appsec-advisor.git` and is cloned to `upstream/appsec-advisor/` at build time.
 
-Crucially, the scripts that do the real packaging work (`package_internal_plugin.py`, `validate_org_profile.py`, `smoke_test_package.py`) live **upstream**, not here. The `scripts/` in this repo only fetch upstream and invoke those tools. To understand build behavior, read the upstream scripts after a fetch.
+The core packaging, profile validation, and smoke-test scripts live upstream. The
+local `scripts/` directory fetches and invokes that core, then finalizes the
+organization version, normalizes known legacy origins, generates package-specific
+help and README content, prunes disabled banner code, and optionally archives the
+verified result.
 
 ## Build pipeline
 
-`make package` runs: `fetch-upstream.sh` (clone/checkout upstream at `APPSEC_ADVISOR_REF`) → optional `org-skills/` overlay into a temporary source tree → upstream `package_internal_plugin.py` (overlay `org-profile/` onto upstream, applying `package-policy.yaml` allowlist) → upstream `smoke_test_package.py` → output to `build/<INTERNAL_NAME>/`.
+`make package` runs: fetch the pinned upstream → optionally overlay `org-skills/`
+in a temporary source tree → invoke the upstream packager with `org-profile/` and
+its allowlist → normalize and finalize the package → validate the resolved core
+compatibility → generate packaged help and README → prune disabled banner code →
+run the upstream smoke test. Output goes to `build/<INTERNAL_NAME>/`.
 
 `make local-marketplace` adds a generated
 `build/.claude-plugin/marketplace.json` around the packaged plugin for local
@@ -28,28 +36,39 @@ make upstream-check # read-only drift check: reports if the build ref moved (new
 make validate      # validate org-profile.yaml against upstream schema only
 make package       # fetch + build + smoke test → build/<name>/
 make rebuild       # clean (removes upstream/ build/ dist/) then package
-make clean         # remove generated dirs
+make clean         # remove generated dirs, coverage output and local tool caches
 make ci-github     # install .github/workflows/package.yml
 make ci-gitlab     # install .gitlab-ci.yml
-ARCHIVE=1 ORG_REV=3 make package-archive       # produce dist/*.tgz + .sha256
+ARCHIVE=1 PACKAGE_VERSION=1.2.0 make package-archive # produce dist/*.tgz + .sha256
 
 # Test the built plugin in Claude Code:
 claude --plugin-dir build/<INTERNAL_NAME>
 ```
 
-Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL` (upstream repo or fork), `APPSEC_ADVISOR_REF` (defaults to the pinned release tag `v0.6.0-beta.1`; `latest` resolves to the newest `v*` tag), `APPSEC_ADVISOR_SOURCE` (use an existing local checkout, skips fetch), `ORG_SKILLS_DIR` (defaults to `org-skills`), `INTERNAL_NAME`, `ORG_ID`, `ORG_REV`, `VERSION`.
+Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL`
+(upstream repo or fork), `APPSEC_ADVISOR_REF` (defaults to the pinned release
+tag `v0.6.0-beta.1`; `latest` resolves to the newest `v*` tag),
+`APPSEC_ADVISOR_SOURCE` (use an existing local checkout, skips fetch),
+`ORG_SKILLS_DIR` (defaults to `org-skills`), `INTERNAL_NAME`,
+`INTERNAL_REPOSITORY_URL`, `PACKAGE_VERSION`, and the backward-compatible
+one-off `VERSION` override.
 
 ### Package versioning
 
-`package-local.sh` derives the version from upstream lineage plus an org revision counter — `VERSION` is only an override:
+`PACKAGE_VERSION` is the organization-owned plugin version. It defaults to
+`0.1.0` and is shown in the session banner, packaged help, plugin manifest and
+archive filename. It is independent of `APPSEC_ADVISOR_REF`, which pins the
+upstream implementation.
 
 ```
-<upstream-version>+<org-id>.<org-rev>     e.g. 0.6.0-beta.1+acme.3
+Acme AppSec Advisor 1.2.0 · /acme-appsec:help
 ```
 
-Left half: the upstream checkout's tag (`git describe --tags --exact-match`, `v` stripped). Off a branch tip it derives from the nearest tag as `<tag>-dev.g<shortsha>` (for example `0.6.0-beta.1-dev.gabc1234`); without a reachable tag it falls back to `0.0.0-<ref>.g<shortsha>`. Right half is SemVer build metadata: `ORG_ID` (defaults to the first segment of `INTERNAL_NAME`) and `ORG_REV` (defaults to `1`).
-
-Bump rule: increment `ORG_REV` for org-only changes (`org-profile/`, `org-skills/`, `package-policy.yaml`); when `APPSEC_ADVISOR_REF` moves, the left half changes and `ORG_REV` restarts at 1. Both CI templates set `ORG_REV` to the repo tag on tag pipelines, else the commit sha, and glob `dist/<name>-*.tgz` for artifacts rather than reconstructing the version string.
+Bump `PACKAGE_VERSION` for an internal package release. A packaging-repository
+tag such as `v1.2.0` becomes the package version in CI. `VERSION` remains a
+one-off compatibility override. The final manifest stores the implementation
+separately as `appsec_advisor_core_version`, so `compatibility.core` continues
+to validate the upstream core.
 
 ### Tracking upstream: release vs branch
 
@@ -81,6 +100,7 @@ APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 | `org-skills/<skill-id>/SKILL.md` | Optional org-owned skills packaged next to upstream skills |
 | `Makefile`, `scripts/` | Build/fetch glue |
 | `ci-templates/` | CI pipelines copied into place by `make ci-*` |
+| `ci-requirements.lock` | Hashed, binary-only Python dependencies used by CI |
 
 `build/`, `dist/`, `upstream/` are **generated — never commit them** (gitignored).
 
@@ -99,6 +119,8 @@ APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 
 `scripts/init-org-repo.sh` is a standalone generator (run via curl or locally) that scaffolds a *new* packaging repo: it prompts for org name/id/plugin name, then copies+`sed`-substitutes the placeholders into a fresh git repo. It is not part of the build. When editing template files, keep its substitution targets intact — it `sed`-replaces literal strings like `acme-appsec`, `Acme Corp`, `Acme AppSec Team`, `id: acme`, `profile_version: "2026.06.1"`, and specific `requirements_yaml_url`/`label` lines. The scaffolded repo's `README.md` is rendered from `README.example.md` (copied + `sed`-substituted) — edit that file to change what end-user repos ship with.
 
-## Note on language
+## Agent guidance
 
-`AGENTS.md` is written in German and documents the same editable surface and invariants; keep it in sync with this file when those change.
+`AGENTS.md` contains the repository-wide operating instructions and the same
+editable-surface invariants. Keep this Claude Code-specific summary consistent
+with it when build behavior changes.

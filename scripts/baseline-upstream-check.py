@@ -126,8 +126,6 @@ def _profile_allowlist(profile: dict[str, Any]) -> list[str]:
 
 
 def _fetch(url: str, profile: dict[str, Any], core_config_path: Path) -> bytes:
-    if url == LEGACY_BASELINE_URL:
-        url = CURRENT_BASELINE_URL
     parsed = urlsplit(url)
     if parsed.scheme != "https":
         raise BaselineCheckError("baseline drift checks require an HTTPS source URL")
