@@ -236,7 +236,10 @@ tgt="$d/out"
 mkdir -p "$tgt"
 printf 'Test Org\n\n\n\n%s\nn\n\ny\n' "$tgt" | (cd "$ROOT" && timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
-assert_rc "init: existing dir, continue" 0 "$?"
+rc=$?
+if [ "$rc" = 0 ] && [ -d "$tgt/.git" ]; then
+  pass "init: partial existing dir is initialized and completed"
+else fail "init: partial existing dir is initialized and completed" "rc=$rc"; fi
 
 d="$(newdir)"
 tgt="$d/out"
@@ -263,6 +266,20 @@ printf '\nTest Org\n\n\n\n%s\ny\n\n' "$tgt" | \
   (cd "$d" && env GITSTUB_CLONE_SRC="$clean" timeout 20 bash -x "$lonely/init-org-repo.sh") \
   >/dev/null 2>>"$COV"
 assert_rc "init: clone fallback" 0 "$?"
+
+# A remotely downloaded initializer may be newer than the selected template
+# branch. Optional files added by the newer script must not make an older,
+# otherwise self-consistent template snapshot fail during scaffolding.
+legacy="$WORKROOT/legacy-export"
+cp -r "$clean" "$legacy"
+rm "$legacy/scripts/prepare-local-marketplace.py"
+d="$(newdir)"
+tgt="$d/out"
+printf 'Test Org\n\n\n\n%s\nn\n\n' "$tgt" | \
+  (cd "$d" && env GITSTUB_CLONE_SRC="$legacy" APPSEC_ADVISOR_TEMPLATE_REF=dev \
+    timeout 20 bash -x "$lonely/init-org-repo.sh") \
+  >/dev/null 2>>"$COV"
+assert_rc "init: newer script tolerates older template snapshot" 0 "$?"
 
 # ── upstream-check.sh ────────────────────────────────────────────────────────
 echo "--- upstream-check.sh ---"

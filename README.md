@@ -21,7 +21,7 @@ and development workflow.
 Run the init script — it asks for your org name and plugin name, then creates a ready-to-use git repo with all placeholders already replaced:
 
 ```bash
-APPSEC_ADVISOR_TEMPLATE_REF=dev bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh)
+APPSEC_ADVISOR_TEMPLATE_REF=dev bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/dev/scripts/init-org-repo.sh)
 ```
 
 Alternatively, click **Use this template** on GitHub and replace `Acme Corp` / `acme-appsec` manually.

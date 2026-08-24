@@ -32,8 +32,8 @@ APPSEC_ADVISOR_SOURCE=/home/mrohr/appsec-advisor make package
 Für ein Scaffold, das ebenfalls gegen `appsec-advisor/dev` baut:
 
 ```bash
-APPSEC_ADVISOR_TEMPLATE_REF=dev bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh)
+APPSEC_ADVISOR_TEMPLATE_REF=dev bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/dev/scripts/init-org-repo.sh)
 ```
 
-Ohne `APPSEC_ADVISOR_TEMPLATE_REF=dev` erzeugt der `main`-URL ein
-releaseorientiertes Scaffold.
+Für ein releaseorientiertes Scaffold stattdessen die Script-URL mit `/main/`
+verwenden und `APPSEC_ADVISOR_TEMPLATE_REF` weglassen.

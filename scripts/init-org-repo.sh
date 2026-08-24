@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Creates a fresh org packaging repo for appsec-advisor.
 # Usage: bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh)
-# Dev scaffold: APPSEC_ADVISOR_TEMPLATE_REF=dev bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh)
+# Dev scaffold: APPSEC_ADVISOR_TEMPLATE_REF=dev bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/dev/scripts/init-org-repo.sh)
 # Or locally: scripts/init-org-repo.sh
 set -euo pipefail
 
@@ -117,9 +117,11 @@ cp "${TEMPLATE_BASE}/scripts/fetch-upstream.sh" "${TARGET_DIR}/scripts/fetch-ups
 chmod +x "${TARGET_DIR}/scripts/fetch-upstream.sh"
 cp "${TEMPLATE_BASE}/scripts/upstream-check.sh" "${TARGET_DIR}/scripts/upstream-check.sh"
 chmod +x "${TARGET_DIR}/scripts/upstream-check.sh"
-cp "${TEMPLATE_BASE}/scripts/prepare-local-marketplace.py" \
-   "${TARGET_DIR}/scripts/prepare-local-marketplace.py"
-chmod +x "${TARGET_DIR}/scripts/prepare-local-marketplace.py"
+if [ -f "${TEMPLATE_BASE}/scripts/prepare-local-marketplace.py" ]; then
+  cp "${TEMPLATE_BASE}/scripts/prepare-local-marketplace.py" \
+     "${TARGET_DIR}/scripts/prepare-local-marketplace.py"
+  chmod +x "${TARGET_DIR}/scripts/prepare-local-marketplace.py"
+fi
 
 cp "${TEMPLATE_BASE}/ci-templates/github/workflows/package.yml" \
    "${TARGET_DIR}/ci-templates/github/workflows/package.yml"
@@ -249,7 +251,7 @@ sed -i \
 # ── Init git repo ─────────────────────────────────────────────────────────────
 
 cd "${TARGET_DIR}"
-if [ "${REINIT}" = false ]; then
+if [ ! -e .git ]; then
   git init -q
 fi
 git add .
