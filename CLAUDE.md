@@ -88,6 +88,12 @@ APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 
 `make upstream-check` adapts to the mode: with `REF=latest` it flags a newer release tag; with a branch ref it flags when the branch tip has moved past your local checkout.
 
+Generated repositories pin the packaging template separately through
+`APPSEC_ADVISOR_TEMPLATE_REF`. `make packaging-template-check` reports drift without
+modifying the repository. `make reinit` reapplies the pin; use
+`make reinit APPSEC_ADVISOR_TEMPLATE_REF=<reviewed-commit>` for a deliberate
+update using the exact commit reported by the check.
+
 ## Editable surface
 
 | Path | Purpose |

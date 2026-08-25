@@ -198,6 +198,11 @@ valid_upstream_ref() {
   git check-ref-format "refs/appsec-advisor/$1" >/dev/null 2>&1
 }
 
+is_commit_ref() {
+  case "$1" in *[!0-9a-f]*) return 1 ;; esac
+  [ "${#1}" -eq 40 ] || [ "${#1}" -eq 64 ]
+}
+
 resolve_latest_upstream_release() {
   local upstream_url latest
   upstream_url="${APPSEC_ADVISOR_URL:-https://github.com/appsec-foundry/appsec-advisor.git}"
@@ -681,21 +686,56 @@ SCRIPT_ABS="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)/$(basename
 TEMPLATE_BASE="${SCRIPT_ABS%/scripts/init-org-repo.sh}"
 TEMPLATE_REF="${APPSEC_ADVISOR_TEMPLATE_REF:-main}"
 
+if ! valid_upstream_ref "${TEMPLATE_REF}"; then
+  echo "ERROR: APPSEC_ADVISOR_TEMPLATE_REF is not a safe branch, tag, or commit: ${TEMPLATE_REF}" >&2
+  exit 2
+fi
+
 # When invoked via curl/pipe the path above resolves to something like /dev/fd/N
 # which has no Makefile — fall back to cloning.
 if [ ! -f "${TEMPLATE_BASE}/Makefile" ]; then
   TMPDIR_CLONE="$(mktemp -d)"
   echo "==> Cloning template from GitHub …"
-  if ! git clone --depth 1 --branch "${TEMPLATE_REF}" \
+  if is_commit_ref "${TEMPLATE_REF}"; then
+    if ! git clone --filter=blob:none --no-checkout -- \
       "https://github.com/appsec-foundry/appsec-advisor-packaging-template.git" \
       "${TMPDIR_CLONE}"; then
-    echo "ERROR: could not fetch packaging template ref '${TEMPLATE_REF}'." >&2
-    echo "Check network access and APPSEC_ADVISOR_TEMPLATE_REF, then retry." >&2
-    exit 2
+      echo "ERROR: could not clone the packaging template before resolving commit '${TEMPLATE_REF}'." >&2
+      exit 2
+    fi
+    if ! git -C "${TMPDIR_CLONE}" fetch --depth 1 origin "${TEMPLATE_REF}" ||
+       ! git -C "${TMPDIR_CLONE}" checkout --detach FETCH_HEAD; then
+      echo "ERROR: could not fetch pinned packaging-template commit '${TEMPLATE_REF}'." >&2
+      exit 2
+    fi
+  elif ! git clone --depth 1 --branch "${TEMPLATE_REF}" -- \
+    "https://github.com/appsec-foundry/appsec-advisor-packaging-template.git" \
+    "${TMPDIR_CLONE}"; then
+      echo "ERROR: could not fetch packaging template ref '${TEMPLATE_REF}'." >&2
+      echo "Check network access and APPSEC_ADVISOR_TEMPLATE_REF, then retry." >&2
+      exit 2
   fi
   TEMPLATE_BASE="${TMPDIR_CLONE}"
 fi
 check_template_layout
+
+if ! RESOLVED_TEMPLATE_REF="$(git -C "${TEMPLATE_BASE}" rev-parse --verify 'HEAD^{commit}')" ||
+   ! is_commit_ref "${RESOLVED_TEMPLATE_REF}"; then
+  echo "ERROR: packaging template source is not a Git checkout with an exact commit." >&2
+  echo "Use a checked-out APPSEC_ADVISOR_TEMPLATE_SOURCE or a fetchable APPSEC_ADVISOR_TEMPLATE_REF." >&2
+  exit 2
+fi
+if ! git -C "${TEMPLATE_BASE}" diff --quiet HEAD -- ||
+   [ -n "$(git -C "${TEMPLATE_BASE}" ls-files --others --exclude-standard)" ]; then
+  echo "ERROR: packaging template source has uncommitted or untracked changes and cannot be pinned reproducibly." >&2
+  echo "Commit the template changes or initialize from a clean release checkout." >&2
+  exit 2
+fi
+PERSISTED_TEMPLATE_REF="${RESOLVED_TEMPLATE_REF}"
+if git -C "${TEMPLATE_BASE}" show-ref --verify --quiet "refs/tags/${TEMPLATE_REF}"; then
+  PERSISTED_TEMPLATE_REF="${TEMPLATE_REF}"
+fi
+echo "==> Packaging template ref: ${PERSISTED_TEMPLATE_REF} (pinned at ${RESOLVED_TEMPLATE_REF})"
 
 if [ "${REINIT_MODE}" != true ] && [ "${UPSTREAM_REF}" = latest ]; then
   UPSTREAM_REF="$(resolve_latest_upstream_release)" || exit 2
@@ -846,6 +886,11 @@ cp "${TEMPLATE_BASE}/scripts/fetch-upstream.sh" "${TARGET_DIR}/scripts/fetch-ups
 chmod +x "${TARGET_DIR}/scripts/fetch-upstream.sh"
 cp "${TEMPLATE_BASE}/scripts/upstream-check.sh" "${TARGET_DIR}/scripts/upstream-check.sh"
 chmod +x "${TARGET_DIR}/scripts/upstream-check.sh"
+if [ -f "${TEMPLATE_BASE}/scripts/packaging-template-check.sh" ]; then
+  cp "${TEMPLATE_BASE}/scripts/packaging-template-check.sh" \
+    "${TARGET_DIR}/scripts/packaging-template-check.sh"
+  chmod +x "${TARGET_DIR}/scripts/packaging-template-check.sh"
+fi
 if [ -f "${TEMPLATE_BASE}/scripts/prepare-local-marketplace.py" ]; then
   cp "${TEMPLATE_BASE}/scripts/prepare-local-marketplace.py" \
      "${TARGET_DIR}/scripts/prepare-local-marketplace.py"
@@ -911,6 +956,7 @@ fi
 E_PLUGIN=$(sed_escape "${PLUGIN_NAME}")
 E_PACKAGE_VERSION=$(sed_escape "${PACKAGE_VERSION}")
 E_UPSTREAM_REF=$(sed_escape "${UPSTREAM_REF}")
+E_TEMPLATE_REF=$(sed_escape "${PERSISTED_TEMPLATE_REF}")
 INTERNAL_REPOSITORY_ASSIGNMENT="INTERNAL_REPOSITORY_URL ?="
 if [ -n "${INTERNAL_REPOSITORY_URL}" ]; then
   INTERNAL_REPOSITORY_ASSIGNMENT="${INTERNAL_REPOSITORY_ASSIGNMENT} ${INTERNAL_REPOSITORY_URL}"
@@ -919,6 +965,7 @@ E_INTERNAL_REPOSITORY_ASSIGNMENT=$(sed_escape "${INTERNAL_REPOSITORY_ASSIGNMENT}
 sed \
   -e "s/acme-appsec/${E_PLUGIN}/g" \
   -e "s/^APPSEC_ADVISOR_REF := .*$/APPSEC_ADVISOR_REF := ${E_UPSTREAM_REF}/" \
+  -e "s/^APPSEC_ADVISOR_TEMPLATE_REF ?= .*$/APPSEC_ADVISOR_TEMPLATE_REF ?= ${E_TEMPLATE_REF}/" \
   -e "s/^PACKAGE_VERSION ?= 0.1.0$/PACKAGE_VERSION ?= ${E_PACKAGE_VERSION}/" \
   -e "s|^INTERNAL_REPOSITORY_URL ?=$|${E_INTERNAL_REPOSITORY_ASSIGNMENT}|" \
   "${TEMPLATE_BASE}/Makefile" > "${TARGET_DIR}/Makefile"

@@ -23,6 +23,8 @@ export PACKAGE_VERSION VERSION INTERNAL_REPOSITORY_URL
 LOCAL_MARKETPLACE_NAME ?= $(INTERNAL_NAME)-local
 LOCAL_MARKETPLACE_SCOPE ?= local
 APPSEC_ADVISOR_TEMPLATE_URL ?= https://github.com/appsec-foundry/appsec-advisor-packaging-template.git
+# The initializer replaces this moving bootstrap ref with the exact template
+# commit used to create or reinitialize a generated repository.
 APPSEC_ADVISOR_TEMPLATE_REF ?= main
 APPSEC_ADVISOR_TEMPLATE_SOURCE ?=
 REINIT_BUILD ?= 1
@@ -36,10 +38,10 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint check release release-check fetch-upstream upstream-check baseline-check check-updates drift-check validate package release-package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean rebuild reinit test
+.PHONY: help lint check release release-check fetch-upstream upstream-check packaging-template-check baseline-check check-updates drift-check validate package release-package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean rebuild reinit test
 
 help: ## Show this help
-	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-28s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 test: ## Run the shell-script test suite + coverage gate (skipped if tests/ is absent)
 	@if [ -f tests/run.sh ]; then \
@@ -68,6 +70,9 @@ release-check: ## Release-boundary gate: check + validate + build a clean plugin
 
 upstream-check: ## Read-only drift check for the appsec-advisor ref and releases
 	APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" scripts/upstream-check.sh
+
+packaging-template-check: ## Read-only check for a newer packaging-template revision
+	APPSEC_ADVISOR_TEMPLATE_URL="$(APPSEC_ADVISOR_TEMPLATE_URL)" APPSEC_ADVISOR_TEMPLATE_REF="$(APPSEC_ADVISOR_TEMPLATE_REF)" scripts/packaging-template-check.sh
 
 baseline-check: ## Read-only drift check for the configured secure-coding baseline
 	python3 scripts/baseline-upstream-check.py --profile org-profile/org-profile.yaml --core-config "$(APPSEC_ADVISOR_SOURCE)/config.json"
@@ -120,7 +125,7 @@ clean: ## Remove generated dirs, coverage output and local tool caches
 
 rebuild: clean package ## clean then package
 
-reinit: ## Reapply the current template to this repo using its existing settings
+reinit: ## Reapply the selected template ref using the existing settings
 	scripts/reinit-org-repo.sh
 
 ci-github: ## Install the GitHub Actions packaging workflow

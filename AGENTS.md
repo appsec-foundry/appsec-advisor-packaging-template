@@ -128,17 +128,28 @@ make test                             # shell test suite + coverage gate (skippe
 make check                            # offline gate: lint + test (no network, no upstream fetch)
 make release-check                    # release gate: check + check-updates (advisory) + validate + package
 make upstream-check                   # read-only drift check: has the build ref moved, is there a newer v* release
+make packaging-template-check         # read-only drift check for the pinned packaging-template commit
 make baseline-check                   # read-only drift check: does the configured baseline id match its published document
-make check-updates                    # check both upstream sources for available updates
+make check-updates                    # check appsec-advisor and baseline updates
 make package                          # fetch upstream + build the package + smoke-test it
 APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package # pin a specific release
 make validate                         # validate org-profile.yaml only
 make local-marketplace                # build + generate a local marketplace catalog under build/
 make install-local                    # register that catalog and install the plugin at local scope
-make reinit                           # reapply template main with existing settings, then package
+make reinit                           # reapply the pinned template with existing settings, then package
+make reinit APPSEC_ADVISOR_TEMPLATE_REF=<reviewed-commit> # deliberately apply the exact reviewed template commit
 REINIT_BUILD=0 make reinit            # reapply template without packaging afterwards
 make release-package                    # produce distributable archives + checksums
 ```
+
+The initializer resolves the packaging-template checkout to an exact Git commit
+and writes that pin to generated repositories. `make reinit` reapplies that
+same revision; it does not silently execute a newer `main`. Run
+`make packaging-template-check`, review the reported drift, then use
+`make reinit APPSEC_ADVISOR_TEMPLATE_REF=<reviewed-commit>` (or a reviewed
+release tag) to update deliberately. Use the exact commit reported by the check,
+not the moving branch name. A successful reinitialization persists that exact
+revision again.
 
 Reinitialization refreshes infrastructure directly. For each differing
 user-editable template file, it prompts to overwrite, keep, overwrite all
@@ -177,8 +188,9 @@ Der Initializer bietet zwei Upstream-Kanäle an. **Stable** ist der Standard:
 der höchste verfügbare `v*`-Tag wird einmal aufgelöst und konkret im erzeugten
 `Makefile` gepinnt. **Development** schreibt `APPSEC_ADVISOR_REF=dev` und folgt
 damit bei jedem Build dem aktuellen Branch-Head. Das Template-Repository selbst
-pinnt aktuell `v0.6.0-beta.1`; `make reinit` erhält den Ref eines erzeugten
-Repositories, statt die Kanalauswahl erneut auszuführen.
+pinnt aktuell `v0.6.0-beta.1`; `make reinit` erhält sowohl diesen Upstream-Ref
+als auch den exakten Packaging-Template-Pin eines erzeugten Repositories, statt
+die Kanalauswahl erneut auszuführen.
 
 ```bash
 make package                              # upstream v0.6.0-beta.1 (default)

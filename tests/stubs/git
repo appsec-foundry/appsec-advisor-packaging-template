@@ -24,6 +24,7 @@ rest = argv[1:]
 TAGS = os.environ.get("GITSTUB_TAGS", "").split()
 HEADS = os.environ.get("GITSTUB_HEADS", "").split()
 SHA = "abc1234"
+TEMPLATE_SHA = os.environ.get("GITSTUB_TEMPLATE_SHA", "a" * 40)
 
 
 def out(s=""):
@@ -45,6 +46,9 @@ if sub == "rev-parse":
     if "--short" in rest:
         out(SHA)
         sys.exit(0)
+    if "--verify" in rest and "HEAD^{commit}" in rest:
+        out(TEMPLATE_SHA)
+        sys.exit(0)
     # plain `rev-parse HEAD` -> local checkout commit
     out(os.environ.get("GITSTUB_LOCAL_SHA", SHA))
     sys.exit(0)
@@ -57,6 +61,18 @@ if sub == "var" and rest == ["GIT_AUTHOR_IDENT"]:
 
 if sub == "diff" and rest == ["--cached", "--quiet"]:
     sys.exit(1 if os.environ.get("GITSTUB_HAS_STAGED_CHANGES") == "1" else 0)
+
+if sub == "diff" and "--quiet" in rest:
+    sys.exit(1 if os.environ.get("GITSTUB_TEMPLATE_DIRTY") == "1" else 0)
+
+if sub == "ls-files":
+    if os.environ.get("GITSTUB_TEMPLATE_UNTRACKED") == "1":
+        out("untracked-template-file")
+    sys.exit(0)
+
+if sub == "show-ref":
+    ref = last().split("refs/tags/")[-1]
+    sys.exit(0 if ref in TAGS else 1)
 
 if sub == "commit":
     sys.exit(1 if os.environ.get("GITSTUB_FAIL_COMMIT") == "1" else 0)
@@ -99,7 +115,13 @@ if sub == "remote":
     sys.exit(0)
 
 if sub == "ls-remote":
+    if os.environ.get("GITSTUB_FAIL_LS_REMOTE") == "1":
+        sys.exit(2)
     arg = last()
+    if arg == "HEAD":
+        remote_sha = os.environ.get("GITSTUB_REMOTE_SHA", TEMPLATE_SHA)
+        out(f"{remote_sha}\tHEAD")
+        sys.exit(0)
     if has("--exit-code"):
         if has("--tags"):
             ref = arg.split("refs/tags/")[-1]
@@ -116,7 +138,7 @@ if sub == "ls-remote":
     if has("--heads") and arg.startswith("refs/heads/"):
         ref = arg.split("refs/heads/")[-1]
         if ref in HEADS:
-            out(f"{SHA}\trefs/heads/{ref}")
+            out(f"{TEMPLATE_SHA}\trefs/heads/{ref}")
         sys.exit(0)
     if has("--tags"):  # listing form: ls-remote --tags --refs origin 'v[0-9]*'
         for t in TAGS:
@@ -131,7 +153,10 @@ if sub == "ls-remote":
         out(f"{remote_sha}\trefs/heads/{bare}")
     sys.exit(0)
 
-if sub in ("fetch", "checkout"):
+if sub == "fetch":
+    sys.exit(1 if os.environ.get("GITSTUB_FAIL_FETCH") == "1" else 0)
+
+if sub == "checkout":
     sys.exit(0)
 
 sys.exit(0)

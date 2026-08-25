@@ -28,6 +28,7 @@ FETCH="$ROOT/scripts/fetch-upstream.sh"
 PKG="$ROOT/scripts/package-local.sh"
 INIT="$ROOT/scripts/init-org-repo.sh"
 CHECK="$ROOT/scripts/upstream-check.sh"
+TEMPLATE_CHECK="$ROOT/scripts/packaging-template-check.sh"
 REINIT="$ROOT/scripts/reinit-org-repo.sh"
 RELEASE="$ROOT/scripts/release.sh"
 GUARD_TEST="$HERE/test_guard.py"
@@ -496,6 +497,7 @@ printf 'Test Org\n\n\n\n\n%s\n\nn\n\n\n\nn\n' "$tgt" | \
 rc=$?
 if [ "$rc" = 0 ] && \
    grep -Fqx 'APPSEC_ADVISOR_REF := v0.6.0' "$tgt/Makefile" && \
+   grep -Fqx 'APPSEC_ADVISOR_TEMPLATE_REF ?= aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$tgt/Makefile" && \
    grep -Fq 'Latest stable appsec-advisor release: v0.6.0 (pinned)' "$channel_log"; then
   pass "init: stable channel resolves and pins the latest release"
 else fail "init: stable channel resolves and pins the latest release" "rc=$rc"; fi
@@ -547,6 +549,33 @@ if [ "$rc" = 2 ] && [ ! -e "$tgt" ] && \
    grep -Fq 'APPSEC_ADVISOR_REF is not a valid tag or branch name' "$COV"; then
   pass "init: unsafe upstream ref is rejected before Makefile rendering"
 else fail "init: unsafe upstream ref is rejected before Makefile rendering" "rc=$rc"; fi
+
+# Template refs are rendered into Makefiles after resolution. Reject unsafe
+# values before fetching and refuse to claim that a dirty source has an exact,
+# reproducible commit pin.
+d="$(newdir)"
+tgt="$d/out"
+template_ref_log="$d/unsafe-template-ref.log"
+printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\n' "$tgt" | \
+  (cd "$ROOT" && env 'APPSEC_ADVISOR_TEMPLATE_REF=main$(shell,id)' \
+    timeout 20 bash -x "$INIT") >"$template_ref_log" 2>>"$COV"
+rc=$?
+if [ "$rc" = 2 ] && [ ! -e "$tgt" ] && \
+   grep -Fq 'APPSEC_ADVISOR_TEMPLATE_REF is not a safe branch, tag, or commit' "$COV"; then
+  pass "init: unsafe template ref is rejected before rendering"
+else fail "init: unsafe template ref is rejected before rendering" "rc=$rc"; fi
+
+d="$(newdir)"
+tgt="$d/out"
+template_dirty_log="$d/dirty-template.log"
+printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\n' "$tgt" | \
+  (cd "$ROOT" && env GITSTUB_TEMPLATE_DIRTY=1 timeout 20 bash -x "$INIT") \
+  >"$template_dirty_log" 2>>"$COV"
+rc=$?
+if [ "$rc" = 2 ] && [ ! -e "$tgt" ] && \
+   grep -Fq 'template source has uncommitted or untracked changes' "$COV"; then
+  pass "init: dirty template source cannot be recorded as an exact pin"
+else fail "init: dirty template source cannot be recorded as an exact pin" "rc=$rc"; fi
 
 # Stable initialization must fail closed when it cannot identify a release;
 # falling through to a branch would silently change the selected trust boundary.
@@ -871,8 +900,50 @@ if [ "$rc" = 0 ] && \
 else fail "init: skipped build remains a next step" "rc=$rc"; fi
 self_contained_tgt="$tgt"
 
+# Exercise the current reinit wrapper itself (rather than the copied scaffold
+# wrapper) with the persisted exact commit, including validation and a failed
+# fetch boundary.
+root_reinit_tgt="$d/root-reinit"
+cp -r "$self_contained_tgt" "$root_reinit_tgt"
+root_reinit_log="$d/root-reinit.log"
+template_commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+(cd "$root_reinit_tgt" && env APPSEC_ADVISOR_TEMPLATE_REF="$template_commit" \
+  GITSTUB_CLONE_SRC="$ROOT" REINIT_BUILD=0 timeout 20 bash -x "$REINIT") \
+  >"$root_reinit_log" 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && \
+   grep -Fqx "APPSEC_ADVISOR_TEMPLATE_REF ?= $template_commit" "$root_reinit_tgt/Makefile"; then
+  pass "reinit: exact template commit is fetched and persisted"
+else fail "reinit: exact template commit is fetched and persisted" "rc=$rc"; fi
+
+(cd "$root_reinit_tgt" && env 'APPSEC_ADVISOR_TEMPLATE_REF=main$(shell,id)' \
+  REINIT_BUILD=0 timeout 20 bash -x "$REINIT") >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 2 ] && \
+   grep -Fq 'APPSEC_ADVISOR_TEMPLATE_REF is not a safe branch, tag, or commit' "$COV"; then
+  pass "reinit: unsafe template ref is rejected"
+else fail "reinit: unsafe template ref is rejected" "rc=$rc"; fi
+
+(cd "$root_reinit_tgt" && env APPSEC_ADVISOR_TEMPLATE_REF="$template_commit" \
+  APPSEC_ADVISOR_TEMPLATE_URL=http://example.test/template.git \
+  REINIT_BUILD=0 timeout 20 bash -x "$REINIT") >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 2 ] && \
+   grep -Fq 'APPSEC_ADVISOR_TEMPLATE_URL must use HTTPS without credentials or an SSH Git URL' "$COV"; then
+  pass "reinit: insecure template URL is rejected"
+else fail "reinit: insecure template URL is rejected" "rc=$rc"; fi
+
+(cd "$root_reinit_tgt" && env APPSEC_ADVISOR_TEMPLATE_REF="$template_commit" \
+  GITSTUB_CLONE_SRC="$ROOT" GITSTUB_FAIL_FETCH=1 REINIT_BUILD=0 \
+  timeout 20 bash -x "$REINIT") >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 2 ] && \
+   grep -Fq 'could not fetch pinned packaging-template commit' "$COV"; then
+  pass "reinit: failed pinned template fetch stops before refresh"
+else fail "reinit: failed pinned template fetch stops before refresh" "rc=$rc"; fi
+
 # make reinit reads identity from the existing repo, keeps differing user-owned
-# files by default, refreshes infrastructure from template main, and can skip packaging.
+# files by default, reapplies the selected template ref, and can skip packaging.
 profile_before="$(cksum "$self_contained_tgt/org-profile/org-profile.yaml")"
 readme_before="$(cksum "$self_contained_tgt/README.md")"
 printf 'stale infrastructure\n' >"$self_contained_tgt/scripts/package-local.sh"
@@ -1114,7 +1185,7 @@ else fail "init: UTF-8 recovery rejects a backup-directory symlink" "rc=$rc"; fi
 # the CI templates reference but init never copies only fails much later, at
 # 'make package' / 'make upstream-check' time in the user's repo.
 missing=""
-for f in scripts/fetch-upstream.sh scripts/upstream-check.sh scripts/package-local.sh \
+for f in scripts/fetch-upstream.sh scripts/upstream-check.sh scripts/packaging-template-check.sh scripts/package-local.sh \
          scripts/prepare-local-marketplace.py scripts/render-packaged-help.py \
          scripts/render-packaged-readme.py scripts/prune-packaged-session-banner.py \
          scripts/baseline-upstream-check.py \
@@ -1169,6 +1240,23 @@ printf '\nTest Org\n\n\n\n\n%s\ny\n\n' "$tgt" | \
   >/dev/null 2>>"$COV"
 assert_rc "init: clone fallback" 0 "$?"
 
+# A downloaded initializer can also bootstrap from an exact commit. The
+# generated repository retains that commit rather than a moving branch name.
+d="$(newdir)"
+tgt="$d/out"
+template_commit=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+printf '\nTest Org\n\n\n\n\n%s\ny\n\n' "$tgt" | \
+  (cd "$d" && env GITSTUB_CLONE_SRC="$clean" \
+    GITSTUB_TEMPLATE_SHA="$template_commit" \
+    APPSEC_ADVISOR_TEMPLATE_REF="$template_commit" \
+    timeout 20 bash -x "$lonely/init-org-repo.sh") \
+  >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && \
+   grep -Fqx "APPSEC_ADVISOR_TEMPLATE_REF ?= $template_commit" "$tgt/Makefile"; then
+  pass "init: exact template commit fallback remains pinned"
+else fail "init: exact template commit fallback remains pinned" "rc=$rc"; fi
+
 # A remotely downloaded initializer may be newer than the selected template
 # branch. Optional files added by the newer script must not make an older,
 # otherwise self-consistent template snapshot fail during scaffolding.
@@ -1220,12 +1308,58 @@ check_run "check: latest no tags -> error" 2 0 APPSEC_ADVISOR_REF=latest
 check_run "check: pinned ref not found -> error" 2 0 \
   APPSEC_ADVISOR_REF=v9.9.9 GITSTUB_TAGS="v0.4.0"
 
+# ── packaging-template-check.sh ─────────────────────────────────────────────
+echo "--- packaging-template-check.sh ---"
+template_check_run() {
+  local name="$1" exp="$2"
+  shift 2
+  local d
+  d="$(newdir)"
+  TEMPLATE_CHECK_LAST_LOG="$d/output.log"
+  (cd "$d" && env "$@" timeout 15 bash -x "$TEMPLATE_CHECK") \
+    >"$TEMPLATE_CHECK_LAST_LOG" 2>>"$COV"
+  assert_rc "$name" "$exp" "$?"
+}
+template_commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+new_template_commit=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+template_check_run "template check: pinned commit is current" 0 \
+  APPSEC_ADVISOR_TEMPLATE_REF="$template_commit" \
+  GITSTUB_REMOTE_SHA="$template_commit"
+template_check_run "template check: pinned commit has an update" 1 \
+  APPSEC_ADVISOR_TEMPLATE_REF="$template_commit" \
+  GITSTUB_REMOTE_SHA="$new_template_commit"
+if grep -Fq "make reinit APPSEC_ADVISOR_TEMPLATE_REF=$new_template_commit" \
+  "$TEMPLATE_CHECK_LAST_LOG"; then
+  pass "template check: update command uses the exact reported commit"
+else fail "template check: update command uses the exact reported commit" "moving ref suggested"; fi
+template_check_run "template check: invalid remote HEAD fails closed" 2 \
+  APPSEC_ADVISOR_TEMPLATE_REF="$template_commit" GITSTUB_REMOTE_SHA=invalid
+template_check_run "template check: network query failure is normalized" 2 \
+  APPSEC_ADVISOR_TEMPLATE_REF="$template_commit" GITSTUB_FAIL_LS_REMOTE=1
+template_check_run "template check: moving branch is reported" 1 \
+  APPSEC_ADVISOR_TEMPLATE_REF=main GITSTUB_HEADS=main
+template_check_run "template check: current release tag" 0 \
+  APPSEC_ADVISOR_TEMPLATE_REF=v0.2.0 GITSTUB_TAGS="v0.1.0 v0.2.0"
+template_check_run "template check: newer release tag" 1 \
+  APPSEC_ADVISOR_TEMPLATE_REF=v0.1.0 GITSTUB_TAGS="v0.1.0 v0.2.0"
+template_check_run "template check: missing ref fails closed" 2 \
+  APPSEC_ADVISOR_TEMPLATE_REF=v9.9.9
+template_check_run "template check: unsafe ref fails closed" 2 \
+  'APPSEC_ADVISOR_TEMPLATE_REF=bad$(shell,id)'
+template_check_run "template check: credential URL fails closed" 2 \
+  APPSEC_ADVISOR_TEMPLATE_REF="$template_commit" \
+  APPSEC_ADVISOR_TEMPLATE_URL=https://user:secret@example.test/template.git
+template_check_run "template check: SSH URL is accepted" 0 \
+  APPSEC_ADVISOR_TEMPLATE_REF="$template_commit" \
+  APPSEC_ADVISOR_TEMPLATE_URL=ssh://git@example.test/template.git \
+  GITSTUB_REMOTE_SHA="$template_commit"
+
 # ── report ───────────────────────────────────────────────────────────────────
 echo ""
 echo "functional checks: $PASS passed, $FAIL failed"
 python3 "$HERE/lib/coverage.py" --trace "$COV" --threshold "$THRESHOLD" \
   --lcov "$ROOT/coverage.lcov" --source-root "$ROOT" \
-  "$FETCH" "$PKG" "$INIT" "$REINIT" "$RELEASE" "$CHECK"
+  "$FETCH" "$PKG" "$INIT" "$REINIT" "$RELEASE" "$CHECK" "$TEMPLATE_CHECK"
 covrc=$?
 
 if [ "$FAIL" -eq 0 ] && [ "$covrc" -eq 0 ]; then exit 0; else exit 1; fi

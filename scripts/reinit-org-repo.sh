@@ -14,6 +14,36 @@ TEMPLATE_SOURCE="${APPSEC_ADVISOR_TEMPLATE_SOURCE:-}"
 REINIT_BUILD="${REINIT_BUILD:-1}"
 TEMP_TEMPLATE=""
 
+valid_template_ref() {
+  case "$1" in
+    ""|[!A-Za-z0-9]*|*[!A-Za-z0-9._/-]*|*..*|*//*|*/|*.) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+is_commit_ref() {
+  case "$1" in *[!0-9a-f]*) return 1 ;; esac
+  [ "${#1}" -eq 40 ] || [ "${#1}" -eq 64 ]
+}
+
+valid_template_url() {
+  local authority
+  case "$1" in
+    https://*)
+      authority="${1#https://}"
+      authority="${authority%%/*}"
+      case "${authority}" in ""|*@*) return 1 ;; esac
+      ;;
+    ssh://*)
+      authority="${1#ssh://}"
+      authority="${authority%%/*}"
+      case "${authority}" in ""|*:*@*) return 1 ;; esac
+      ;;
+    [A-Za-z0-9._-]*@[A-Za-z0-9._-]*:*) ;;
+    *) return 1 ;;
+  esac
+}
+
 cleanup() {
   if [ -n "${TEMP_TEMPLATE}" ]; then
     rm -rf "${TEMP_TEMPLATE}"
@@ -38,6 +68,15 @@ fi
 
 if [ ! -f "${REPO_ROOT}/Makefile" ] || [ ! -f "${REPO_ROOT}/org-profile/org-profile.yaml" ]; then
   echo "ERROR: make reinit must run from a scaffolded packaging repository root" >&2
+  exit 2
+fi
+
+if ! valid_template_ref "${TEMPLATE_REF}"; then
+  echo "ERROR: APPSEC_ADVISOR_TEMPLATE_REF is not a safe branch, tag, or commit: ${TEMPLATE_REF}" >&2
+  exit 2
+fi
+if ! valid_template_url "${TEMPLATE_URL}"; then
+  echo "ERROR: APPSEC_ADVISOR_TEMPLATE_URL must use HTTPS without credentials or an SSH Git URL." >&2
   exit 2
 fi
 
@@ -188,7 +227,20 @@ fi
 if [ -z "${TEMPLATE_SOURCE}" ]; then
   TEMP_TEMPLATE="$(mktemp -d "${TMPDIR:-/tmp}/appsec-packaging-template.XXXXXX")"
   echo "==> Fetching packaging template ${TEMPLATE_REF} …"
-  git clone --quiet --depth 1 --branch "${TEMPLATE_REF}" "${TEMPLATE_URL}" "${TEMP_TEMPLATE}"
+  if is_commit_ref "${TEMPLATE_REF}"; then
+    if ! git clone --quiet --filter=blob:none --no-checkout -- "${TEMPLATE_URL}" "${TEMP_TEMPLATE}"; then
+      echo "ERROR: could not clone the packaging template before resolving commit ${TEMPLATE_REF}." >&2
+      exit 2
+    fi
+    if ! git -C "${TEMP_TEMPLATE}" fetch --quiet --depth 1 origin "${TEMPLATE_REF}" ||
+       ! git -C "${TEMP_TEMPLATE}" checkout --quiet --detach FETCH_HEAD; then
+      echo "ERROR: could not fetch pinned packaging-template commit ${TEMPLATE_REF}." >&2
+      exit 2
+    fi
+  elif ! git clone --quiet --depth 1 --branch "${TEMPLATE_REF}" -- "${TEMPLATE_URL}" "${TEMP_TEMPLATE}"; then
+    echo "ERROR: could not fetch packaging-template ref ${TEMPLATE_REF}." >&2
+    exit 2
+  fi
   TEMPLATE_SOURCE="${TEMP_TEMPLATE}"
 fi
 

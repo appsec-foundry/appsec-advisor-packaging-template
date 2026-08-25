@@ -123,11 +123,19 @@ Declare MCP servers only in the profile's `mcp:` block. Reference secrets with `
 | `make release-check` | Run the release gate and package build |
 | `make release-package` | Create ZIP/TGZ archives and checksums under `dist/` |
 | `make upstream-check` | Check whether the selected upstream source moved |
+| `make packaging-template-check` | Check whether the packaging template has moved |
 | `make baseline-check` | Compare the configured baseline with its published document |
-| `make check-updates` | Run both update checks |
-| `make reinit` | Reapply the current template while preserving organization settings |
+| `make check-updates` | Check appsec-advisor and baseline updates |
+| `make reinit` | Reapply the pinned template while preserving organization settings |
 
 `PACKAGE_VERSION` is the organization-owned plugin version; `APPSEC_ADVISOR_REF` independently selects the upstream implementation. Both default in the `Makefile` and can be overridden for a build.
+
+The initializer records the exact packaging-template commit in generated
+repositories. Run `make packaging-template-check` to check for a newer revision. After
+reviewing the available change, update deliberately with
+`make reinit APPSEC_ADVISOR_TEMPLATE_REF=<reported-commit>`; using the exact
+reported commit avoids a moving-branch race. Organization settings are retained,
+and changes remain uncommitted for review.
 
 ## Documentation
 

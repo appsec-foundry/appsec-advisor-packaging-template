@@ -275,8 +275,9 @@ the initializer skips the prompt; `latest` is still resolved and pinned there.
 
 ```bash
 make upstream-check  # check the selected upstream ref or release
+make packaging-template-check  # check the pinned packaging-template revision
 make baseline-check  # check the secure-coding baseline id
-make check-updates   # run both checks
+make check-updates   # check appsec-advisor and baseline together
 ```
 
 These checks require network access and do not modify configuration. Review an
@@ -329,17 +330,37 @@ make release-package
 
 ## Reinitialization
 
-Refresh infrastructure from the current packaging template with:
+The initializer records the exact packaging-template commit in the generated
+`Makefile`. Reapply that same revision with:
 
 ```bash
 make reinit
 ```
 
-The command reuses organization identity, the selected upstream ref, and package
-settings. It does not re-run the Stable/Development selection. For each changed
+Check whether the template's default branch has moved:
+
+```bash
+make packaging-template-check
+```
+
+After reviewing the available revision, update deliberately and skip the
+automatic package build while inspecting the migration:
+
+```bash
+REINIT_BUILD=0 make reinit APPSEC_ADVISOR_TEMPLATE_REF=<reviewed-commit>
+```
+
+Replace `<reviewed-commit>` with the exact commit printed by
+`make packaging-template-check`, after reviewing its diff. Do not substitute
+the moving branch name: it could change between the check and execution. A
+reviewed release tag can be supplied instead when the template publishes
+releases. The command reuses
+organization identity, the selected appsec-advisor upstream ref, and package
+settings; it does not re-run the Stable/Development selection. For each changed
 user-owned template file, it prompts to overwrite or keep the file. Overwritten
 files are backed up under `.reinit-backups/`, and all changes remain uncommitted
-for review. Use `REINIT_BUILD=0 make reinit` to skip the build afterwards.
+for review. Without `REINIT_BUILD=0`, reinitialization builds the package after
+refreshing the files.
 
 Review the complete diff and rerun the appropriate checks before committing a
 reinitialization.
