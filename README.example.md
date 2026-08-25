@@ -15,7 +15,9 @@ need the packaging toolchain or its Python build dependencies.
 ## Maintainer quick start
 
 The initializer has already set the organization identity, package name,
-version, owner, baseline choice, and startup-status choice. Review the remaining
+version, owner, upstream channel, baseline choice, and startup-status choice.
+The default stable channel is resolved to a concrete release tag; the optional
+development channel follows the upstream `dev` branch. Review the remaining
 organization-specific content before rollout:
 
 - Replace `org-profile/context/organization.md` with factual organization
@@ -128,4 +130,6 @@ through a support channel that is not approved for that data.
 
 This repository was generated with the
 [`appsec-advisor` packaging template](https://github.com/appsec-foundry/appsec-advisor-packaging-template).
-The upstream source URL and pinned ref are recorded in the `Makefile`.
+The upstream source URL and selected release tag or branch ref are recorded in
+the `Makefile`. The exact manual Stable and Development update procedures are in
+[`docs/MAINTAINER-RUNBOOK.md`](docs/MAINTAINER-RUNBOOK.md#versioning-and-upstream-updates).

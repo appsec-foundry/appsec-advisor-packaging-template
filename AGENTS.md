@@ -167,21 +167,31 @@ a `v*` tag, the literal `latest`, **or a branch name** — `fetch-upstream.sh`
 checks both tags and heads, and a branch ref is pulled up to its current tip on
 every run (a `--depth 1` detached checkout, so effectively a pull).
 
-Das Packaging-Repository verwendet aktuell ausschließlich `main` und pinnt
-`APPSEC_ADVISOR_REF=v0.6.0-beta.1`. Der Pin wird im `Makefile` hochgezogen,
-sobald upstream ein neues Release taggt.
+Der Initializer bietet zwei Upstream-Kanäle an. **Stable** ist der Standard:
+der höchste verfügbare `v*`-Tag wird einmal aufgelöst und konkret im erzeugten
+`Makefile` gepinnt. **Development** schreibt `APPSEC_ADVISOR_REF=dev` und folgt
+damit bei jedem Build dem aktuellen Branch-Head. Das Template-Repository selbst
+pinnt aktuell `v0.6.0-beta.1`; `make reinit` erhält den Ref eines erzeugten
+Repositories, statt die Kanalauswahl erneut auszuführen.
 
 ```bash
 make package                              # upstream v0.6.0-beta.1 (default)
-APPSEC_ADVISOR_REF=latest make package    # follow the highest v* tag instead
+APPSEC_ADVISOR_REF=latest make package    # one-off build from the highest valid SemVer v* tag
 APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package # pin a specific release (reproducible)
 APPSEC_ADVISOR_REF=dev make package       # follow the upstream dev branch
 APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 ```
 
-`make upstream-check` adapts to the mode: with `REF=latest` it reports a newer
-release tag; with a branch ref it reports when the branch tip has moved past
-your local checkout.
+For a persistent Stable update, run `make upstream-check`, copy its `latest
+release` value into the `APPSEC_ADVISOR_REF := ...` assignment in `Makefile`,
+bump `PACKAGE_VERSION`, and run `make release-package`. A command-line
+`APPSEC_ADVISOR_REF=latest` override affects only that invocation and does not
+rewrite `Makefile`. With a `dev` ref, a normal `make package` or
+`make release-package` fetches the current branch head automatically.
+
+`make upstream-check` adapts to the mode: with a pinned release it reports a
+newer release tag; with a branch ref it reports when the branch tip has moved
+past your local checkout.
 
 ## Testing the plugin locally
 

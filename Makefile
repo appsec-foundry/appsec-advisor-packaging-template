@@ -1,6 +1,7 @@
 APPSEC_ADVISOR_URL ?= https://github.com/appsec-foundry/appsec-advisor.git
-# Pin the single packaging branch to the current upstream release. Treat an
-# explicitly exported empty CI variable as unset so it cannot fall back to latest.
+# The initializer replaces this template default with either the resolved stable
+# release tag or the moving dev branch. Treat an explicitly exported empty CI
+# variable as unset so generated repositories still use their persisted choice.
 APPSEC_ADVISOR_REF ?=
 ifeq ($(strip $(APPSEC_ADVISOR_REF)),)
 APPSEC_ADVISOR_REF := v0.6.0-beta.1

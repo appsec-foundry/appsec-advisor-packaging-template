@@ -99,6 +99,7 @@ check_template_layout() {
     docs/MAINTAINER-RUNBOOK.example.md \
     scripts/fetch-upstream.sh \
     scripts/upstream-check.sh \
+    scripts/select-latest-release.py \
     scripts/package-local.sh \
     scripts/release.sh \
     org-profile/org-profile.yaml \
@@ -186,6 +187,66 @@ ask_package_version() {
       return 0
     fi
     echo "  (enter a valid SemVer such as 1.2.0 or 1.2.0-internal.1)" >&2
+  done
+}
+
+valid_upstream_ref() {
+  case "$1" in
+    ""|[!A-Za-z0-9]*|*[!A-Za-z0-9._/+@%-]*) return 1 ;;
+  esac
+  git check-ref-format "refs/appsec-advisor/$1" >/dev/null 2>&1
+}
+
+resolve_latest_upstream_release() {
+  local upstream_url latest
+  upstream_url="${APPSEC_ADVISOR_URL:-https://github.com/appsec-foundry/appsec-advisor.git}"
+
+  if ! latest="$(git ls-remote --tags --refs "${upstream_url}" 'v[0-9]*' | \
+      PYTHONUTF8=1 python3 "${TEMPLATE_BASE}/scripts/select-latest-release.py")"; then
+    echo "ERROR: could not list appsec-advisor releases from the configured APPSEC_ADVISOR_URL." >&2
+    echo "Check network access and APPSEC_ADVISOR_URL, then retry." >&2
+    return 2
+  fi
+  if [ -z "${latest}" ]; then
+    echo "ERROR: no valid v* SemVer appsec-advisor release tags were found at the configured APPSEC_ADVISOR_URL." >&2
+    echo "Choose the development channel or set APPSEC_ADVISOR_REF explicitly." >&2
+    return 2
+  fi
+  printf '%s\n' "${latest}"
+}
+
+select_upstream_ref() {
+  local configured reply
+  configured="${APPSEC_ADVISOR_REF:-}"
+  if [ -n "${configured}" ]; then
+    if [ "${configured}" = latest ]; then
+      printf '%s\n' latest
+      return 0
+    fi
+    if ! valid_upstream_ref "${configured}"; then
+      echo "ERROR: APPSEC_ADVISOR_REF is not a valid tag or branch name: ${configured}" >&2
+      return 2
+    fi
+    printf '%s\n' "${configured}"
+    return 0
+  fi
+
+  while true; do
+    echo "Select the appsec-advisor upstream channel:" >&2
+    echo "  1. Latest stable release, pinned to the resolved tag (default)" >&2
+    echo "  2. Development branch 'dev', updated on every build" >&2
+    read -r -p "Upstream channel [1]: " reply || reply=""
+    case "${reply}" in
+      ""|1|stable|Stable)
+        printf '%s\n' latest
+        return 0
+        ;;
+      2|dev|Dev)
+        printf '%s\n' dev
+        return 0
+        ;;
+      *) echo "  (enter 1 for stable or 2 for dev)" >&2 ;;
+    esac
   done
 }
 
@@ -478,6 +539,13 @@ if [ -n "${APPSEC_REINIT_TARGET:-}" ]; then
     echo "ERROR: existing plugin package version is not valid SemVer: ${PACKAGE_VERSION}" >&2
     exit 2
   }
+  # New reinit wrappers preserve this value from the existing Makefile. Older
+  # wrappers fall back to an explicit caller override or the historical pin.
+  UPSTREAM_REF="${APPSEC_REINIT_UPSTREAM_REF:-${APPSEC_ADVISOR_REF:-v0.6.0-beta.1}}"
+  if ! valid_upstream_ref "${UPSTREAM_REF}"; then
+    echo "ERROR: existing APPSEC_ADVISOR_REF is not a valid tag or branch name: ${UPSTREAM_REF}" >&2
+    exit 2
+  fi
   OWNER="$(printf '%s' "${APPSEC_REINIT_OWNER:?}" | normalize_utf8)"
   DEMO_CONTENT="${APPSEC_REINIT_DEMO:?}"
   BASELINE_ENABLED="${APPSEC_REINIT_BASELINE:?}"
@@ -519,6 +587,8 @@ else
   OWNER_PREFIX="$(uppercase_ascii "${ORG_ID}")"
   OWNER=$(ask "Team owner (e.g. AppSec Team)" "${OWNER_PREFIX} AppSec Team")
   TARGET_DIR=$(ask "Target directory" "./${ORG_ID}-appsec-advisor")
+
+  UPSTREAM_REF="$(select_upstream_ref)" || exit 2
 
   read -r -p "Include demo content (example requirements + filled org profile)? [y/N]: " _demo_reply
   case "${_demo_reply}" in
@@ -577,6 +647,11 @@ if [ ! -f "${TEMPLATE_BASE}/Makefile" ]; then
   TEMPLATE_BASE="${TMPDIR_CLONE}"
 fi
 check_template_layout
+
+if [ "${REINIT_MODE}" != true ] && [ "${UPSTREAM_REF}" = latest ]; then
+  UPSTREAM_REF="$(resolve_latest_upstream_release)" || exit 2
+  echo "==> Latest stable appsec-advisor release: ${UPSTREAM_REF} (pinned)"
+fi
 
 # ── Create repo ───────────────────────────────────────────────────────────────
 
@@ -732,6 +807,7 @@ for helper in \
   render-packaged-readme.py \
   prune-packaged-session-banner.py \
   baseline-upstream-check.py \
+  select-latest-release.py \
   archive-built-plugin.py \
   finalize-package-version.py \
   rewrite-packaged-origins.py \
@@ -784,6 +860,7 @@ fi
 
 E_PLUGIN=$(sed_escape "${PLUGIN_NAME}")
 E_PACKAGE_VERSION=$(sed_escape "${PACKAGE_VERSION}")
+E_UPSTREAM_REF=$(sed_escape "${UPSTREAM_REF}")
 INTERNAL_REPOSITORY_ASSIGNMENT="INTERNAL_REPOSITORY_URL ?="
 if [ -n "${INTERNAL_REPOSITORY_URL}" ]; then
   INTERNAL_REPOSITORY_ASSIGNMENT="${INTERNAL_REPOSITORY_ASSIGNMENT} ${INTERNAL_REPOSITORY_URL}"
@@ -791,6 +868,7 @@ fi
 E_INTERNAL_REPOSITORY_ASSIGNMENT=$(sed_escape "${INTERNAL_REPOSITORY_ASSIGNMENT}")
 sed \
   -e "s/acme-appsec/${E_PLUGIN}/g" \
+  -e "s/^APPSEC_ADVISOR_REF := .*$/APPSEC_ADVISOR_REF := ${E_UPSTREAM_REF}/" \
   -e "s/^PACKAGE_VERSION ?= 0.1.0$/PACKAGE_VERSION ?= ${E_PACKAGE_VERSION}/" \
   -e "s|^INTERNAL_REPOSITORY_URL ?=$|${E_INTERNAL_REPOSITORY_ASSIGNMENT}|" \
   "${TEMPLATE_BASE}/Makefile" > "${TARGET_DIR}/Makefile"

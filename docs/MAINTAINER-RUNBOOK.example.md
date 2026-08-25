@@ -203,6 +203,13 @@ approved repository and package name for developers.
 `PACKAGE_VERSION` is the organization-owned release version. The upstream core
 remains independently selected through `APPSEC_ADVISOR_REF`.
 
+During initialization, the default **Stable release** channel resolves the
+highest available upstream `v*` tag and writes that concrete tag into the
+generated `Makefile`. This keeps later builds reproducible. Selecting
+**Development** writes `dev` instead, so each build follows the current head of
+the upstream development branch. An explicit `APPSEC_ADVISOR_REF` supplied to
+the initializer skips the prompt; `latest` is still resolved and pinned there.
+
 ```bash
 make upstream-check  # check the selected upstream ref or release
 make baseline-check  # check the secure-coding baseline id
@@ -210,7 +217,52 @@ make check-updates   # run both checks
 ```
 
 These checks require network access and do not modify configuration. Review an
-upstream update before changing the pinned ref and rebuilding the package.
+upstream update before changing the pinned ref and rebuilding the package. A
+repository configured for `dev` is intentionally non-reproducible across branch
+updates; use a release tag for an internally released package.
+
+### Manually update a Stable package
+
+First display the newest release available from the configured upstream:
+
+```bash
+make upstream-check
+```
+
+Copy the reported `latest release` tag into the `APPSEC_ADVISOR_REF := ...`
+assignment in `Makefile`, increment `PACKAGE_VERSION`, then build the
+distributable organization package:
+
+```bash
+make release-package
+```
+
+This fetches the selected tag from `APPSEC_ADVISOR_URL`, validates the retained
+organization profile against it, rebuilds and smoke-tests the plugin, and writes
+ZIP/TGZ archives plus checksums under `dist/`. Confirm that only the intended
+version settings changed:
+
+```bash
+git diff -- Makefile org-profile org-skills
+```
+
+For a one-off test without changing the persisted Stable pin, use:
+
+```bash
+APPSEC_ADVISOR_REF=latest make package
+```
+
+Unlike initialization, this command-line override does not rewrite `Makefile`.
+
+### Manually update a Development package
+
+When `Makefile` contains `APPSEC_ADVISOR_REF := dev`, every normal build fetches
+the current upstream `dev` head. Increment `PACKAGE_VERSION` when the result will
+be distributed, then run:
+
+```bash
+make release-package
+```
 
 ## Reinitialization
 
@@ -220,7 +272,8 @@ Refresh infrastructure from the current packaging template with:
 make reinit
 ```
 
-The command reuses organization identity and package settings. For each changed
+The command reuses organization identity, the selected upstream ref, and package
+settings. It does not re-run the Stable/Development selection. For each changed
 user-owned template file, it prompts to overwrite or keep the file. Overwritten
 files are backed up under `.reinit-backups/`, and all changes remain uncommitted
 for review. Use `REINIT_BUILD=0 make reinit` to skip the build afterwards.

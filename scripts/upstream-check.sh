@@ -14,12 +14,11 @@ set -euo pipefail
 URL="${APPSEC_ADVISOR_URL:-https://github.com/appsec-foundry/appsec-advisor.git}"
 REF="${APPSEC_ADVISOR_REF:-latest}"
 DEST="${APPSEC_ADVISOR_DEST:-upstream/appsec-advisor}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 _latest_tag() {
   git ls-remote --tags --refs "${URL}" 'v[0-9]*' |
-    awk -F/ '{print $NF}' |
-    sort -V |
-    tail -n 1
+    PYTHONUTF8=1 python3 "${SCRIPT_DIR}/select-latest-release.py"
 }
 
 _remote_sha() { # _remote_sha <ref> -> commit sha (peels annotated tags)
@@ -73,14 +72,20 @@ elif [ "${LOCAL_SHA}" != "${REMOTE_SHA}" ]; then
   drift=1
 fi
 
-# Release drift: a newer release tag exists than the pinned ref.
-if [ "${REF}" != "latest" ] && [ -n "${LATEST_TAG}" ] && [ "${RESOLVED}" != "${LATEST_TAG}" ]; then
-  newest="$(printf '%s\n%s\n' "${RESOLVED}" "${LATEST_TAG}" | sort -V | tail -n 1)"
-  if [ "${newest}" = "${LATEST_TAG}" ]; then
-    echo "DRIFT (release): newer release ${LATEST_TAG} available (pinned ref is ${REF})"
-    drift=1
-  fi
-fi
+# Release drift applies only to a pinned SemVer tag. Moving branch channels such
+# as dev/main are assessed solely by their commit drift.
+case "${REF}" in
+  v[0-9]*)
+    if [ -n "${LATEST_TAG}" ] && [ "${RESOLVED}" != "${LATEST_TAG}" ]; then
+      newest="$(printf '%s\n%s\n' "${RESOLVED}" "${LATEST_TAG}" | \
+        PYTHONUTF8=1 python3 "${SCRIPT_DIR}/select-latest-release.py")"
+      if [ "${newest}" = "${LATEST_TAG}" ]; then
+        echo "DRIFT (release): newer release ${LATEST_TAG} available (pinned ref is ${REF})"
+        drift=1
+      fi
+    fi
+    ;;
+esac
 
 if [ "${drift}" -eq 0 ]; then
   echo "OK: up to date with ${RESOLVED}"

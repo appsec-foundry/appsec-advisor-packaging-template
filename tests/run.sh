@@ -19,6 +19,10 @@ THRESHOLD="${THRESHOLD:-90}"
 chmod +x "$STUBS"/* 2>/dev/null || true
 export PATH="$STUBS:$PATH"
 export PS4='@@COV:${BASH_SOURCE}:${LINENO}@@ '
+# Existing initializer scenarios focus on organization settings and run without
+# network access. Pin their upstream explicitly; dedicated cases below exercise
+# the new interactive stable/dev selection and release resolution.
+export APPSEC_ADVISOR_REF=v0.6.0-beta.1
 
 FETCH="$ROOT/scripts/fetch-upstream.sh"
 PKG="$ROOT/scripts/package-local.sh"
@@ -35,6 +39,7 @@ ARCHIVE_TEST="$HERE/test_archive_built_plugin.py"
 BASELINE_UPSTREAM_TEST="$HERE/test_baseline_upstream_check.py"
 PACKAGE_VERSION_TEST="$HERE/test_finalize_package_version.py"
 PACKAGED_ORIGINS_TEST="$HERE/test_rewrite_packaged_origins.py"
+LATEST_RELEASE_TEST="$HERE/test_select_latest_release.py"
 
 # -B: importing guard.py must not leave __pycache__ in org-profile/hooks/,
 # which the packager would copy and the smoke test rejects.
@@ -47,6 +52,7 @@ PACKAGED_ORIGINS_TEST="$HERE/test_rewrite_packaged_origins.py"
 /usr/bin/python3 -B "$BASELINE_UPSTREAM_TEST"
 /usr/bin/python3 -B "$PACKAGE_VERSION_TEST"
 /usr/bin/python3 -B "$PACKAGED_ORIGINS_TEST"
+/usr/bin/python3 -B "$LATEST_RELEASE_TEST"
 
 COV="$(mktemp)"
 WORKROOT="$(mktemp -d)"
@@ -379,9 +385,9 @@ else fail "package: a leftover org-mcp.json no longer overwrites the build" "rc=
 
 # ── init-org-repo.sh ─────────────────────────────────────────────────────────
 echo "--- init-org-repo.sh ---"
-# answers order: org-name, org-id(default), plugin(default), package-version,
-#                owner(default),
-#                target-dir, demo(y/n), baseline(y/n), statusline(y/n),
+# answers order when APPSEC_ADVISOR_REF is unset: org-name, org-id(default),
+#                plugin(default), package-version, owner(default), target-dir,
+#                upstream-channel(stable/dev), demo(y/n), baseline(y/n), statusline(y/n),
 #                internal-repository-url(optional),
 #                [continue? when dir exists], [build(y/n)]
 
@@ -463,6 +469,84 @@ cat "$reinit_log" >>"$COV"
 if [ "$rc" = 2 ] && grep -Fq 'existing organization id must start' "$reinit_log"; then
   pass "init: invalid recovered organization id has a clear error"
 else fail "init: invalid recovered organization id has a clear error" "rc=$rc"; fi
+
+# Stable is the default channel. Resolve it once and persist the concrete tag so
+# a generated repository remains reproducible even after newer tags appear.
+d="$(newdir)"
+tgt="$d/out"
+channel_log="$d/stable-channel.log"
+printf 'Test Org\n\n\n\n\n%s\n\nn\n\n\n\nn\n' "$tgt" | \
+  (cd "$ROOT" && env -u APPSEC_ADVISOR_REF \
+    GITSTUB_TAGS='v0.5.0 v0.6.0-beta.1 v0.6.0' timeout 20 bash -x "$INIT") \
+  >"$channel_log" 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && \
+   grep -Fqx 'APPSEC_ADVISOR_REF := v0.6.0' "$tgt/Makefile" && \
+   grep -Fq 'Latest stable appsec-advisor release: v0.6.0 (pinned)' "$channel_log"; then
+  pass "init: stable channel resolves and pins the latest release"
+else fail "init: stable channel resolves and pins the latest release" "rc=$rc"; fi
+
+# Development is deliberately a moving branch ref. An invalid first response
+# also verifies that the initializer does not silently select a channel.
+d="$(newdir)"
+tgt="$d/out"
+channel_log="$d/dev-channel.log"
+printf 'Test Org\n\n\n\n\n%s\nunknown\n2\nn\n\n\n\nn\n' "$tgt" | \
+  (cd "$ROOT" && env -u APPSEC_ADVISOR_REF timeout 20 bash -x "$INIT") \
+  >"$channel_log" 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && \
+   grep -Fqx 'APPSEC_ADVISOR_REF := dev' "$tgt/Makefile" && \
+   grep -Fq '(enter 1 for stable or 2 for dev)' "$COV"; then
+  pass "init: development channel persists the moving dev branch"
+else fail "init: development channel persists the moving dev branch" "rc=$rc"; fi
+
+# The automation form APPSEC_ADVISOR_REF=latest has the same reproducible
+# semantics as choosing Stable interactively: persist the resolved tag, not the
+# moving word "latest".
+d="$(newdir)"
+tgt="$d/out"
+channel_log="$d/latest-override.log"
+printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\nn\n' "$tgt" | \
+  (cd "$ROOT" && env APPSEC_ADVISOR_REF=latest \
+    GITSTUB_TAGS='v0.5.0 v0.7.0' timeout 20 bash -x "$INIT") \
+  >"$channel_log" 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && \
+   grep -Fqx 'APPSEC_ADVISOR_REF := v0.7.0' "$tgt/Makefile" && \
+   ! grep -Fqx 'APPSEC_ADVISOR_REF := latest' "$tgt/Makefile" && \
+   grep -Fq 'Latest stable appsec-advisor release: v0.7.0 (pinned)' "$channel_log"; then
+  pass "init: explicit latest override resolves to a concrete tag"
+else fail "init: explicit latest override resolves to a concrete tag" "rc=$rc"; fi
+
+# A configured ref is rendered into a Makefile, so constrain it to a safe Git
+# ref token and reject Make syntax even if a remote could technically name such
+# a branch or tag.
+d="$(newdir)"
+tgt="$d/out"
+channel_log="$d/unsafe-ref.log"
+printf 'Test Org\n\n\n\n\n%s\n' "$tgt" | \
+  (cd "$ROOT" && env 'APPSEC_ADVISOR_REF=dev$(shell,id)' \
+    timeout 20 bash -x "$INIT") >"$channel_log" 2>>"$COV"
+rc=$?
+if [ "$rc" = 2 ] && [ ! -e "$tgt" ] && \
+   grep -Fq 'APPSEC_ADVISOR_REF is not a valid tag or branch name' "$COV"; then
+  pass "init: unsafe upstream ref is rejected before Makefile rendering"
+else fail "init: unsafe upstream ref is rejected before Makefile rendering" "rc=$rc"; fi
+
+# Stable initialization must fail closed when it cannot identify a release;
+# falling through to a branch would silently change the selected trust boundary.
+d="$(newdir)"
+tgt="$d/out"
+channel_log="$d/no-release.log"
+printf 'Test Org\n\n\n\n\n%s\n\nn\n\n\n\n' "$tgt" | \
+  (cd "$ROOT" && env -u APPSEC_ADVISOR_REF timeout 20 bash -x "$INIT") \
+  >"$channel_log" 2>>"$COV"
+rc=$?
+if [ "$rc" = 2 ] && [ ! -e "$tgt" ] && \
+   grep -Fq 'no valid v* SemVer appsec-advisor release tags were found' "$COV"; then
+  pass "init: stable channel fails closed when no release exists"
+else fail "init: stable channel fails closed when no release exists" "rc=$rc"; fi
 
 if ! grep -Eq 'sed -i|\$\{[^}]+\^\^|mapfile' "$INIT" "$REINIT"; then
   pass "init: avoids known GNU sed and Bash 4-only constructs"
@@ -778,6 +862,8 @@ sed -i 's/^PACKAGE_VERSION ?= 0.1.0$/PACKAGE_VERSION ?= 2.4.0/' \
   "$self_contained_tgt/Makefile"
 sed -i 's|^INTERNAL_REPOSITORY_URL ?=$|INTERNAL_REPOSITORY_URL ?= https://git.example.test/to-appsec|' \
   "$self_contained_tgt/Makefile"
+sed -i 's/^APPSEC_ADVISOR_REF := .*$/APPSEC_ADVISOR_REF := dev/' \
+  "$self_contained_tgt/Makefile"
 sed -i '/^      - help$/d; /^      - session-banner$/d' \
   "$self_contained_tgt/org-profile/package-policy.yaml"
 printf '\n# retained organization policy marker\n' >> \
@@ -794,6 +880,7 @@ if [ "$rc" = 0 ] && \
    grep -Fqx 'PACKAGE_VERSION ?= 2.4.0' "$self_contained_tgt/Makefile" && \
    grep -Fqx 'INTERNAL_REPOSITORY_URL ?= https://git.example.test/to-appsec' \
      "$self_contained_tgt/Makefile" && \
+   grep -Fqx 'APPSEC_ADVISOR_REF := dev' "$self_contained_tgt/Makefile" && \
    grep -Fq 'render-packaged-help.py' "$self_contained_tgt/scripts/package-local.sh" && \
    [ "$(grep -Fxc '      - help' "$self_contained_tgt/org-profile/package-policy.yaml")" = 1 ] && \
    [ "$(grep -Fxc '      - session-banner' "$self_contained_tgt/org-profile/package-policy.yaml")" = 0 ] && \
@@ -1002,6 +1089,7 @@ for f in scripts/fetch-upstream.sh scripts/upstream-check.sh scripts/package-loc
          scripts/prepare-local-marketplace.py scripts/render-packaged-help.py \
          scripts/render-packaged-readme.py scripts/prune-packaged-session-banner.py \
          scripts/baseline-upstream-check.py \
+         scripts/select-latest-release.py \
          scripts/archive-built-plugin.py scripts/finalize-package-version.py \
          scripts/rewrite-packaged-origins.py scripts/release.sh \
          scripts/reinit-org-repo.sh \
@@ -1085,6 +1173,11 @@ check_run "check: latest in sync" 0 1 \
   APPSEC_ADVISOR_REF=latest GITSTUB_TAGS="v0.3.0 v0.4.0" GITSTUB_IS_CHECKOUT=1
 check_run "check: pinned tag in sync" 0 1 \
   APPSEC_ADVISOR_REF=v0.4.0 GITSTUB_TAGS="v0.3.0 v0.4.0" GITSTUB_IS_CHECKOUT=1
+check_run "check: dev branch in sync ignores release tags" 0 1 \
+  APPSEC_ADVISOR_REF=dev GITSTUB_HEADS="dev" GITSTUB_TAGS="v0.4.0" GITSTUB_IS_CHECKOUT=1
+check_run "check: dev branch reports moved head" 1 1 \
+  APPSEC_ADVISOR_REF=dev GITSTUB_HEADS="dev" GITSTUB_TAGS="v0.4.0" \
+  GITSTUB_IS_CHECKOUT=1 GITSTUB_REMOTE_SHA=def5678
 check_run "check: commit drift" 1 1 \
   APPSEC_ADVISOR_REF=latest GITSTUB_TAGS="v0.4.0" GITSTUB_IS_CHECKOUT=1 GITSTUB_REMOTE_SHA=def5678
 check_run "check: latest, no checkout -> nothing to do" 0 0 \

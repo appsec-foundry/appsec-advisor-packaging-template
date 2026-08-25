@@ -4,6 +4,7 @@ set -euo pipefail
 URL="${APPSEC_ADVISOR_URL:-https://github.com/appsec-foundry/appsec-advisor.git}"
 REF="${APPSEC_ADVISOR_REF:-latest}"
 DEST="${APPSEC_ADVISOR_DEST:-upstream/appsec-advisor}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 case "${URL}" in
   *"github.com/appsec-foundry?tab=repositories"*)
@@ -48,9 +49,7 @@ _use_trunk() {
 
 _latest_tag() {
   git -C "${DEST}" ls-remote --tags --refs origin 'v[0-9]*' |
-    awk -F/ '{print $NF}' |
-    sort -V |
-    tail -n 1
+    PYTHONUTF8=1 python3 "${SCRIPT_DIR}/select-latest-release.py"
 }
 
 if [ "${REF}" = "latest" ]; then

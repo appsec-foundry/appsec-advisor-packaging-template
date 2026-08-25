@@ -143,6 +143,20 @@ if not package_version:
     package_version = match.group(1) if match else "0.1.0"
 match = re.search(r"^INTERNAL_REPOSITORY_URL\s*\?=\s*([^\s#]+)?\s*$", makefile, re.MULTILINE)
 repository_url = (match.group(1) or "") if match else ""
+match = re.search(
+    r"^APPSEC_ADVISOR_REF\s*\?=\s*([^\s#]+)\s*$",
+    makefile,
+    re.MULTILINE,
+)
+if match:
+    upstream_ref = match.group(1)
+else:
+    match = re.search(
+        r"^APPSEC_ADVISOR_REF\s*:=\s*([^\s#]+)\s*$",
+        makefile,
+        re.MULTILINE,
+    )
+    upstream_ref = match.group(1) if match else ""
 values = [
     organization.get("name", ""),
     organization.get("id", ""),
@@ -153,9 +167,10 @@ values = [
     "true" if baseline_enabled else "false",
     "true" if banner_enabled and banner_packaged else "false",
     repository_url,
+    upstream_ref,
 ]
-if any(not value for value in values[:5]):
-    print("ERROR: cannot recover organization name/id/owner, INTERNAL_NAME or PACKAGE_VERSION from this repository", file=sys.stderr)
+if any(not value for value in values[:5]) or not upstream_ref:
+    print("ERROR: cannot recover organization name/id/owner, INTERNAL_NAME, PACKAGE_VERSION or APPSEC_ADVISOR_REF from this repository", file=sys.stderr)
     raise SystemExit(2)
 if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*", values[1]):
     print("ERROR: existing organization id is not safe for reinitialization", file=sys.stderr)
@@ -165,7 +180,7 @@ for value in values:
 PY
 )
 
-if [ "${#SETTINGS[@]}" -ne 9 ]; then
+if [ "${#SETTINGS[@]}" -ne 10 ]; then
   echo "ERROR: failed to read existing packaging settings" >&2
   exit 2
 fi
@@ -192,5 +207,6 @@ APPSEC_REINIT_DEMO="${SETTINGS[5]}" \
 APPSEC_REINIT_BASELINE="${SETTINGS[6]}" \
 APPSEC_REINIT_STATUSLINE="${SETTINGS[7]}" \
 APPSEC_REINIT_REPOSITORY_URL="${SETTINGS[8]}" \
+APPSEC_REINIT_UPSTREAM_REF="${SETTINGS[9]}" \
 APPSEC_REINIT_BUILD="${REINIT_BUILD}" \
   "${TEMPLATE_SOURCE}/scripts/init-org-repo.sh"
