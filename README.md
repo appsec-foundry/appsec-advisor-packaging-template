@@ -47,9 +47,9 @@ Open `org-profile/org-profile.yaml` in your new repo. If you used the init scrip
 
 If you used the GitHub Template instead, also replace `organization.id`, `.name`, `.profile_version`, and `.owner` with your values.
 
-Set `PACKAGE_VERSION` in the generated `Makefile` to your internal plugin
-release. It defaults to `0.1.0` and is independent of `APPSEC_ADVISOR_REF`,
-which continues to pin the upstream implementation.
+`PACKAGE_VERSION` in the generated `Makefile` is used for local builds. It
+defaults to `0.1.0` and is independent of `APPSEC_ADVISOR_REF`. Releases use
+the version from their tag.
 
 Set `INTERNAL_REPOSITORY_URL` to the HTTPS URL of the internal packaging
 repository. The initializer fills it when provided and configures it as
@@ -65,6 +65,7 @@ make ci-gitlab   # copies ci-templates/gitlab-ci.yml → .gitlab-ci.yml
 ```
 
 Then set `INTERNAL_NAME` to your plugin name in the CI repository variables if it differs from the default.
+GitLab tag releases require the project's Package Registry to be enabled.
 
 **4. Build the plugin locally:**
 
@@ -97,7 +98,80 @@ claude --plugin-dir build/your-plugin-name
 /your-plugin-name:create-threat-model
 ```
 
-For CI, tagging a release triggers the pipeline from step 3 automatically.
+**7. Publish a release** after committing the CI definition and pushing
+`main`:
+
+```bash
+make release RELEASE_VERSION=1.0.0
+```
+
+This checks the build, creates the `v1.0.0` tag, and pushes it. CI publishes
+the archives and checksums as a GitLab or GitHub Release.
+
+## Rollout options
+
+### Release or web server
+
+This is the recommended path when there is no internal Marketplace. A release
+starts with:
+
+```bash
+make release RELEASE_VERSION=1.0.0
+```
+
+The command checks and tags `main`. The tag starts CI. `make package-archive`
+then builds the archives for publication. The included definitions use GitLab
+or GitHub Releases. The same ZIP can instead be uploaded to S3, Nexus,
+Artifactory, or a normal HTTPS web server.
+
+`make package-archive` creates both `.zip` and `.tgz` files under `dist/`. Use
+the ZIP with `--plugin-url`; the TGZ is for conventional download workflows.
+
+Developers load it without checking out the packaging repository:
+
+```bash
+claude --plugin-url \
+  "https://plugins.example.com/acme-appsec/1.0.0/acme-appsec-1.0.0.zip"
+```
+
+Claude Code 2.1.129 or newer is required. The URL must return the ZIP directly,
+not a release page. Claude Code loads it for the current session. Use a
+versioned URL for a pinned rollout, or offer a second stable URL such as
+`/latest/acme-appsec.zip` for the newest release.
+
+If the URL requires an interactive login, download the ZIP from the release
+page while signed in and use `claude --plugin-dir /path/to/plugin.zip`.
+Credentials must not be embedded in the URL.
+
+### Local checkout
+
+For a pilot or local testing, each developer can build the plugin:
+
+```bash
+git clone <internal-packaging-repository> /path/to/appsec-packaging
+cd /path/to/appsec-packaging
+make package
+
+cd /path/to/application
+claude --plugin-dir /path/to/appsec-packaging/build/acme-appsec
+```
+
+Updates require `git pull --ff-only` followed by another `make package`.
+`build/` remains generated and is not committed.
+
+### Internal Marketplace
+
+If the organization maintains a Claude Code Marketplace, developers add it and
+install the plugin once:
+
+```bash
+claude plugin marketplace add <marketplace-git-url>
+claude plugin install <plugin-name>@<marketplace-name>
+```
+
+This provides persistent installation and managed updates. The
+`local-marketplace` target only creates a catalog for local testing; it is not
+the organization's shared Marketplace.
 
 ## Customization
 
@@ -201,8 +275,11 @@ APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package
 # Follow a different branch tip (re-pulled to its tip on each build)
 APPSEC_ADVISOR_REF=main make package
 
-# Build a distributable archive (.tgz + .sha256)
+# Build distributable .tgz and .zip archives with checksums
 ARCHIVE=1 PACKAGE_VERSION=1.0.0 make package-archive
+
+# Validate main, create v1.0.0 and trigger the configured CI release
+make release RELEASE_VERSION=1.0.0
 
 # Use an existing local upstream checkout
 APPSEC_ADVISOR_SOURCE=/path/to/local/appsec-advisor make package
@@ -227,7 +304,10 @@ does not replace your organization's existing marketplace.
 
 ## CI
 
-Run `make ci-github` or `make ci-gitlab` to install the CI pipeline (see Quick Start step 3). Both do the same as the local build: fetch upstream, build, smoke test, and upload the `.tgz` with its `.sha256` as a build artifact. The pipeline triggers on `v*` tags and `workflow_dispatch`.
+Run `make ci-github` or `make ci-gitlab` to install the CI pipeline (see Quick
+Start step 3). Normal builds keep the archives for 30 days. A `v*` tag publishes
+them as a GitHub Release or as a GitLab Release backed by the Generic Package
+Registry. Create the tag with `make release RELEASE_VERSION=x.y.z`.
 
 | Variable | Default | Description |
 |---|---|---|
@@ -236,7 +316,7 @@ Run `make ci-github` or `make ci-gitlab` to install the CI pipeline (see Quick S
 | `INTERNAL_NAME` | `acme-appsec` | Plugin name and Claude Code command namespace |
 | `PACKAGE_VERSION` | `0.1.0` | Organization-owned version shown in the banner, help, manifest and archive name |
 | `INTERNAL_REPOSITORY_URL` | empty | Internal HTTPS packaging repository; also shown to developers |
-| `VERSION` | empty | Optional one-off override of `PACKAGE_VERSION` |
+| `VERSION` | empty | Optional one-off override of `PACKAGE_VERSION` for non-tagged builds |
 
 ## Related Projects
 

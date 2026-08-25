@@ -1,6 +1,7 @@
 stages:
   - check
   - package
+  - release
 
 variables:
   INTERNAL_NAME: "acme-appsec"
@@ -43,11 +44,42 @@ package:
     - if: $CI_PIPELINE_SOURCE != "schedule"
   script:
     # A packaging-repository tag defines the organization package release.
-    - if [ -n "${CI_COMMIT_TAG}" ]; then export PACKAGE_VERSION="${CI_COMMIT_TAG#v}"; fi
-    - make package-archive
+    - |
+      if [ -n "${CI_COMMIT_TAG}" ]; then
+        export PACKAGE_VERSION="${CI_COMMIT_TAG#v}"
+        export VERSION=
+      fi
+      make package-archive
   artifacts:
-    name: "${INTERNAL_NAME}-${PACKAGE_VERSION}"
+    name: "${INTERNAL_NAME}-${CI_COMMIT_REF_SLUG}"
     paths:
       - "dist/${INTERNAL_NAME}-*.tgz"
       - "dist/${INTERNAL_NAME}-*.tgz.sha256"
+      - "dist/${INTERNAL_NAME}-*.zip"
+      - "dist/${INTERNAL_NAME}-*.zip.sha256"
     expire_in: 30 days
+
+# Tag releases require the project's Package Registry.
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/cli:v1.58.0
+  before_script: []
+  needs:
+    - job: package
+      artifacts: true
+  variables:
+    GLAB_ENABLE_CI_AUTOLOGIN: "true"
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v/'
+  script:
+    - |
+      glab release create "${CI_COMMIT_TAG}" \
+        --name "${INTERNAL_NAME} ${CI_COMMIT_TAG#v}" \
+        --notes "Internal ${INTERNAL_NAME} release ${CI_COMMIT_TAG#v}" \
+        --no-update \
+        --package-name "${INTERNAL_NAME}" \
+        --use-package-registry \
+        dist/${INTERNAL_NAME}-*.tgz \
+        dist/${INTERNAL_NAME}-*.tgz.sha256 \
+        dist/${INTERNAL_NAME}-*.zip \
+        dist/${INTERNAL_NAME}-*.zip.sha256

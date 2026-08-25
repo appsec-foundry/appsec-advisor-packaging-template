@@ -10,6 +10,7 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+import zipfile
 
 
 ROOT = Path(__file__).parents[1]
@@ -195,19 +196,27 @@ class PackagedHelpTests(unittest.TestCase):
             self.assertIsNotNone(member)
             assert member
             self.assertEqual(rendered, member.read())
+        with zipfile.ZipFile(tar_path.with_suffix(".zip")) as archive:
+            self.assertEqual(rendered, archive.read("pruf-appsec/skills/help/SKILL.md"))
 
     def test_stale_archive_is_removed_before_rebuilding(self) -> None:
         dist = Path(self.temporary.name) / "dist"
         dist.mkdir()
         archive = dist / "pruf-appsec-0.6.0-beta.2+pruf.7.tgz"
         checksum = archive.with_suffix(".tgz.sha256")
+        zip_archive = archive.with_suffix(".zip")
+        zip_checksum = Path(f"{zip_archive}.sha256")
         archive.write_text("stale", encoding="utf-8")
         checksum.write_text("stale", encoding="utf-8")
+        zip_archive.write_text("stale", encoding="utf-8")
+        zip_checksum.write_text("stale", encoding="utf-8")
 
         archiver.remove_stale_archive("pruf-appsec", "0.6.0-beta.2+pruf.7", dist)
 
         self.assertFalse(archive.exists())
         self.assertFalse(checksum.exists())
+        self.assertFalse(zip_archive.exists())
+        self.assertFalse(zip_checksum.exists())
 
 
 if __name__ == "__main__":

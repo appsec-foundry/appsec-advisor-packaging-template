@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import tarfile
 import tempfile
+import zipfile
 
 
 PLUGIN_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -34,6 +35,8 @@ def remove_stale_archive(name: str, version: str, dist_dir: Path) -> None:
     for path in (
         dist_dir / f"{name}-{version}.tgz",
         dist_dir / f"{name}-{version}.tgz.sha256",
+        dist_dir / f"{name}-{version}.zip",
+        dist_dir / f"{name}-{version}.zip.sha256",
     ):
         if path.is_file() or path.is_symlink():
             path.unlink()
@@ -57,8 +60,12 @@ def archive_plugin(plugin_root: Path, dist_dir: Path) -> tuple[Path, Path]:
     dist_dir.mkdir(parents=True, exist_ok=True)
     tar_path = dist_dir / f"{name}-{version}.tgz"
     sha_path = dist_dir / f"{name}-{version}.tgz.sha256"
+    zip_path = dist_dir / f"{name}-{version}.zip"
+    zip_sha_path = dist_dir / f"{name}-{version}.zip.sha256"
     temporary_tar = ""
     temporary_sha = ""
+    temporary_zip = ""
+    temporary_zip_sha = ""
     try:
         with tempfile.NamedTemporaryFile(
             dir=dist_dir, suffix=".tgz", delete=False
@@ -75,12 +82,45 @@ def archive_plugin(plugin_root: Path, dist_dir: Path) -> tuple[Path, Path]:
             file.write(f"{digest}  {tar_path.name}\n")
             file.flush()
             os.fchmod(file.fileno(), 0o644)
+
+        with tempfile.NamedTemporaryFile(
+            dir=dist_dir, suffix=".zip", delete=False
+        ) as file:
+            temporary_zip = file.name
+        with zipfile.ZipFile(
+            temporary_zip, "w", compression=zipfile.ZIP_DEFLATED
+        ) as archive:
+            for path in sorted(plugin_root.rglob("*")):
+                if path.is_symlink():
+                    raise ArchiveError(
+                        f"packaged plugin cannot contain a symlink in a zip archive: {path}"
+                    )
+                archive.write(path, arcname=Path(name) / path.relative_to(plugin_root))
+        zip_digest = hashlib.sha256(Path(temporary_zip).read_bytes()).hexdigest()
+
+        with tempfile.NamedTemporaryFile(
+            "w", encoding="utf-8", dir=dist_dir, delete=False
+        ) as file:
+            temporary_zip_sha = file.name
+            file.write(f"{zip_digest}  {zip_path.name}\n")
+            file.flush()
+            os.fchmod(file.fileno(), 0o644)
+
         os.replace(temporary_tar, tar_path)
         temporary_tar = ""
         os.replace(temporary_sha, sha_path)
         temporary_sha = ""
+        os.replace(temporary_zip, zip_path)
+        temporary_zip = ""
+        os.replace(temporary_zip_sha, zip_sha_path)
+        temporary_zip_sha = ""
     finally:
-        for temporary in (temporary_tar, temporary_sha):
+        for temporary in (
+            temporary_tar,
+            temporary_sha,
+            temporary_zip,
+            temporary_zip_sha,
+        ):
             if temporary and os.path.exists(temporary):
                 os.unlink(temporary)
     return tar_path, sha_path
@@ -107,6 +147,9 @@ def main() -> int:
         parser.error(str(error))
     print(f"Archive: {tar_path}")
     print(f"Checksum: {sha_path}")
+    zip_path = tar_path.with_suffix(".zip")
+    print(f"Claude Code archive: {zip_path}")
+    print(f"Checksum: {zip_path}.sha256")
     return 0
 
 

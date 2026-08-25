@@ -17,6 +17,7 @@ PACKAGE_VERSION ?= 0.1.0
 # Backward-compatible one-off override; normally leave this empty and edit
 # PACKAGE_VERSION instead.
 VERSION ?=
+RELEASE_VERSION ?=
 export PACKAGE_VERSION VERSION INTERNAL_REPOSITORY_URL
 LOCAL_MARKETPLACE_NAME ?= $(INTERNAL_NAME)-local
 LOCAL_MARKETPLACE_SCOPE ?= local
@@ -34,7 +35,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint check release-check fetch-upstream upstream-check baseline-check check-updates drift-check validate package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean rebuild reinit test
+.PHONY: help lint check release release-check fetch-upstream upstream-check baseline-check check-updates drift-check validate package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean rebuild reinit test
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -54,6 +55,9 @@ lint: ## shellcheck the shell scripts (skipped if shellcheck is absent)
 	fi
 
 check: lint test ## Offline gate: lint + test (no network, no upstream fetch)
+
+release: ## Validate, tag and push a release (RELEASE_VERSION=x.y.z)
+	@scripts/release.sh "$(RELEASE_VERSION)"
 
 release-check: ## Release-boundary gate: check + validate + build a clean plugin against upstream
 	@$(MAKE) --no-print-directory check
@@ -93,7 +97,7 @@ validate: $(FETCH_TARGET) ## Validate org-profile.yaml against the upstream sche
 package: $(FETCH_TARGET) ## Fetch + build + smoke-test the plugin into build/<name>/
 	APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" APPSEC_ADVISOR_SOURCE="$(APPSEC_ADVISOR_SOURCE)" INTERNAL_NAME="$(INTERNAL_NAME)" scripts/package-local.sh
 
-package-archive: $(FETCH_TARGET) ## Like package, plus a dist/*.tgz + .sha256 archive
+package-archive: $(FETCH_TARGET) ## Like package, plus .tgz/.zip archives and checksums
 	APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" APPSEC_ADVISOR_SOURCE="$(APPSEC_ADVISOR_SOURCE)" INTERNAL_NAME="$(INTERNAL_NAME)" ARCHIVE=1 scripts/package-local.sh
 
 local-marketplace: package ## Prepare build/ as a local Claude Code marketplace

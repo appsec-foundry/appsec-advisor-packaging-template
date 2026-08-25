@@ -25,6 +25,7 @@ PKG="$ROOT/scripts/package-local.sh"
 INIT="$ROOT/scripts/init-org-repo.sh"
 CHECK="$ROOT/scripts/upstream-check.sh"
 REINIT="$ROOT/scripts/reinit-org-repo.sh"
+RELEASE="$ROOT/scripts/release.sh"
 GUARD_TEST="$HERE/test_guard.py"
 MARKETPLACE_TEST="$HERE/test_local_marketplace.py"
 PACKAGED_HELP_TEST="$HERE/test_packaged_help.py"
@@ -158,6 +159,8 @@ mkfake "$d/src"
   timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
 rc=$?
 if [ "$rc" = 0 ] && [ -f "$d/dist/acme-appsec-0.1.0.tgz" ] && \
+   [ -f "$d/dist/acme-appsec-0.1.0.zip" ] && \
+   [ -f "$d/dist/acme-appsec-0.1.0.zip.sha256" ] && \
    tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/.claude-plugin/plugin.json | \
      grep -Fq '"appsec_advisor_core_version": "0.6.0-beta.1"' && \
    tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/config.json | \
@@ -190,12 +193,16 @@ mkfake "$d/src"
 mkdir -p "$d/dist"
 printf stale >"$d/dist/acme-appsec-1.2.3.tgz"
 printf stale >"$d/dist/acme-appsec-1.2.3.tgz.sha256"
+printf stale >"$d/dist/acme-appsec-1.2.3.zip"
+printf stale >"$d/dist/acme-appsec-1.2.3.zip.sha256"
 (cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" ARCHIVE=1 VERSION=1.2.3 \
   PYSTUB_FAIL=smoke INTERNAL_NAME=acme-appsec timeout 15 bash -x "$PKG") \
   >/dev/null 2>>"$COV"
 rc=$?
 if [ "$rc" != 0 ] && [ ! -e "$d/dist/acme-appsec-1.2.3.tgz" ] && \
-   [ ! -e "$d/dist/acme-appsec-1.2.3.tgz.sha256" ]; then
+   [ ! -e "$d/dist/acme-appsec-1.2.3.tgz.sha256" ] && \
+   [ ! -e "$d/dist/acme-appsec-1.2.3.zip" ] && \
+   [ ! -e "$d/dist/acme-appsec-1.2.3.zip.sha256" ]; then
   pass "package: failed rebuild removes stale same-version archive"
 else fail "package: failed rebuild removes stale same-version archive" "rc=$rc"; fi
 
@@ -237,6 +244,124 @@ printf '%s\n' 'description: Bad name.' >"$d/org-skills/BadName/SKILL.md"
 (cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" INTERNAL_NAME=acme-appsec \
   timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
 assert_rc "package: org skill name validation" 2 "$?"
+
+# ── release.sh ───────────────────────────────────────────────────────────────
+echo "--- release.sh ---"
+RELEASE_BIN="$WORKROOT/release-bin"
+mkdir -p "$RELEASE_BIN"
+ln -s "$REAL_GIT" "$RELEASE_BIN/git"
+printf '%s\n' \
+  '#!/bin/sh' \
+  'printf "%s\n" "$*" >> "$RELEASE_MAKE_LOG"' \
+  'if [ "${RELEASE_MAKE_DIRTY:-0}" = 1 ]; then printf "generated\n" > release-check-output.txt; fi' \
+  'exit "${RELEASE_MAKE_RC:-0}"' \
+  >"$RELEASE_BIN/make"
+chmod +x "$RELEASE_BIN/make"
+
+new_release_repo() {
+  RELEASE_CASE="$(newdir)"
+  RELEASE_REMOTE="$RELEASE_CASE/remote.git"
+  RELEASE_WORK="$RELEASE_CASE/work"
+  RELEASE_MAKE_LOG="$RELEASE_CASE/make.log"
+  "$REAL_GIT" init -q --bare "$RELEASE_REMOTE"
+  "$REAL_GIT" init -q "$RELEASE_WORK"
+  "$REAL_GIT" -C "$RELEASE_WORK" symbolic-ref HEAD refs/heads/main
+  "$REAL_GIT" -C "$RELEASE_WORK" config user.name 'Release Test'
+  "$REAL_GIT" -C "$RELEASE_WORK" config user.email release@example.test
+  printf 'release fixture\n' >"$RELEASE_WORK/README.md"
+  "$REAL_GIT" -C "$RELEASE_WORK" add README.md
+  "$REAL_GIT" -C "$RELEASE_WORK" commit -q -m initial
+  "$REAL_GIT" -C "$RELEASE_WORK" remote add origin "$RELEASE_REMOTE"
+  "$REAL_GIT" -C "$RELEASE_WORK" push -q -u origin main
+}
+
+release_run() {
+  local name="$1" expected="$2" version="$3"
+  shift 3
+  RELEASE_LAST_LOG="$RELEASE_CASE/release-$PASS-$FAIL.log"
+  (cd "$RELEASE_WORK" && env PATH="$RELEASE_BIN:/usr/bin:/bin" \
+    RELEASE_MAKE_LOG="$RELEASE_MAKE_LOG" "$@" \
+    timeout 20 /bin/bash -x "$RELEASE" "$version") \
+    >"$RELEASE_LAST_LOG" 2>&1
+  local rc=$?
+  cat "$RELEASE_LAST_LOG" >>"$COV"
+  assert_rc "$name" "$expected" "$rc"
+}
+
+d="$(newdir)"
+(cd "$d" && /bin/sh "$RELEASE") >/dev/null 2>&1
+assert_rc "release: wrong shell reports Bash requirement" 2 "$?"
+
+RELEASE_CASE="$(newdir)"
+RELEASE_WORK="$RELEASE_CASE"
+RELEASE_MAKE_LOG="$RELEASE_CASE/make.log"
+release_run "release: version is required" 2 ""
+
+RELEASE_LAST_LOG="$RELEASE_CASE/missing-python.log"
+(cd "$RELEASE_WORK" && env PATH="$RELEASE_BIN" RELEASE_MAKE_LOG="$RELEASE_MAKE_LOG" \
+  /bin/bash -x "$RELEASE" 1.2.3) >"$RELEASE_LAST_LOG" 2>&1
+rc=$?
+cat "$RELEASE_LAST_LOG" >>"$COV"
+if [ "$rc" = 2 ] && grep -Fq 'releasing requires python3' "$RELEASE_LAST_LOG"; then
+  pass "release: missing dependency is reported"
+else fail "release: missing dependency is reported" "rc=$rc"; fi
+
+release_run "release: invalid SemVer is rejected" 2 "01.2.3"
+release_run "release: repository is required" 2 "1.2.3"
+
+new_release_repo
+"$REAL_GIT" -C "$RELEASE_WORK" switch -q -c feature
+release_run "release: main branch is required" 2 "1.2.3"
+
+new_release_repo
+printf 'dirty\n' >"$RELEASE_WORK/untracked.txt"
+release_run "release: dirty worktree is rejected" 2 "1.2.3"
+
+new_release_repo
+"$REAL_GIT" -C "$RELEASE_WORK" remote remove origin
+release_run "release: origin is required" 2 "1.2.3"
+
+new_release_repo
+mv "$RELEASE_REMOTE" "$RELEASE_REMOTE.unavailable"
+release_run "release: fetch failure is reported" 2 "1.2.3"
+
+new_release_repo
+printf 'ahead\n' >>"$RELEASE_WORK/README.md"
+"$REAL_GIT" -C "$RELEASE_WORK" add README.md
+"$REAL_GIT" -C "$RELEASE_WORK" commit -q -m ahead
+release_run "release: local main must match origin" 2 "1.2.3"
+
+new_release_repo
+"$REAL_GIT" -C "$RELEASE_WORK" tag -a v1.2.3 -m existing
+release_run "release: existing tag is rejected" 2 "1.2.3"
+
+new_release_repo
+release_run "release: failed checks create no tag" 7 "1.2.3" RELEASE_MAKE_RC=7
+if ! "$REAL_GIT" -C "$RELEASE_WORK" show-ref --verify --quiet refs/tags/v1.2.3; then
+  pass "release: failed checks leave tags unchanged"
+else fail "release: failed checks leave tags unchanged" "tag exists"; fi
+
+new_release_repo
+release_run "release: check-created changes are rejected" 2 "1.2.3" RELEASE_MAKE_DIRTY=1
+
+new_release_repo
+printf '%s\n' '#!/bin/sh' 'exit 1' >"$RELEASE_REMOTE/hooks/pre-receive"
+chmod +x "$RELEASE_REMOTE/hooks/pre-receive"
+release_run "release: failed push is reported" 1 "1.2.3"
+if "$REAL_GIT" -C "$RELEASE_WORK" show-ref --verify --quiet refs/tags/v1.2.3 && \
+   ! "$REAL_GIT" --git-dir="$RELEASE_REMOTE" show-ref --verify --quiet refs/tags/v1.2.3 && \
+   grep -Fq 'local tag v1.2.3 remains for inspection' "$RELEASE_LAST_LOG"; then
+  pass "release: failed push preserves only the local tag"
+else fail "release: failed push preserves only the local tag" "unexpected tag state"; fi
+
+new_release_repo
+release_run "release: checked tag is pushed" 0 "1.2.3-internal.1"
+if "$REAL_GIT" --git-dir="$RELEASE_REMOTE" show-ref --verify --quiet \
+     refs/tags/v1.2.3-internal.1 && \
+   grep -Fqx -- '--no-print-directory PACKAGE_VERSION=1.2.3-internal.1 VERSION= release-check' \
+     "$RELEASE_MAKE_LOG"; then
+  pass "release: CI tag and local check use the requested version"
+else fail "release: CI tag and local check use the requested version" "tag or make arguments missing"; fi
 
 # MCP servers are declared in the profile's `mcp:` block and written by the
 # upstream packager. A leftover org-mcp.json from the previous mechanism must no
@@ -363,6 +488,21 @@ if grep -Fqx '      - session-banner' "$ROOT/org-profile/package-policy.yaml"; t
   pass "policy: session banner is included"
 else fail "policy: session banner is included" "missing hook id"; fi
 
+if grep -Fq 'glab release create "${CI_COMMIT_TAG}"' \
+     "$ROOT/ci-templates/gitlab-ci.yml" && \
+   grep -Fq -- '--use-package-registry' "$ROOT/ci-templates/gitlab-ci.yml" && \
+   grep -Fq 'artifacts: true' "$ROOT/ci-templates/gitlab-ci.yml" && \
+   grep -Fq 'gh release create "${GITHUB_REF_NAME}"' \
+     "$ROOT/ci-templates/github/workflows/package.yml" && \
+   grep -Fq 'contents: write' "$ROOT/ci-templates/github/workflows/package.yml" && \
+   grep -Fq 'dist/${{ env.INTERNAL_NAME }}-*.zip' \
+     "$ROOT/ci-templates/github/workflows/package.yml" && \
+   grep -Fq 'dist/${INTERNAL_NAME}-*.zip' "$ROOT/ci-templates/gitlab-ci.yml" && \
+   grep -Fq 'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093' \
+     "$ROOT/ci-templates/github/workflows/package.yml"; then
+  pass "ci: tagged builds publish tested archives as platform releases"
+else fail "ci: tagged builds publish tested archives as platform releases" "release job incomplete"; fi
+
 # demo=yes; leading empty answer exercises the "(required)" retry on org-name.
 d="$(newdir)"
 tgt="$d/out"
@@ -470,6 +610,10 @@ if grep -Fq '`poaa-appsec` is the Claude Code security plugin' "$unicode_tgt/REA
    grep -Fq 'POAA AppSec Team' "$unicode_tgt/README.md" && \
    grep -Fq '| `/poaa-appsec:check-permissions` | Enabled |' "$unicode_tgt/README.md" && \
    grep -Fq '| `/poaa-appsec:audit-security-requirements` | Disabled |' "$unicode_tgt/README.md" && \
+   grep -Fq '### Release URL' "$unicode_tgt/README.md" && \
+   grep -Fq 'claude --plugin-url "<ZIP URL from the release>"' "$unicode_tgt/README.md" && \
+   grep -Fq '### Internal Marketplace' "$unicode_tgt/README.md" && \
+   grep -Fq '### Local checkout' "$unicode_tgt/README.md" && \
    grep -Fq 'build/poaa-appsec/config.json' "$unicode_tgt/README.md" && \
    grep -Fq '### Configuration map' "$unicode_tgt/README.md" && \
    grep -Fq 'Organization identity; presets and guardrails; requirements;' "$unicode_tgt/README.md" && \
@@ -610,7 +754,8 @@ if [ "$rc" = 0 ] && \
    grep -Fq 'disabled: audit-security-requirements, verify-requirements' "$build_log" && \
    grep -Fq 'package-policy.yaml includes/removes skills; org-profile.yaml skill_toggles' "$build_log" && \
    grep -Fq 'enable or disable packaged skills; see README.md#customize-skills' "$build_log" && \
-   grep -Fq '  - Distribute the tested plugin through an internal Claude Code Marketplace' "$build_log" && \
+   grep -Fq '  - Configure CI and tag-based releases: make ci-gitlab or make ci-github' "$build_log" && \
+   grep -Fq '  - Optionally distribute the tested plugin through an internal Claude Code Marketplace' "$build_log" && \
    ! grep -Eq '^  [0-9]+\. Optional:' "$build_log" && \
    ! grep -Fq 'Set up CI' "$build_log"; then
   pass "init: skipped build remains a next step"
@@ -844,7 +989,8 @@ for f in scripts/fetch-upstream.sh scripts/upstream-check.sh scripts/package-loc
          scripts/render-packaged-readme.py scripts/prune-packaged-session-banner.py \
          scripts/baseline-upstream-check.py \
          scripts/archive-built-plugin.py scripts/finalize-package-version.py \
-         scripts/rewrite-packaged-origins.py scripts/reinit-org-repo.sh \
+         scripts/rewrite-packaged-origins.py scripts/release.sh \
+         scripts/reinit-org-repo.sh \
          org-profile/package-policy.yaml org-profile/org-profile.yaml \
          ci-requirements.lock Makefile; do
   [ -f "$self_contained_tgt/$f" ] || missing="$missing $f"
@@ -942,7 +1088,7 @@ echo ""
 echo "functional checks: $PASS passed, $FAIL failed"
 python3 "$HERE/lib/coverage.py" --trace "$COV" --threshold "$THRESHOLD" \
   --lcov "$ROOT/coverage.lcov" --source-root "$ROOT" \
-  "$FETCH" "$PKG" "$INIT" "$REINIT" "$CHECK"
+  "$FETCH" "$PKG" "$INIT" "$REINIT" "$RELEASE" "$CHECK"
 covrc=$?
 
 if [ "$FAIL" -eq 0 ] && [ "$covrc" -eq 0 ]; then exit 0; else exit 1; fi

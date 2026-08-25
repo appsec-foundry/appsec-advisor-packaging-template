@@ -45,6 +45,8 @@ jobs:
   package:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
+    outputs:
+      package_version: ${{ steps.version.outputs.package_version }}
     steps:
       - name: Checkout packaging repo
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -61,17 +63,21 @@ jobs:
       # Branch builds use PACKAGE_VERSION; VERSION remains a one-off override.
       - name: Resolve package version
         id: version
+        env:
+          VERSION_OVERRIDE: ${{ vars.VERSION }}
         run: |
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             echo "package_version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            echo "version_override=" >> "$GITHUB_OUTPUT"
           else
             echo "package_version=${PACKAGE_VERSION}" >> "$GITHUB_OUTPUT"
+            echo "version_override=${VERSION_OVERRIDE}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Package and smoke-test plugin
         env:
           PACKAGE_VERSION: ${{ steps.version.outputs.package_version }}
-          VERSION: ${{ vars.VERSION }}
+          VERSION: ${{ steps.version.outputs.version_override }}
           ARCHIVE: "1"
         run: make package-archive
 
@@ -82,4 +88,33 @@ jobs:
           path: |
             dist/${{ env.INTERNAL_NAME }}-*.tgz
             dist/${{ env.INTERNAL_NAME }}-*.tgz.sha256
+            dist/${{ env.INTERNAL_NAME }}-*.zip
+            dist/${{ env.INTERNAL_NAME }}-*.zip.sha256
           retention-days: 30
+
+  release:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Download tested package
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ env.INTERNAL_NAME }}-${{ needs.package.outputs.package_version }}
+          path: dist
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/${INTERNAL_NAME}-*.tgz \
+            dist/${INTERNAL_NAME}-*.tgz.sha256 \
+            dist/${INTERNAL_NAME}-*.zip \
+            dist/${INTERNAL_NAME}-*.zip.sha256 \
+            --verify-tag \
+            --title "${INTERNAL_NAME} ${GITHUB_REF_NAME#v}" \
+            --notes-from-tag

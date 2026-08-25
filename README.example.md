@@ -26,13 +26,40 @@ does not replace the normal engineering or AppSec review process.
 
 ## Getting started
 
-If `acme-appsec` is already installed through our internal Claude Code
-Marketplace, start Claude Code in the project you want to review. For a local
-build, point Claude Code at the absolute plugin path:
+### Release URL
+
+Without a Marketplace, use the ZIP link from this repository's Releases page
+or from the internal plugin web server:
 
 ```bash
 cd /path/to/your/project
-claude --plugin-dir /absolute/path/to/the-packaging-repo/build/acme-appsec
+claude --plugin-url "<ZIP URL from the release>"
+```
+
+This requires Claude Code 2.1.129 or newer and loads the plugin for the current
+session. The URL must return the ZIP itself. If it requires a login, download
+the ZIP and use `claude --plugin-dir /path/to/acme-appsec.zip`.
+
+### Internal Marketplace
+
+If `acme-appsec` is available through an internal Marketplace, install it once:
+
+```bash
+claude plugin marketplace add <marketplace-git-url>
+claude plugin install acme-appsec@<marketplace-name>
+```
+
+### Local checkout
+
+For local testing, clone this packaging repository and build the plugin:
+
+```bash
+git clone <internal-packaging-repository> /path/to/acme-appsec-packaging
+cd /path/to/acme-appsec-packaging
+make package
+
+cd /path/to/your/project
+claude --plugin-dir /path/to/acme-appsec-packaging/build/acme-appsec
 ```
 
 When startup status is enabled, you should now see the plugin version,
@@ -103,7 +130,7 @@ approved installation path.
 For CI or a scripted review, use the wrapper included in the built plugin:
 
 ```bash
-/absolute/path/to/the-packaging-repo/build/acme-appsec/scripts/run-headless.sh \
+/absolute/path/to/acme-appsec/scripts/run-headless.sh \
   --repo /path/to/your/project \
   --incremental \
   --max-duration 1800 \
@@ -174,15 +201,16 @@ and [organization profile reference](https://github.com/appsec-foundry/appsec-ad
 for the full configuration syntax.
 
 The plugin is written to `build/acme-appsec/` and smoke-tested as part of the
-build. `PACKAGE_VERSION` in the `Makefile` is the internal release number shown
-in the session banner and packaged help; it is intentionally independent of the
-upstream version selected by `APPSEC_ADVISOR_REF`. The package retains that
-upstream core version separately for compatibility checks. Before publishing a
-release, run:
+build. `PACKAGE_VERSION` is the internal version for local builds and remains
+independent of `APPSEC_ADVISOR_REF`. After installing a CI definition and
+pushing `main`, publish a version with:
 
 ```bash
-make release-check
+make release RELEASE_VERSION=1.0.0
 ```
+
+This checks the build and pushes the `v1.0.0` tag. CI publishes the archives
+and checksums.
 
 Use `make upstream-check` for the appsec-advisor core only, `make
 baseline-check` for the configured secure-coding baseline, or `make
@@ -216,8 +244,9 @@ server is not shipped until its id is included there. Keep credentials and
 tokens out of this repository; MCP configuration must reference them through
 `${ENV_VAR}` values.
 
-Install a CI definition with `make ci-github` or `make ci-gitlab`. Generated
-content under `upstream/`, `build/`, and `dist/` must not be committed.
+Install a CI definition with `make ci-github` or `make ci-gitlab`. A `v*` tag
+publishes a GitHub Release or a GitLab Release. GitLab requires the project's
+Generic Package Registry. Do not commit `upstream/`, `build/`, or `dist/`.
 
 Maintainer references:
 

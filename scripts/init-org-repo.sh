@@ -99,6 +99,7 @@ check_template_layout() {
     scripts/fetch-upstream.sh \
     scripts/upstream-check.sh \
     scripts/package-local.sh \
+    scripts/release.sh \
     org-profile/org-profile.yaml \
     org-profile/package-policy.yaml \
     org-profile/hooks/guard.py \
@@ -732,6 +733,7 @@ for helper in \
   archive-built-plugin.py \
   finalize-package-version.py \
   rewrite-packaged-origins.py \
+  release.sh \
   reinit-org-repo.sh; do
   if [ -f "${TEMPLATE_BASE}/scripts/${helper}" ]; then
     helper_tmp="${TARGET_DIR}/scripts/.${helper}.new"
@@ -1049,7 +1051,8 @@ print_optional_steps() {
   echo "       disabled: audit-security-requirements, verify-requirements"
   echo "       package-policy.yaml includes/removes skills; org-profile.yaml skill_toggles"
   echo "       enable or disable packaged skills; see README.md#customize-skills"
-  echo "  - Distribute the tested plugin through an internal Claude Code Marketplace"
+  echo "  - Configure CI and tag-based releases: make ci-gitlab or make ci-github"
+  echo "  - Optionally distribute the tested plugin through an internal Claude Code Marketplace"
 }
 
 echo ""
