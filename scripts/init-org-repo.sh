@@ -100,6 +100,7 @@ check_template_layout() {
     scripts/fetch-upstream.sh \
     scripts/upstream-check.sh \
     scripts/select-latest-release.py \
+    scripts/check-org-hook-collisions.py \
     scripts/package-local.sh \
     scripts/release.sh \
     org-profile/org-profile.yaml \
@@ -407,6 +408,34 @@ def selection_block(section: str) -> tuple[str | None, int | None]:
     return selections[0] if selections else (None, None)
 
 
+def add_mcp_allowlist(entries: list[str]) -> bool:
+    section_pattern = re.compile(r"^  mcp_servers:\s*(?:#.*)?$")
+    if any(section_pattern.match(line.rstrip("\r\n")) for line in lines):
+        return False
+    surface_start = next(
+        (
+            index
+            for index, line in enumerate(lines)
+            if re.match(r"^plugin_surface:\s*(?:#.*)?$", line.rstrip("\r\n"))
+        ),
+        None,
+    )
+    if surface_start is None:
+        raise ValueError("plugin_surface is missing")
+    insertion = next(
+        (
+            index
+            for index in range(surface_start + 1, len(lines))
+            if lines[index].strip() and not lines[index][0].isspace()
+        ),
+        len(lines),
+    )
+    block = ["  mcp_servers:\n", "    include:\n"]
+    block.extend(f"      - {entry}\n" for entry in sorted(set(entries)))
+    lines[insertion:insertion] = block
+    return True
+
+
 def ensure_available(section: str, entry: str) -> bool:
     mode, selection = selection_block(section)
     if mode is None or selection is None:
@@ -469,25 +498,43 @@ def ensure_unavailable(section: str, entry: str) -> bool:
 
 banner_disabled = False
 inside_banner = False
+mcp_server_names = []
+inside_mcp = False
+inside_mcp_servers = False
 for line in profile_lines:
     if line and not line[0].isspace():
-        inside_banner = line.split(":", 1)[0] == "banner"
+        top_level = line.split(":", 1)[0]
+        inside_banner = top_level == "banner"
+        inside_mcp = top_level == "mcp"
+        inside_mcp_servers = False
         continue
     if inside_banner and re.match(r"^  enabled:\s*false(?:\s+#.*)?$", line):
         banner_disabled = True
+    if inside_mcp and re.match(r"^  servers:\s*(?:#.*)?$", line):
+        inside_mcp_servers = True
+        continue
+    if inside_mcp_servers:
+        server = re.match(r"^    ([a-z0-9][a-z0-9_-]{0,62}):\s*(?:#.*)?$", line)
+        if server:
+            mcp_server_names.append(server.group(1))
+        elif line.strip() and len(line) - len(line.lstrip(" ")) <= 2:
+            inside_mcp_servers = False
 
 enabled = []
 disabled = []
+added_surfaces = []
 try:
     if ensure_available("skills", "help"):
         enabled.append("help")
     if banner_disabled and ensure_unavailable("hooks", "session-banner"):
         disabled.append("session-banner")
+    if add_mcp_allowlist(mcp_server_names):
+        added_surfaces.append("mcp_servers allowlist")
 except ValueError as error:
     print(f"ERROR: cannot migrate package policy: {error}", file=sys.stderr)
     raise SystemExit(2)
 
-if enabled or disabled:
+if enabled or disabled or added_surfaces:
     mode = stat.S_IMODE(policy_path.stat().st_mode)
     descriptor, temporary_name = tempfile.mkstemp(
         dir=policy_path.parent, prefix=f".{policy_path.name}."
@@ -505,6 +552,8 @@ if enabled or disabled:
         changes.append(f"enabled {', '.join(enabled)}")
     if disabled:
         changes.append(f"disabled {', '.join(disabled)}")
+    if added_surfaces:
+        changes.append(f"added {', '.join(added_surfaces)}")
     print(f"  migrated: {policy_path} ({'; '.join(changes)})")
 PY
 }
@@ -808,6 +857,7 @@ for helper in \
   prune-packaged-session-banner.py \
   baseline-upstream-check.py \
   select-latest-release.py \
+  check-org-hook-collisions.py \
   archive-built-plugin.py \
   finalize-package-version.py \
   rewrite-packaged-origins.py \
@@ -836,7 +886,7 @@ if [ -f "${TEMPLATE_BASE}/org-skills/README.md" ]; then
     "${TARGET_DIR}/org-skills/README.md" \
     "org-skills/README.md"
 fi
-# The rendered org-profile.yaml declares the block-risky-bash hook and
+# The rendered org-profile.yaml declares the org-block-risky-bash hook and
 # package-policy.yaml allowlists it, so the script must ship with the scaffold.
 refresh_user_file \
   "${TEMPLATE_BASE}/org-profile/hooks/guard.py" \

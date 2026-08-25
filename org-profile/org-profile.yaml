@@ -93,9 +93,12 @@ actors:
 # The script lives under org-profile/hooks/ and is referenced via
 # ${CLAUDE_PLUGIN_ROOT}. Org hooks run at Claude Code's event layer only; they
 # never reach the analysis pipeline. Each hook id must also be allowlisted in
-# package-policy.yaml (plugin_surface.hooks) to be included in the build.
+# package-policy.yaml (plugin_surface.hooks) to be included in the build. Use a
+# distinct, organization-prefixed id; collisions with the selected upstream
+# abort validation. To replace behavior, omit the upstream id from the allowlist
+# and add the organization hook under its own id.
 hooks:
-  block-risky-bash:
+  org-block-risky-bash:
     event: PreToolUse
     matcher: Bash
     command: python3 ${CLAUDE_PLUGIN_ROOT}/org-profile/hooks/guard.py
@@ -107,7 +110,8 @@ hooks:
 #
 # Secrets belong in ${ENV_VAR}, which Claude Code expands at load time — a
 # credential in the URL is rejected at validation. Each server must also be
-# allowlisted in package-policy.yaml (plugin_surface.mcp_servers).
+# allowlisted in package-policy.yaml (plugin_surface.mcp_servers); removing its
+# id from that allowlist removes the endpoint from the packaged .mcp.json.
 #
 # mcp:
 #   servers:

@@ -40,6 +40,7 @@ BASELINE_UPSTREAM_TEST="$HERE/test_baseline_upstream_check.py"
 PACKAGE_VERSION_TEST="$HERE/test_finalize_package_version.py"
 PACKAGED_ORIGINS_TEST="$HERE/test_rewrite_packaged_origins.py"
 LATEST_RELEASE_TEST="$HERE/test_select_latest_release.py"
+ORG_HOOK_COLLISION_TEST="$HERE/test_org_hook_collisions.py"
 
 # -B: importing guard.py must not leave __pycache__ in org-profile/hooks/,
 # which the packager would copy and the smoke test rejects.
@@ -53,6 +54,7 @@ LATEST_RELEASE_TEST="$HERE/test_select_latest_release.py"
 /usr/bin/python3 -B "$PACKAGE_VERSION_TEST"
 /usr/bin/python3 -B "$PACKAGED_ORIGINS_TEST"
 /usr/bin/python3 -B "$LATEST_RELEASE_TEST"
+/usr/bin/python3 -B "$ORG_HOOK_COLLISION_TEST"
 
 COV="$(mktemp)"
 WORKROOT="$(mktemp -d)"
@@ -74,6 +76,11 @@ mkfake() { # a minimal appsec-advisor checkout
   for f in package_internal_plugin smoke_test_package; do
     printf '# stub\n' >"$1/scripts/$f.py"
   done
+  printf '%s\n' \
+    'import os' \
+    'def _available_hook_ids(_source):' \
+    '    return {item for item in os.environ.get("PYSTUB_UPSTREAM_HOOK_IDS", "").split(",") if item}' \
+    >>"$1/scripts/package_internal_plugin.py"
   printf '%s\n' \
     'import json' \
     'from pathlib import Path' \
@@ -250,6 +257,13 @@ printf '%s\n' 'description: Bad name.' >"$d/org-skills/BadName/SKILL.md"
 (cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" INTERNAL_NAME=acme-appsec \
   timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
 assert_rc "package: org skill name validation" 2 "$?"
+
+d="$(newdir)"
+mkfake "$d/src"
+(cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" \
+  PYSTUB_UPSTREAM_HOOK_IDS=org-block-risky-bash INTERNAL_NAME=acme-appsec \
+  timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
+assert_rc "package: org hook cannot reuse an upstream id" 2 "$?"
 
 # ── release.sh ───────────────────────────────────────────────────────────────
 echo "--- release.sh ---"
@@ -572,6 +586,10 @@ if grep -Fqx '      - session-banner' "$ROOT/org-profile/package-policy.yaml"; t
   pass "policy: session banner is included"
 else fail "policy: session banner is included" "missing hook id"; fi
 
+if grep -Fqx '  mcp_servers:' "$ROOT/org-profile/package-policy.yaml"; then
+  pass "policy: MCP servers use an explicit allowlist"
+else fail "policy: MCP servers use an explicit allowlist" "missing mcp_servers surface"; fi
+
 if grep -Fq 'glab release create "${CI_COMMIT_TAG}"' \
      "$ROOT/ci-templates/gitlab-ci.yml" && \
    grep -Fq -- '--use-package-registry' "$ROOT/ci-templates/gitlab-ci.yml" && \
@@ -866,8 +884,18 @@ sed -i 's/^APPSEC_ADVISOR_REF := .*$/APPSEC_ADVISOR_REF := dev/' \
   "$self_contained_tgt/Makefile"
 sed -i '/^      - help$/d; /^      - session-banner$/d' \
   "$self_contained_tgt/org-profile/package-policy.yaml"
+sed -i '/^  mcp_servers:/,$d' \
+  "$self_contained_tgt/org-profile/package-policy.yaml"
 printf '\n# retained organization policy marker\n' >> \
   "$self_contained_tgt/org-profile/package-policy.yaml"
+printf '%s\n' \
+  'mcp:' \
+  '  servers:' \
+  '    org-sast:' \
+  '      type: http' \
+  '      url: https://sast.example.internal/mcp' \
+  >>"$self_contained_tgt/org-profile/org-profile.yaml"
+profile_before="$(cksum "$self_contained_tgt/org-profile/org-profile.yaml")"
 reinit_log="$d/reinit.log"
 (cd "$self_contained_tgt" && set -x && export SHELLOPTS && \
   timeout 20 make --no-print-directory GITSTUB_CLONE_SRC="$ROOT" \
@@ -884,6 +912,7 @@ if [ "$rc" = 0 ] && \
    grep -Fq 'render-packaged-help.py' "$self_contained_tgt/scripts/package-local.sh" && \
    [ "$(grep -Fxc '      - help' "$self_contained_tgt/org-profile/package-policy.yaml")" = 1 ] && \
    [ "$(grep -Fxc '      - session-banner' "$self_contained_tgt/org-profile/package-policy.yaml")" = 0 ] && \
+   [ "$(grep -Fxc '      - org-sast' "$self_contained_tgt/org-profile/package-policy.yaml")" = 1 ] && \
    grep -Fq 'retained organization policy marker' "$self_contained_tgt/org-profile/package-policy.yaml" && \
    grep -Fq 'Re-initialization complete' "$reinit_log" && \
    grep -Fq 'enabled help' "$reinit_log" && \
@@ -898,7 +927,7 @@ fi
 # from the exclusion list rather than converting the organization's policy mode.
 sed -i '/^  skills:/,/^  hooks:/ s/^    include:/    exclude:/' \
   "$self_contained_tgt/org-profile/package-policy.yaml"
-sed -i '/^  hooks:/,$ s/^    include:/    exclude:/' \
+sed -i '/^  hooks:/,/^  mcp_servers:/ s/^    include:/    exclude:/' \
   "$self_contained_tgt/org-profile/package-policy.yaml"
 exclude_log="$d/reinit-exclude.log"
 (cd "$self_contained_tgt" && env APPSEC_ADVISOR_TEMPLATE_SOURCE="$ROOT" \
@@ -1090,6 +1119,7 @@ for f in scripts/fetch-upstream.sh scripts/upstream-check.sh scripts/package-loc
          scripts/render-packaged-readme.py scripts/prune-packaged-session-banner.py \
          scripts/baseline-upstream-check.py \
          scripts/select-latest-release.py \
+         scripts/check-org-hook-collisions.py \
          scripts/archive-built-plugin.py scripts/finalize-package-version.py \
          scripts/rewrite-packaged-origins.py scripts/release.sh \
          scripts/reinit-org-repo.sh \

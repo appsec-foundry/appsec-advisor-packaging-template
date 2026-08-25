@@ -95,16 +95,79 @@ surface, then rebuild.
 The secure-coding baseline is pinned independently from the plugin core. Use
 `make baseline-check` to compare its configured id with the published document.
 
-### Hooks and MCP servers
+### Customize hooks
 
-Organization hooks run on Claude Code's event layer. They do not change the
-analysis pipeline, severity logic, or schemas. Every declared hook must be
-included by `plugin_surface.hooks` to reach the package.
+Organization hooks run when their configured Claude Code event occurs. They can
+add context or block a tool call. Add a script below `org-profile/hooks/`,
+declare it under the top-level `hooks:` block, and allowlist the same id:
 
-Declare MCP servers only under `mcp:` in `org-profile/org-profile.yaml` and
-include them through `plugin_surface.mcp_servers`. Reference secrets through
-`${ENV_VAR}` values; never commit tokens or embed credentials in URLs. MCP tool
-output is untrusted and does not override permissions or analysis policy.
+```yaml
+# org-profile/org-profile.yaml
+hooks:
+  org-block-risky-bash:
+    event: PreToolUse
+    matcher: Bash
+    command: python3 ${CLAUDE_PLUGIN_ROOT}/org-profile/hooks/guard.py
+
+# org-profile/package-policy.yaml
+plugin_surface:
+  hooks:
+    include:
+      - org-block-risky-bash
+```
+
+Use the allowlist as follows:
+
+- Remove an upstream or organization hook id to omit that handler completely.
+- Add an organization hook by declaring and allowlisting a distinct `org-...`
+  id.
+- Replace upstream behavior by removing the upstream id, then adding and
+  allowlisting an organization hook with a different id and the desired event,
+  matcher, and command.
+
+Review an upstream hook's purpose before removing it: the hook may provide a
+guard, policy check, status signal, or audit data that the replacement must
+preserve.
+
+Do not reuse an upstream hook id. `make validate` and `make package` check the
+selected release or branch and abort on a collision. After building, inspect
+the `hooks` section of `.claude-plugin/package-surface.json` to verify what was
+included and removed.
+
+### Add or remove MCP servers
+
+Declare MCP servers only under `mcp.servers` in
+`org-profile/org-profile.yaml`. The packager generates `.mcp.json` from these
+organization declarations; do not maintain or copy a separate `.mcp.json`:
+
+```yaml
+# org-profile/org-profile.yaml
+mcp:
+  servers:
+    org-sast:
+      type: http
+      url: https://sast.example.internal/mcp
+      headers:
+        Authorization: Bearer ${ORG_SAST_TOKEN}
+
+# org-profile/package-policy.yaml
+plugin_surface:
+  mcp_servers:
+    include:
+      - org-sast
+```
+
+Add a declared server id to `mcp_servers.include` to ship it. Remove the id to
+remove the endpoint from the packaged `.mcp.json`; remove its profile declaration
+too when it is no longer maintained. Unknown ids fail the build.
+
+Add only approved MCP servers, grant them the minimum required permissions, and
+use TLS endpoints. Reference secrets through `${ENV_VAR}` values; never commit
+tokens or embed credentials in URLs. MCP tools are available to the Claude Code
+session and organization-owned skills, but the upstream threat-model pipeline
+does not call them. Treat MCP tool output as untrusted. After building, inspect
+`mcp_servers` in `.claude-plugin/package-surface.json` and the generated
+`.mcp.json`.
 
 ## Build and verification
 

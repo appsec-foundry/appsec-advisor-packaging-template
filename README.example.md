@@ -27,6 +27,16 @@ organization-specific content before rollout:
 - Add organization skills under `org-skills/`, and include or remove skills,
   hooks, and MCP servers through `org-profile/package-policy.yaml`.
 
+To disable a hook, remove its id from `plugin_surface.hooks.include`. To add or
+replace behavior, declare an organization hook under a distinct `org-...` id
+and include that id. Reusing an upstream hook id fails validation.
+
+MCP endpoints are declared under `mcp.servers` in `org-profile.yaml` and become
+part of `.mcp.json` only when their ids are present in
+`plugin_surface.mcp_servers.include`. Removing an id from that allowlist removes
+the endpoint from the built plugin. Keep credentials in `${ENV_VAR}` references.
+The maintainer runbook contains complete examples for both customizations.
+
 Build and test the local package:
 
 ```bash

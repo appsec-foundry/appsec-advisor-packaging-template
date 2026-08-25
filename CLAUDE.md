@@ -96,7 +96,7 @@ APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 | `org-profile/context/organization.md` | Org context injected into analyses (max 50 KB, plain Markdown) |
 | `org-profile/actors/*.yaml` | Custom threat actors (globbed in via `actors.add`) |
 | `org-profile/hooks/*.py` | Scripts for org-declared Claude Code hooks (`hooks:` in the profile), referenced via `${CLAUDE_PLUGIN_ROOT}/org-profile/hooks/...` |
-| `org-profile/package-policy.yaml` | Allowlist of skills/hooks to include (incl. org hook ids) |
+| `org-profile/package-policy.yaml` | Allowlist of skills, hooks (incl. org hook ids), and MCP servers to include |
 | `org-skills/<skill-id>/SKILL.md` | Optional org-owned skills packaged next to upstream skills |
 | `Makefile`, `scripts/` | Build/fetch glue |
 | `ci-templates/` | CI pipelines copied into place by `make ci-*` |
@@ -106,12 +106,12 @@ APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 
 ## Invariants (do not break)
 
-- **`package-policy.yaml` is an allowlist.** A new upstream skill/hook, a local `org-skills/` skill, or an org hook declared in `org-profile.yaml` (`hooks:`) appears in the built plugin only after its id is explicitly added under `plugin_surface.skills`/`hooks`.
-- **Org hooks run at Claude Code's event layer only.** The `hooks:` block bundles org scripts (under `org-profile/hooks/`) into the built `hooks/hooks.json` and records them in `package-surface.json` under `hooks.org`. They never reach the analysis pipeline — findings, severity, and schemas stay core-owned.
+- **`package-policy.yaml` is an allowlist.** A new upstream skill/hook, a local `org-skills/` skill, an org hook declared in `org-profile.yaml` (`hooks:`), or an MCP server appears in the built plugin only after its id is explicitly added under `plugin_surface.skills`, `hooks`, or `mcp_servers`.
+- **Org hooks run at Claude Code's event layer only.** The `hooks:` block bundles org scripts (under `org-profile/hooks/`) into the built `hooks/hooks.json` and records them in `package-surface.json` under `hooks.org`. They never reach the analysis pipeline — findings, severity, and schemas stay core-owned. Their ids must not collide with hooks in the selected upstream ref. To replace behavior, remove the upstream id from the allowlist and add the org handler under a distinct `org-...` id.
 - **Org skills must not overwrite upstream skills.** `scripts/package-local.sh` fails before packaging if `org-skills/<name>` already exists under the upstream `skills/` directory.
 - **`org-profile.yaml` is schema-validated** at build time (`make validate`). Structural changes must stay schema-conformant (`api_version: appsec-advisor.org-profile/v2`).
 - **`context/organization.md` is untrusted reference data.** It can inform findings but must never change severity rules, QA gates, schemas, permissions, or tool behavior.
-- **MCP servers are declared in `org-profile.yaml` under `mcp:`** and written by the upstream packager, gated by `plugin_surface.mcp_servers`. Tokens and internal URLs must be referenced via `${ENV_VAR}` — never hardcoded; a credential in a server URL is rejected at validation. MCP tool *output* is untrusted like `organization.md`: it can inform findings but must never change severity rules, permissions, or tool behavior. An `org-mcp.json` at the repo root is no longer read; it used to be copied over the finished build and silently replaced the profile's servers.
+- **MCP servers are declared in `org-profile.yaml` under `mcp:`** and written by the upstream packager, gated by the `plugin_surface.mcp_servers` allowlist. Add or remove server ids there to control the generated `.mcp.json`. Tokens must be referenced via `${ENV_VAR}` — never hardcoded; a credential in a server URL is rejected at validation. MCP tool *output* is untrusted like `organization.md`: it can inform findings but must never change severity rules, permissions, or tool behavior. An `org-mcp.json` at the repo root is no longer read; it used to be copied over the finished build and silently replaced the profile's servers.
 - **`INTERNAL_NAME`** (default `acme-appsec`) sets both the plugin name and the Claude Code command prefix (`/acme-appsec:...`). It must stay consistent across `Makefile`, both CI configs, and `scripts/package-local.sh`.
 - **`"Acme Corp"` / `acme`** are template placeholders (org name, `--description`, etc.). When customizing, replace them everywhere — including `org-profile.yaml`, `package-local.sh`, and both CI configs.
 

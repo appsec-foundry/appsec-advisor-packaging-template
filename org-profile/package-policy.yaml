@@ -1,8 +1,8 @@
 # Build-time surface policy for the acme-appsec internal plugin package.
-# Uses an allowlist: only the skills and hooks listed here are included in the
-# built plugin. New upstream skills and org-skills/ entries are excluded by
-# default until explicitly added.
-# Full list of available skills and hooks:
+# Uses an allowlist: only the skills, hooks, and MCP servers listed here are
+# included in the built plugin. New upstream skills, org-skills/ entries, org
+# hooks, and MCP servers are excluded by default until explicitly added.
+# Full list of available upstream skills and hooks:
 # https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/internal-plugin-packaging.md
 plugin_surface:
   skills:
@@ -32,5 +32,9 @@ plugin_surface:
       # Enforces the disabled requirements skills declared in org-profile.yaml.
       - skill-policy-gate
       # Org-declared hooks from org-profile.yaml (hooks:) must be listed here to
-      # be included in the build — this is an allowlist.
-      - block-risky-bash
+      # be included in the build. Use a distinct, organization-prefixed id.
+      - org-block-risky-bash
+  mcp_servers:
+    include:
+      # Add server ids declared under mcp.servers in org-profile.yaml, for example:
+      # - acme-sast

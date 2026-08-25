@@ -94,6 +94,7 @@ fetch-upstream: ## Clone/checkout upstream appsec-advisor at APPSEC_ADVISOR_REF
 
 validate: $(FETCH_TARGET) ## Validate org-profile.yaml against the upstream schema
 	python3 "$(APPSEC_ADVISOR_SOURCE)/scripts/validate_org_profile.py" org-profile/org-profile.yaml
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/check-org-hook-collisions.py --source "$(APPSEC_ADVISOR_SOURCE)" --profile org-profile/org-profile.yaml
 
 package: $(FETCH_TARGET) ## Fetch + build + smoke-test the plugin into build/<name>/
 	APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" APPSEC_ADVISOR_SOURCE="$(APPSEC_ADVISOR_SOURCE)" INTERNAL_NAME="$(INTERNAL_NAME)" scripts/package-local.sh

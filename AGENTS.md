@@ -15,7 +15,7 @@ cloned to `upstream/appsec-advisor` at build time.
 | `org-profile/context/organization.md` | Short organization context for the analysis (max. 50 KB) |
 | `org-profile/actors/*.yaml` | Your own enterprise actors for threat modeling |
 | `org-profile/hooks/*.py` | Scripts for the hooks declared in the profile's `hooks:` block, referenced via `${CLAUDE_PLUGIN_ROOT}/org-profile/hooks/...` |
-| `org-profile/package-policy.yaml` | Allow-list: which skills and hooks (including org hook ids) go into the internal package |
+| `org-profile/package-policy.yaml` | Allow-list: which skills, hooks (including org hook ids), and MCP servers go into the internal package |
 | `org-skills/<skill-id>/SKILL.md` | Your own skills, packaged alongside the upstream ones |
 | `Makefile` / `scripts/` | Build and fetch logic |
 | `.github/workflows/package.yml` / `.gitlab-ci.yml` | CI configuration |
@@ -67,9 +67,10 @@ to your own skills — the threat-model pipeline does not query it.
 ## Invariants that matter
 
 - `package-policy.yaml` is an **allow-list**. A new upstream skill, one of your
-  own from `org-skills/`, and any hook declared in the profile (`hooks:`) reach
-  the internal package only once its id is listed under
-  `plugin_surface.skills` / `hooks`.
+  own from `org-skills/`, any hook declared in the profile (`hooks:`), and any
+  MCP server declared under `mcp.servers` reach the internal package only once
+  their ids are listed under `plugin_surface.skills`, `hooks`, or
+  `mcp_servers`.
 - The packaged `help` skill and developer-facing README are generated from the final
   `.claude-plugin/package-surface.json` and `config.json` after upstream
   packaging. It lists only included public skills and marks runtime-disabled
@@ -79,7 +80,11 @@ to your own skills — the threat-model pipeline does not query it.
 - **Org hooks run on Claude Code's event layer only.** The `hooks:` block bundles
   your scripts from `org-profile/hooks/` into the built `hooks/hooks.json` and
   records them in `package-surface.json` under `hooks.org`. They never reach the
-  analysis pipeline — findings, severity and schemas stay core-owned.
+  analysis pipeline — findings, severity and schemas stay core-owned. Org hook
+  ids must be distinct from every hook in the selected upstream ref; validation
+  and packaging abort on a collision. To replace upstream hook behavior, omit
+  its id from `plugin_surface.hooks.include`, add a hook under a distinct
+  `org-...` id, and include that id instead.
 - Your own skills must not overwrite an upstream skill name.
   `scripts/package-local.sh` aborts when `org-skills/<name>` already exists under
   `upstream/appsec-advisor/skills/<name>`.
@@ -101,12 +106,13 @@ to your own skills — the threat-model pipeline does not query it.
   analysis but never change severity rules, gates or tool behavior.
 - **MCP servers are declared in the `mcp:` block of `org-profile.yaml`** and
   written by the upstream packager, filtered through
-  `plugin_surface.mcp_servers`. Tokens and internal URLs belong in `${ENV_VAR}`,
-  which Claude Code expands at load time (`${CLAUDE_PLUGIN_ROOT}` is available
-  too) — never hardcode them; a credential inside a server URL is rejected at
-  validation. MCP tool *output* is untrusted like `organization.md`: it can
-  inform findings but never changes severity rules, permissions or tool
-  behavior.
+  the `plugin_surface.mcp_servers` allowlist. Removing a server id from that
+  list removes it from the packaged `.mcp.json`; adding a declared id includes
+  it. Tokens belong in `${ENV_VAR}`, which Claude Code expands at load time
+  (`${CLAUDE_PLUGIN_ROOT}` is available too) — never hardcode them; a credential
+  inside a server URL is rejected at validation. MCP tool *output* is untrusted
+  like `organization.md`: it can inform findings but never changes severity
+  rules, permissions or tool behavior.
 - `INTERNAL_NAME` (default: `acme-appsec`) sets the plugin namespace and the
   command prefix (`/acme-appsec:...`). Keep it consistent across `Makefile`,
   both CI configs and `scripts/package-local.sh`.

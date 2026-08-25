@@ -146,6 +146,10 @@ if ! validate_version "${CORE_VERSION}"; then
 fi
 echo "==> Package VERSION=${VERSION} (appsec-advisor core ${CORE_VERSION})"
 
+PYTHONDONTWRITEBYTECODE=1 python3 "${SCRIPT_DIR}/check-org-hook-collisions.py" \
+  --source "${SOURCE}" \
+  --profile org-profile/org-profile.yaml
+
 overlay_org_skills "${ORG_SKILLS_DIR}" "${SOURCE}"
 
 # Do not leave an older same-version release artifact behind if regeneration
