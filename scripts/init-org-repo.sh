@@ -235,7 +235,7 @@ select_upstream_ref() {
   while true; do
     echo "Select the appsec-advisor upstream channel:" >&2
     echo "  1. Latest stable release, pinned to the resolved tag (default)" >&2
-    echo "  2. Development branch 'dev', updated on every build" >&2
+    echo "  2. Development branch 'dev', follows the latest branch head on every build" >&2
     read -r -p "Upstream channel [1]: " reply || reply=""
     case "${reply}" in
       ""|1|stable|Stable)
