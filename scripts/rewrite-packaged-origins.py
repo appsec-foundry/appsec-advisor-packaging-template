@@ -47,7 +47,7 @@ CONFIGURATION_HELP = (
     "help/README link as INTERNAL_REPOSITORY_URL in the Makefile. Select packaged skills, "
     "hooks, and MCP servers in org-profile/package-policy.yaml; inspect the resolved "
     "surface in .claude-plugin/package-surface.json. See "
-    "README.md#configuration-map."
+    "docs/MAINTAINER-RUNBOOK.md#organization-configuration."
 )
 
 

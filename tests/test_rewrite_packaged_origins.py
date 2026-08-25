@@ -60,7 +60,7 @@ def test_verified_origins_are_normalized() -> None:
         assert "MCP" in config["_comment"]
         assert ".claude-plugin/package-surface.json" in config["_comment"]
         assert "org-profile/package-policy.yaml" in config["_comment"]
-        assert "README.md#configuration-map" in config["_comment"]
+        assert "docs/MAINTAINER-RUNBOOK.md#organization-configuration" in config["_comment"]
         documentation = (root / "docs" / "origins.md").read_text(encoding="utf-8")
         assert "https://github.com/appsec-foundry/ai-secure-coding-baseline" in documentation
         assert "https://github.com/appsec-foundry/appsec-advisor" in documentation

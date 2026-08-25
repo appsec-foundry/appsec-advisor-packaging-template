@@ -96,6 +96,7 @@ check_template_layout() {
     .gitignore \
     AGENTS.md \
     README.example.md \
+    docs/MAINTAINER-RUNBOOK.example.md \
     scripts/fetch-upstream.sh \
     scripts/upstream-check.sh \
     scripts/package-local.sh \
@@ -712,6 +713,7 @@ mkdir -p \
   "${TARGET_DIR}/org-profile/actors" \
   "${TARGET_DIR}/org-profile/hooks" \
   "${TARGET_DIR}/org-skills" \
+  "${TARGET_DIR}/docs" \
   "${TARGET_DIR}/scripts" \
   "${TARGET_DIR}/ci-templates/github/workflows"
 
@@ -952,6 +954,20 @@ refresh_user_file \
   "${TARGET_DIR}/README.md" \
   "README.md"
 
+# ── Render maintainer runbook ─────────────────────────────────────────────────
+
+RUNBOOK_CANDIDATE="${CANDIDATE_DIR}/MAINTAINER-RUNBOOK.md"
+sed \
+  -e "s/acme-appsec/${E_PLUGIN}/g" \
+  -e "s/Acme Corp/${E_ORG_NAME}/g" \
+  -e "s/Acme AppSec Team/${E_OWNER}/g" \
+  -e "s|<!-- INTERNAL_REPOSITORY_LINK -->|${E_INTERNAL_REPOSITORY_LINK}|" \
+  "${TEMPLATE_BASE}/docs/MAINTAINER-RUNBOOK.example.md" > "${RUNBOOK_CANDIDATE}"
+refresh_user_file \
+  "${RUNBOOK_CANDIDATE}" \
+  "${TARGET_DIR}/docs/MAINTAINER-RUNBOOK.md" \
+  "docs/MAINTAINER-RUNBOOK.md"
+
 # ── Render package-local.sh with correct org name ─────────────────────────────
 
 sed \
@@ -1049,7 +1065,7 @@ print_sharing_step() {
   echo "         claude --plugin-url \"<direct HTTPS URL to ${PLUGIN_NAME}-${PACKAGE_VERSION}.zip>\""
   echo "     Internal Marketplace:"
   echo "       Publish the plugin through your organization's Marketplace."
-  echo "     See README.md#rollout-options for CI releases and Marketplace setup."
+  echo "     See docs/MAINTAINER-RUNBOOK.md#releases-and-distribution for rollout options."
 }
 
 echo ""
@@ -1095,5 +1111,5 @@ echo "       - Replace org-profile/context/organization.md with your organizatio
 echo "       - Add organization skills or enable, disable, and remove packaged skills."
 echo "       - Adjust requirements, presets, banner, baseline, policy, and guardrails as needed."
 echo "       - Rebuild after changes: make package"
-echo "     See README.md#configuration-map and README.md#customize-skills"
+echo "     See docs/MAINTAINER-RUNBOOK.md#organization-configuration"
 print_sharing_step 4

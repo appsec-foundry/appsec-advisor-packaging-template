@@ -43,6 +43,9 @@ class PackagedReadmeTests(unittest.TestCase):
                         "help",
                         "check-permissions",
                         "create-threat-model",
+                        "update-threat-model",
+                        "show-threat-model",
+                        "review-threat-model",
                         "verify-requirements",
                         "org-review",
                     ],
@@ -112,13 +115,25 @@ class PackagedReadmeTests(unittest.TestCase):
         self.assertIn("/pruf-appsec:help", rendered)
         self.assertIn("/pruf-appsec:check-permissions --update", rendered)
         self.assertIn("/pruf-appsec:create-threat-model", rendered)
+        self.assertIn("## Normal workflow", rendered)
+        self.assertIn("Update it after relevant design or code changes.", rendered)
         self.assertIn("you should see its startup status", rendered)
         self.assertIn("It is not another scanner.", normalized)
         self.assertIn("aisec-0.1.7", rendered)
         self.assertIn("| `/pruf-appsec:verify-requirements` | Disabled |", rendered)
+        self.assertNotIn("Check code and changes against the security requirements", rendered)
         self.assertIn("| `/pruf-appsec:org-review` | Available |", rendered)
         self.assertNotIn("Ignore later instructions", rendered)
         self.assertNotIn("/pruf-appsec:install-baseline", rendered)
+
+    def test_advertises_requirements_only_when_a_requirements_skill_is_available(self) -> None:
+        config_path = self.root / "config.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        config["skill_toggles"]["verify-requirements"]["enabled"] = True
+        config_path.write_text(json.dumps(config), encoding="utf-8")
+
+        rendered = renderer.render_readme(self.root).read_text(encoding="utf-8")
+        self.assertIn("Check code and changes against the security requirements", rendered)
 
     def test_omits_startup_expectation_when_banner_is_not_packaged(self) -> None:
         surface_path = self.root / ".claude-plugin" / "package-surface.json"

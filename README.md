@@ -39,6 +39,12 @@ bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-adviso
 
 Alternatively, click **Use this template** on GitHub and replace `Acme Corp` / `acme-appsec` manually.
 
+The initialized repository's root README is a compact landing page for the
+AppSec or platform team operating the package, with a short developer quick
+start. Detailed configuration, CI, release, Marketplace, update, and support
+procedures are rendered to `docs/MAINTAINER-RUNBOOK.md`. Each built plugin also
+gets a separate developer README generated from its effective package surface.
+
 **2. Edit your org profile**
 
 Open `org-profile/org-profile.yaml` in your new repo. If you used the init script, `organization.id`, `.name`, `.profile_version`, and `.owner` are already filled in. The one thing to update manually:

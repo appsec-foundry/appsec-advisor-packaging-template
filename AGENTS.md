@@ -20,6 +20,7 @@ cloned to `upstream/appsec-advisor` at build time.
 | `Makefile` / `scripts/` | Build and fetch logic |
 | `.github/workflows/package.yml` / `.gitlab-ci.yml` | CI configuration |
 | `ci-requirements.lock` | Hashed, binary-only Python dependencies used by both CI templates |
+| `README.example.md` / `docs/MAINTAINER-RUNBOOK.example.md` | Generated repository landing page and maintainer runbook |
 
 **Do not touch:** `upstream/` and `build/` — both are generated.
 

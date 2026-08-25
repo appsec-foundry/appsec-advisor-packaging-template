@@ -607,29 +607,31 @@ if [ "$rc" = 0 ] && \
   pass "init: invalid UTF-8 and package version are retried safely"
 else fail "init: invalid UTF-8 and package version are retried safely" "rc=$rc"; fi
 
-if grep -Fq '`poaa-appsec` is the Claude Code security plugin' "$unicode_tgt/README.md" && \
+if grep -Fq 'This repository builds and releases the `poaa-appsec`' "$unicode_tgt/README.md" && \
    grep -Fq 'Prüf+Øvelse+Æble+Ångström' "$unicode_tgt/README.md" && \
    grep -Fq 'POAA AppSec Team' "$unicode_tgt/README.md" && \
-   grep -Fq '| `/poaa-appsec:check-permissions` | Enabled |' "$unicode_tgt/README.md" && \
-   grep -Fq '| `/poaa-appsec:audit-security-requirements` | Disabled |' "$unicode_tgt/README.md" && \
-   grep -Fq '### Release URL' "$unicode_tgt/README.md" && \
-   grep -Fq 'claude --plugin-url "<ZIP URL from the release>"' "$unicode_tgt/README.md" && \
-   grep -Fq '### Internal Marketplace' "$unicode_tgt/README.md" && \
-   grep -Fq '### Local checkout' "$unicode_tgt/README.md" && \
-   grep -Fq 'build/poaa-appsec/config.json' "$unicode_tgt/README.md" && \
-   grep -Fq '### Configuration map' "$unicode_tgt/README.md" && \
-   grep -Fq 'Organization identity; presets and guardrails; requirements;' "$unicode_tgt/README.md" && \
+   grep -Fq '## Maintainer quick start' "$unicode_tgt/README.md" && \
+   grep -Fq '## Developer quick start' "$unicode_tgt/README.md" && \
+   grep -Fq 'claude --plugin-url "<direct ZIP URL from the release>"' "$unicode_tgt/README.md" && \
+   grep -Fq 'docs/MAINTAINER-RUNBOOK.md' "$unicode_tgt/README.md" && \
    grep -Fq 'https://github.com/appsec-foundry/appsec-advisor-packaging-template' \
      "$unicode_tgt/README.md" && \
-   grep -Fq 'https://github.com/appsec-foundry/appsec-advisor)' \
-     "$unicode_tgt/README.md" && \
+   grep -Fq '# poaa-appsec maintainer runbook' \
+     "$unicode_tgt/docs/MAINTAINER-RUNBOOK.md" && \
+   grep -Fq 'Prüf+Øvelse+Æble+Ångström' \
+     "$unicode_tgt/docs/MAINTAINER-RUNBOOK.md" && \
+   grep -Fq 'POAA AppSec Team' "$unicode_tgt/docs/MAINTAINER-RUNBOOK.md" && \
+   grep -Fq '## CI integration' "$unicode_tgt/docs/MAINTAINER-RUNBOOK.md" && \
+   grep -Fq 'make release-package' "$unicode_tgt/docs/MAINTAINER-RUNBOOK.md" && \
+   grep -Fq '## References and lineage' "$unicode_tgt/docs/MAINTAINER-RUNBOOK.md" && \
    grep -Fq 'APPSEC_ADVISOR_TEMPLATE_URL ?= https://github.com/appsec-foundry/appsec-advisor-packaging-template.git' \
      "$unicode_tgt/Makefile" && \
    grep -Fq 'APPSEC_ADVISOR_URL ?= https://github.com/appsec-foundry/appsec-advisor.git' \
      "$unicode_tgt/Makefile" && \
-   ! grep -Fq 'Acme' "$unicode_tgt/README.md"; then
-  pass "init: generated README uses organization identity and records repository lineage"
-else fail "init: generated README uses organization identity and records repository lineage" "placeholder, identity, or lineage mismatch"; fi
+   ! grep -Fq 'Acme' "$unicode_tgt/README.md" && \
+   ! grep -Fq 'Acme' "$unicode_tgt/docs/MAINTAINER-RUNBOOK.md"; then
+  pass "init: generated repository docs separate maintainer and developer guidance"
+else fail "init: generated repository docs separate maintainer and developer guidance" "placeholder, audience, identity, or lineage mismatch"; fi
 
 # An explicitly accepted initial build runs only after the repository exists
 # and writes the actual Claude plugin below build/<plugin-name>/.
@@ -755,12 +757,12 @@ if [ "$rc" = 0 ] && \
    grep -Fq 'Add organization skills or enable, disable, and remove packaged skills.' "$build_log" && \
    grep -Fq 'Adjust requirements, presets, banner, baseline, policy, and guardrails as needed.' "$build_log" && \
    grep -Fq 'Rebuild after changes: make package' "$build_log" && \
-   grep -Fq 'See README.md#configuration-map and README.md#customize-skills' "$build_log" && \
+   grep -Fq 'See docs/MAINTAINER-RUNBOOK.md#organization-configuration' "$build_log" && \
    grep -Fq '  4. Share it with developers:' "$build_log" && \
    grep -Fq '       make release-package' "$build_log" && \
    grep -Fq '         claude --plugin-url "<direct HTTPS URL to to-appsec-0.1.0.zip>"' "$build_log" && \
    grep -Fq "Publish the plugin through your organization's Marketplace." "$build_log" && \
-   grep -Fq 'See README.md#rollout-options for CI releases and Marketplace setup.' "$build_log" && \
+   grep -Fq 'See docs/MAINTAINER-RUNBOOK.md#releases-and-distribution for rollout options.' "$build_log" && \
    ! grep -Fq 'Further steps (optional):' "$build_log" && \
    ! grep -Fq 'enabled: help, check-permissions' "$build_log"; then
   pass "init: skipped build remains a next step"
@@ -832,6 +834,7 @@ printf '\n# local guard marker\n' >>"$prompt_tgt/org-profile/hooks/guard.py"
 printf '\nlocal organization marker\n' >>"$prompt_tgt/org-profile/context/organization.md"
 printf '\nlocal agents marker\n' >>"$prompt_tgt/AGENTS.md"
 printf '\nlocal readme marker\n' >>"$prompt_tgt/README.md"
+printf '\nlocal runbook marker\n' >>"$prompt_tgt/docs/MAINTAINER-RUNBOOK.md"
 prompt_log="$d/reinit-prompts.log"
 printf 'y\nn\na\n' | \
   (cd "$prompt_tgt" && set -x && export SHELLOPTS && \
@@ -844,13 +847,16 @@ if [ "$rc" = 0 ] && \
    grep -Fq 'local organization marker' "$prompt_tgt/org-profile/context/organization.md" && \
    ! grep -Fq 'local agents marker' "$prompt_tgt/AGENTS.md" && \
    ! grep -Fq 'local readme marker' "$prompt_tgt/README.md" && \
+   ! grep -Fq 'local runbook marker' "$prompt_tgt/docs/MAINTAINER-RUNBOOK.md" && \
    [ "$(find "$prompt_tgt/.reinit-backups" -type f -path '*/org-profile/hooks/guard.py' | wc -l)" = 1 ] && \
    [ "$(find "$prompt_tgt/.reinit-backups" -type f -path '*/AGENTS.md' | wc -l)" = 1 ] && \
    [ "$(find "$prompt_tgt/.reinit-backups" -type f -path '*/README.md' | wc -l)" = 1 ] && \
+   [ "$(find "$prompt_tgt/.reinit-backups" -type f -path '*/docs/MAINTAINER-RUNBOOK.md' | wc -l)" = 1 ] && \
    grep -Fq 'updated: '"$prompt_tgt"'/org-profile/hooks/guard.py' "$prompt_log" && \
    grep -Fq 'kept: '"$prompt_tgt"'/org-profile/context/organization.md' "$prompt_log" && \
    grep -Fq 'updated: '"$prompt_tgt"'/AGENTS.md' "$prompt_log" && \
-   grep -Fq 'updated: '"$prompt_tgt"'/README.md' "$prompt_log"; then
+   grep -Fq 'updated: '"$prompt_tgt"'/README.md' "$prompt_log" && \
+   grep -Fq 'updated: '"$prompt_tgt"'/docs/MAINTAINER-RUNBOOK.md' "$prompt_log"; then
   pass "reinit: per-file choices and overwrite-all update safely with backups"
 else fail "reinit: per-file choices and overwrite-all update safely with backups" "rc=$rc"; fi
 
@@ -859,6 +865,7 @@ else fail "reinit: per-file choices and overwrite-all update safely with backups
 # changed file encountered in this second run.
 printf '\nsecond local guard marker\n' >>"$prompt_tgt/org-profile/hooks/guard.py"
 printf '\nsecond local readme marker\n' >>"$prompt_tgt/README.md"
+printf '\nsecond local runbook marker\n' >>"$prompt_tgt/docs/MAINTAINER-RUNBOOK.md"
 keep_all_log="$d/reinit-keep-all.log"
 printf 'k\n' | \
   (cd "$prompt_tgt" && set -x && export SHELLOPTS && \
@@ -870,8 +877,10 @@ if [ "$rc" = 0 ] && \
    grep -Fq 'second local guard marker' "$prompt_tgt/org-profile/hooks/guard.py" && \
    grep -Fq 'local organization marker' "$prompt_tgt/org-profile/context/organization.md" && \
    grep -Fq 'second local readme marker' "$prompt_tgt/README.md" && \
+   grep -Fq 'second local runbook marker' "$prompt_tgt/docs/MAINTAINER-RUNBOOK.md" && \
    grep -Fq 'kept: '"$prompt_tgt"'/org-profile/hooks/guard.py' "$keep_all_log" && \
-   grep -Fq 'kept: '"$prompt_tgt"'/README.md' "$keep_all_log"; then
+   grep -Fq 'kept: '"$prompt_tgt"'/README.md' "$keep_all_log" && \
+   grep -Fq 'kept: '"$prompt_tgt"'/docs/MAINTAINER-RUNBOOK.md' "$keep_all_log"; then
   pass "reinit: keep-all preserves all remaining changed files"
 else fail "reinit: keep-all preserves all remaining changed files" "rc=$rc"; fi
 
@@ -997,7 +1006,7 @@ for f in scripts/fetch-upstream.sh scripts/upstream-check.sh scripts/package-loc
          scripts/rewrite-packaged-origins.py scripts/release.sh \
          scripts/reinit-org-repo.sh \
          org-profile/package-policy.yaml org-profile/org-profile.yaml \
-         ci-requirements.lock Makefile; do
+         docs/MAINTAINER-RUNBOOK.md ci-requirements.lock Makefile; do
   [ -f "$self_contained_tgt/$f" ] || missing="$missing $f"
 done
 # every hook script declared in the rendered profile has to exist too

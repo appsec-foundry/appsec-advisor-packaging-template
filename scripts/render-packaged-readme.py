@@ -269,9 +269,31 @@ def render_readme(plugin_root: Path) -> Path:
         "Create an architecture-focused threat model while the design context is still fresh.",
         "Revisit findings and remediation work as the repository changes.",
     ]
-    if {"audit-security-requirements", "verify-requirements"} & included:
+    available = included - disabled
+    if {"audit-security-requirements", "verify-requirements"} & available:
         value_items.append("Check code and changes against the security requirements selected by our AppSec team.")
     value_list = "\n".join(_wrap(item, initial="- ", subsequent="  ") for item in value_items)
+
+    workflow_actions = [
+        ("create-threat-model", "Create the first threat model for the repository."),
+        ("update-threat-model", "Update it after relevant design or code changes."),
+        ("show-threat-model", "Inspect the current findings, backlog, and coverage."),
+        ("review-threat-model", "Triage findings and remediation decisions."),
+    ]
+    available_workflow = [
+        (name, description) for name, description in workflow_actions if name in available
+    ]
+    workflow_lines = [
+        _wrap(description, initial=f"{index}. ", subsequent="   ")
+        for index, (_, description) in enumerate(available_workflow, start=1)
+    ]
+    workflow_section = ""
+    if len(workflow_lines) > 1:
+        workflow_section = (
+            "\n## Normal workflow\n\n"
+            + "\n".join(workflow_lines)
+            + f"\n\nUse `/{plugin_name}:help` when your package offers a different workflow.\n"
+        )
 
     if baseline_enabled:
         baseline_lines = [
@@ -355,8 +377,9 @@ AppSec review; it does not replace either one.
 
 ## Start here
 
-Open Claude Code in the repository you want to review. If you are testing a
-local build, load it with `claude --plugin-dir /absolute/path/to/build/{plugin_name}`.
+Open Claude Code in the repository you want to review and load the plugin through
+your organization's approved release or Marketplace. If you are testing a local
+build, use `claude --plugin-dir /absolute/path/to/build/{plugin_name}`.
 {startup_paragraph}
 Then run:
 
@@ -365,6 +388,7 @@ Then run:
 ```
 
 {help_paragraph}
+{workflow_section}
 
 ## What it helps with
 
