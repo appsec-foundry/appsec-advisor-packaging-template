@@ -62,10 +62,10 @@ version from a clean, synchronized `main` branch:
 
 ```bash
 make ci-github  # or: make ci-gitlab
-make release RELEASE_VERSION=1.0.0
+make release RELEASE_VERSION=0.1.0
 ```
 
-The release command runs the release checks and pushes `v1.0.0`. CI rebuilds the
+The release command runs the release checks and pushes `v0.1.0`. CI rebuilds the
 plugin and publishes ZIP, TGZ, and SHA-256 checksum files.
 
 ### Manual archive hosting

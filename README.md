@@ -9,7 +9,9 @@ Template for building an internal [`appsec-advisor`](https://github.com/appsec-f
 
 ## Quick start
 
-**Prerequisites:** Bash 3.2+, Git, Python 3.10+, Make, `sed`, and `mktemp`. Local builds also require `PyYAML` and `jsonschema`; the initializer checks all prerequisites before building.
+**Prerequisites:** Git, Python 3.10+, Make, and a Bash 3.2+ environment
+(macOS/Linux or WSL on Windows). Local builds also require `PyYAML` and
+`jsonschema`. The initializer checks the required tools before building.
 
 ### 1. Create your packaging repository
 
@@ -58,10 +60,10 @@ make ci-gitlab
 After pushing `main`, create a release:
 
 ```bash
-make release RELEASE_VERSION=1.0.0
+make release RELEASE_VERSION=0.1.0
 ```
 
-The release command checks the build, creates the `v1.0.0` tag, and pushes it. The supplied CI publishes versioned archives and checksums for the tag. GitLab releases require the project's Generic Package Registry.
+The release command checks the build, creates the `v0.1.0` tag, and pushes it. The supplied CI publishes versioned archives and checksums for the tag. GitLab releases require the project's Generic Package Registry.
 
 ## Distribution options
 
@@ -71,10 +73,10 @@ This is the simplest option when there is no internal Marketplace. Developers ca
 
 ```bash
 claude --plugin-url \
-  "https://plugins.example.com/acme-appsec/1.0.0/acme-appsec-1.0.0.zip"
+  "https://plugins.corp.example/acme-appsec.zip"
 ```
 
-The URL must return the ZIP itself. If it requires interactive authentication, download the archive first and use `claude --plugin-dir /path/to/plugin.zip`. Never put credentials in the URL.
+This short URL is a moving alias for the currently approved release; retain the versioned archives and checksums for auditing and rollback. The URL must return the ZIP itself. If it requires interactive authentication, download the archive first and use `claude --plugin-dir /path/to/plugin.zip`. Never put credentials in the URL.
 
 ### Local checkout
 
