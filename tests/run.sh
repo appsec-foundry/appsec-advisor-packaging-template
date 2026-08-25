@@ -787,10 +787,11 @@ if [ "$rc" = 0 ] && [ -d "$tgt/.git" ] && [ -d "$tgt/build/to-appsec" ] && \
    grep -Fq '/to-appsec:help' "$tgt/build/to-appsec/README.md" && \
    grep -Fq 'https://git.example.test/to-appsec' "$tgt/build/to-appsec/README.md" && \
    grep -Fq 'https://git.example.test/to-appsec' "$tgt/build/to-appsec/skills/help/SKILL.md" && \
-   grep -Fq '  2. Test the local build:' "$build_log" && \
-   grep -Fq '  3. Customize it for your organization:' "$build_log" && \
+   grep -Fq '  2. Customize it for your organization:' "$build_log" && \
+   grep -Fq '  3. Rebuild and test the customized plugin:' "$build_log" && \
+   grep -Fq '       make package' "$build_log" && \
    grep -Fq '  4. Share it with developers:' "$build_log" && \
-   ! grep -Fq '  3. Build and test the plugin:' "$build_log"; then
+   ! grep -Fq '  2. Test the local build:' "$build_log"; then
   pass "init: accepted initial build creates plugin"
 else fail "init: accepted initial build creates plugin" "rc=$rc"; fi
 
@@ -806,7 +807,8 @@ printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\ny\n' "$tgt" | \
 rc=$?
 if [ "$rc" = 0 ] && [ -d "$tgt/.git" ] && \
    grep -Fq 'initial plugin build failed' "$COV" && \
-   grep -Fq '  2. Fix the reported build error, then build and test the plugin:' "$build_log" && \
+   grep -Fq '  2. Customize it for your organization:' "$build_log" && \
+   grep -Fq '  3. Fix the reported build error, then build and test the customized plugin:' "$build_log" && \
    grep -Fq '       make package' "$build_log" && \
    grep -Fq '  4. Share it with developers:' "$build_log"; then
   pass "init: failed initial build preserves repo"
@@ -880,14 +882,13 @@ printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\nn\n' "$tgt" | \
   (cd "$ROOT" && timeout 20 bash -x "$INIT") >"$build_log" 2>>"$COV"
 rc=$?
 if [ "$rc" = 0 ] && \
-   grep -Fq '  2. Build and test the plugin:' "$build_log" && \
+   grep -Fq '  2. Customize it for your organization:' "$build_log" && \
+   grep -Fq '  3. Build and test the customized plugin:' "$build_log" && \
    grep -Fq '       make package' "$build_log" && \
    grep -Fq '       claude --plugin-dir' "$build_log" && \
-   grep -Fq '  3. Customize it for your organization:' "$build_log" && \
    grep -Fq 'Replace org-profile/context/organization.md with your organization context.' "$build_log" && \
    grep -Fq 'Add organization skills or enable, disable, and remove packaged skills.' "$build_log" && \
    grep -Fq 'Adjust requirements, presets, banner, baseline, policy, and guardrails as needed.' "$build_log" && \
-   grep -Fq 'Rebuild after changes: make package' "$build_log" && \
    grep -Fq 'See docs/MAINTAINER-RUNBOOK.md#organization-configuration' "$build_log" && \
    grep -Fq '  4. Share it with developers:' "$build_log" && \
    grep -Fq '       make release-package' "$build_log" && \

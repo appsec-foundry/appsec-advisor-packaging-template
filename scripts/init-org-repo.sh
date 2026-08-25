@@ -1270,21 +1270,21 @@ if [ "${REINIT_MODE}" = true ]; then
   exit 0
 fi
 echo "  1. cd ${PACKAGING_ROOT}"
-if [ "${BUILD_STATE}" = failed ]; then
-echo "  2. Fix the reported build error, then build and test the plugin:"
-echo "       make package"
-elif [ "${BUILD_STATE}" = skipped ]; then
-echo "  2. Build and test the plugin:"
-echo "       make package"
-else
-echo "  2. Test the local build:"
-fi
-echo "       cd /path/to/your/project"
-echo "       claude --plugin-dir ${PACKAGING_ROOT}/build/${PLUGIN_NAME}"
-echo "  3. Customize it for your organization:"
+echo "  2. Customize it for your organization:"
 echo "       - Replace org-profile/context/organization.md with your organization context."
 echo "       - Add organization skills or enable, disable, and remove packaged skills."
 echo "       - Adjust requirements, presets, banner, baseline, policy, and guardrails as needed."
-echo "       - Rebuild after changes: make package"
 echo "     See docs/MAINTAINER-RUNBOOK.md#organization-configuration"
+if [ "${BUILD_STATE}" = failed ]; then
+echo "  3. Fix the reported build error, then build and test the customized plugin:"
+echo "       make package"
+elif [ "${BUILD_STATE}" = skipped ]; then
+echo "  3. Build and test the customized plugin:"
+echo "       make package"
+else
+echo "  3. Rebuild and test the customized plugin:"
+echo "       make package"
+fi
+echo "       cd /path/to/your/project"
+echo "       claude --plugin-dir ${PACKAGING_ROOT}/build/${PLUGIN_NAME}"
 print_sharing_step 4
