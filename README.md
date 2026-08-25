@@ -119,13 +119,14 @@ starts with:
 make release RELEASE_VERSION=1.0.0
 ```
 
-The command checks and tags `main`. The tag starts CI. `make package-archive`
+The command checks and tags `main`. The tag starts CI. `make release-package`
 then builds the archives for publication. The included definitions use GitLab
 or GitHub Releases. The same ZIP can instead be uploaded to S3, Nexus,
 Artifactory, or a normal HTTPS web server.
 
-`make package-archive` creates both `.zip` and `.tgz` files under `dist/`. Use
+`make release-package` creates both `.zip` and `.tgz` files under `dist/`. Use
 the ZIP with `--plugin-url`; the TGZ is for conventional download workflows.
+`make package-archive` remains available as a deprecated compatibility alias.
 
 Developers load it without checking out the packaging repository:
 
@@ -276,7 +277,7 @@ APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package
 APPSEC_ADVISOR_REF=main make package
 
 # Build distributable .tgz and .zip archives with checksums
-ARCHIVE=1 PACKAGE_VERSION=1.0.0 make package-archive
+make release-package
 
 # Validate main, create v1.0.0 and trigger the configured CI release
 make release RELEASE_VERSION=1.0.0

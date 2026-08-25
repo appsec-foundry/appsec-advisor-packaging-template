@@ -35,7 +35,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint check release release-check fetch-upstream upstream-check baseline-check check-updates drift-check validate package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean rebuild reinit test
+.PHONY: help lint check release release-check fetch-upstream upstream-check baseline-check check-updates drift-check validate package release-package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean rebuild reinit test
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -97,8 +97,10 @@ validate: $(FETCH_TARGET) ## Validate org-profile.yaml against the upstream sche
 package: $(FETCH_TARGET) ## Fetch + build + smoke-test the plugin into build/<name>/
 	APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" APPSEC_ADVISOR_SOURCE="$(APPSEC_ADVISOR_SOURCE)" INTERNAL_NAME="$(INTERNAL_NAME)" scripts/package-local.sh
 
-package-archive: $(FETCH_TARGET) ## Like package, plus .tgz/.zip archives and checksums
+release-package: $(FETCH_TARGET) ## Build distributable .tgz/.zip archives with checksums
 	APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" APPSEC_ADVISOR_SOURCE="$(APPSEC_ADVISOR_SOURCE)" INTERNAL_NAME="$(INTERNAL_NAME)" ARCHIVE=1 scripts/package-local.sh
+
+package-archive: release-package ## Deprecated alias for release-package
 
 local-marketplace: package ## Prepare build/ as a local Claude Code marketplace
 	python3 scripts/prepare-local-marketplace.py --build-root build --plugin-name "$(INTERNAL_NAME)" --marketplace-name "$(LOCAL_MARKETPLACE_NAME)"

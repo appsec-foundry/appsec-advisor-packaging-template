@@ -495,8 +495,10 @@ if grep -Fq 'glab release create "${CI_COMMIT_TAG}"' \
    grep -Fq 'gh release create "${GITHUB_REF_NAME}"' \
      "$ROOT/ci-templates/github/workflows/package.yml" && \
    grep -Fq 'contents: write' "$ROOT/ci-templates/github/workflows/package.yml" && \
+   grep -Fq 'run: make release-package' "$ROOT/ci-templates/github/workflows/package.yml" && \
    grep -Fq 'dist/${{ env.INTERNAL_NAME }}-*.zip' \
      "$ROOT/ci-templates/github/workflows/package.yml" && \
+   grep -Fq 'make release-package' "$ROOT/ci-templates/gitlab-ci.yml" && \
    grep -Fq 'dist/${INTERNAL_NAME}-*.zip' "$ROOT/ci-templates/gitlab-ci.yml" && \
    grep -Fq 'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093' \
      "$ROOT/ci-templates/github/workflows/package.yml"; then
@@ -652,9 +654,10 @@ if [ "$rc" = 0 ] && [ -d "$tgt/.git" ] && [ -d "$tgt/build/to-appsec" ] && \
    grep -Fq '/to-appsec:help' "$tgt/build/to-appsec/README.md" && \
    grep -Fq 'https://git.example.test/to-appsec' "$tgt/build/to-appsec/README.md" && \
    grep -Fq 'https://git.example.test/to-appsec' "$tgt/build/to-appsec/skills/help/SKILL.md" && \
-   grep -Fq '  4. Load the plugin' "$build_log" && \
-   ! grep -Fq '  4. Build the plugin' "$build_log" && \
-   ! grep -Fq '  4. Rebuild' "$build_log"; then
+   grep -Fq '  2. Test the local build:' "$build_log" && \
+   grep -Fq '  3. Customize it for your organization:' "$build_log" && \
+   grep -Fq '  4. Share it with developers:' "$build_log" && \
+   ! grep -Fq '  3. Build and test the plugin:' "$build_log"; then
   pass "init: accepted initial build creates plugin"
 else fail "init: accepted initial build creates plugin" "rc=$rc"; fi
 
@@ -670,8 +673,9 @@ printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\ny\n' "$tgt" | \
 rc=$?
 if [ "$rc" = 0 ] && [ -d "$tgt/.git" ] && \
    grep -Fq 'initial plugin build failed' "$COV" && \
-   grep -Fq '  4. Retry the plugin build: make package' "$build_log" && \
-   grep -Fq '  5. Load the plugin' "$build_log"; then
+   grep -Fq '  2. Fix the reported build error, then build and test the plugin:' "$build_log" && \
+   grep -Fq '       make package' "$build_log" && \
+   grep -Fq '  4. Share it with developers:' "$build_log"; then
   pass "init: failed initial build preserves repo"
 else fail "init: failed initial build preserves repo" "rc=$rc"; fi
 
@@ -743,21 +747,22 @@ printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\nn\n' "$tgt" | \
   (cd "$ROOT" && timeout 20 bash -x "$INIT") >"$build_log" 2>>"$COV"
 rc=$?
 if [ "$rc" = 0 ] && \
-   grep -Fq '  4. Build the plugin: make package' "$build_log" && \
-   grep -Fq '  5. Load the plugin' "$build_log" && \
-   grep -Fq 'Further steps (optional):' "$build_log" && \
-   grep -Fq '  - Review organization configuration:' "$build_log" && \
-   grep -Fq 'presets, requirements, policy, banner/baseline, context, security coach,' "$build_log" && \
-   grep -Fq 'actors, abuse cases, hooks, and MCP; see README.md#configuration-map' "$build_log" && \
-   grep -Fq '  - Review and customize the default skill selection:' "$build_log" && \
-   grep -Fq 'enabled: help, check-permissions, create/update/review/show/ask-threat-model,' "$build_log" && \
-   grep -Fq 'disabled: audit-security-requirements, verify-requirements' "$build_log" && \
-   grep -Fq 'package-policy.yaml includes/removes skills; org-profile.yaml skill_toggles' "$build_log" && \
-   grep -Fq 'enable or disable packaged skills; see README.md#customize-skills' "$build_log" && \
-   grep -Fq '  - Configure CI and tag-based releases: make ci-gitlab or make ci-github' "$build_log" && \
-   grep -Fq '  - Optionally distribute the tested plugin through an internal Claude Code Marketplace' "$build_log" && \
-   ! grep -Eq '^  [0-9]+\. Optional:' "$build_log" && \
-   ! grep -Fq 'Set up CI' "$build_log"; then
+   grep -Fq '  2. Build and test the plugin:' "$build_log" && \
+   grep -Fq '       make package' "$build_log" && \
+   grep -Fq '       claude --plugin-dir' "$build_log" && \
+   grep -Fq '  3. Customize it for your organization:' "$build_log" && \
+   grep -Fq 'Replace org-profile/context/organization.md with your organization context.' "$build_log" && \
+   grep -Fq 'Add organization skills or enable, disable, and remove packaged skills.' "$build_log" && \
+   grep -Fq 'Adjust requirements, presets, banner, baseline, policy, and guardrails as needed.' "$build_log" && \
+   grep -Fq 'Rebuild after changes: make package' "$build_log" && \
+   grep -Fq 'See README.md#configuration-map and README.md#customize-skills' "$build_log" && \
+   grep -Fq '  4. Share it with developers:' "$build_log" && \
+   grep -Fq '       make release-package' "$build_log" && \
+   grep -Fq '         claude --plugin-url "<direct HTTPS URL to to-appsec-0.1.0.zip>"' "$build_log" && \
+   grep -Fq "Publish the plugin through your organization's Marketplace." "$build_log" && \
+   grep -Fq 'See README.md#rollout-options for CI releases and Marketplace setup.' "$build_log" && \
+   ! grep -Fq 'Further steps (optional):' "$build_log" && \
+   ! grep -Fq 'enabled: help, check-permissions' "$build_log"; then
   pass "init: skipped build remains a next step"
 else fail "init: skipped build remains a next step" "rc=$rc"; fi
 self_contained_tgt="$tgt"

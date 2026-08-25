@@ -130,7 +130,7 @@ make local-marketplace                # build + generate a local marketplace cat
 make install-local                    # register that catalog and install the plugin at local scope
 make reinit                           # reapply template main with existing settings, then package
 REINIT_BUILD=0 make reinit            # reapply template without packaging afterwards
-ARCHIVE=1 PACKAGE_VERSION=1.2.0 make package-archive # produce .tgz + .sha256
+make release-package                    # produce distributable archives + checksums
 ```
 
 Reinitialization refreshes infrastructure directly. For each differing

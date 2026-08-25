@@ -49,7 +49,7 @@ package:
         export PACKAGE_VERSION="${CI_COMMIT_TAG#v}"
         export VERSION=
       fi
-      make package-archive
+      make release-package
   artifacts:
     name: "${INTERNAL_NAME}-${CI_COMMIT_REF_SLUG}"
     paths:

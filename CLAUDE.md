@@ -39,7 +39,7 @@ make rebuild       # clean (removes upstream/ build/ dist/) then package
 make clean         # remove generated dirs, coverage output and local tool caches
 make ci-github     # install .github/workflows/package.yml
 make ci-gitlab     # install .gitlab-ci.yml
-ARCHIVE=1 PACKAGE_VERSION=1.2.0 make package-archive # produce dist/*.tgz + .sha256
+make release-package # produce distributable archives + checksums
 
 # Test the built plugin in Claude Code:
 claude --plugin-dir build/<INTERNAL_NAME>

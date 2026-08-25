@@ -1039,20 +1039,17 @@ fi
 
 PACKAGING_ROOT="$(pwd)"
 
-print_optional_steps() {
-  echo ""
-  echo "Further steps (optional):"
-  echo "  - Review organization configuration:"
-  echo "       presets, requirements, policy, banner/baseline, context, security coach,"
-  echo "       actors, abuse cases, hooks, and MCP; see README.md#configuration-map"
-  echo "  - Review and customize the default skill selection:"
-  echo "       enabled: help, check-permissions, create/update/review/show/ask-threat-model,"
-  echo "                threat-model-health, status, fix-run-issues, clean-run-state"
-  echo "       disabled: audit-security-requirements, verify-requirements"
-  echo "       package-policy.yaml includes/removes skills; org-profile.yaml skill_toggles"
-  echo "       enable or disable packaged skills; see README.md#customize-skills"
-  echo "  - Configure CI and tag-based releases: make ci-gitlab or make ci-github"
-  echo "  - Optionally distribute the tested plugin through an internal Claude Code Marketplace"
+print_sharing_step() {
+  local step="$1"
+  echo "  ${step}. Share it with developers:"
+  echo "     Release URL:"
+  echo "       make release-package"
+  echo "       Upload dist/${PLUGIN_NAME}-${PACKAGE_VERSION}.zip to an internal HTTPS location."
+  echo "       Developers load it with:"
+  echo "         claude --plugin-url \"<direct HTTPS URL to ${PLUGIN_NAME}-${PACKAGE_VERSION}.zip>\""
+  echo "     Internal Marketplace:"
+  echo "       Publish the plugin through your organization's Marketplace."
+  echo "     See README.md#rollout-options for CI releases and Marketplace setup."
 }
 
 echo ""
@@ -1078,28 +1075,25 @@ if [ "${REINIT_MODE}" = true ]; then
   echo "  ${REINIT_STEP}. Load the plugin from any project you want to analyze:"
   echo "       claude --plugin-dir ${PACKAGING_ROOT}/build/${PLUGIN_NAME}"
   echo "  $((REINIT_STEP + 1)). Review and commit the reinitialization changes"
-  print_optional_steps
+  print_sharing_step "$((REINIT_STEP + 2))"
   exit 0
 fi
 echo "  1. cd ${PACKAGING_ROOT}"
-if [ "${DEMO_CONTENT}" = true ]; then
-echo "  2. Edit org-profile/requirements.yaml — replace demo entries with your real requirements"
-echo "     When ready to host it centrally, set requirements_yaml_url to an https:// URL in org-profile/org-profile.yaml"
-else
-echo "  2. Edit org-profile/org-profile.yaml — set requirements_yaml_url to your requirements catalog"
-fi
-echo "  3. Edit org-profile/context/organization.md — describe your org for analyses"
-LOAD_STEP=4
 if [ "${BUILD_STATE}" = failed ]; then
-echo "  4. Retry the plugin build: make package"
-LOAD_STEP=5
+echo "  2. Fix the reported build error, then build and test the plugin:"
+echo "       make package"
 elif [ "${BUILD_STATE}" = skipped ]; then
-echo "  4. Build the plugin: make package"
-LOAD_STEP=5
+echo "  2. Build and test the plugin:"
+echo "       make package"
 else
-echo "     The initial build is complete; run make package again only after changing configuration."
+echo "  2. Test the local build:"
 fi
-echo "  ${LOAD_STEP}. Load the plugin from any project you want to analyze:"
 echo "       cd /path/to/your/project"
 echo "       claude --plugin-dir ${PACKAGING_ROOT}/build/${PLUGIN_NAME}"
-print_optional_steps
+echo "  3. Customize it for your organization:"
+echo "       - Replace org-profile/context/organization.md with your organization context."
+echo "       - Add organization skills or enable, disable, and remove packaged skills."
+echo "       - Adjust requirements, presets, banner, baseline, policy, and guardrails as needed."
+echo "       - Rebuild after changes: make package"
+echo "     See README.md#configuration-map and README.md#customize-skills"
+print_sharing_step 4
