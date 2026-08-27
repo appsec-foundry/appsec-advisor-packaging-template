@@ -886,9 +886,13 @@ if [ "$rc" = 0 ] && \
    grep -Fq '  3. Build and test the customized plugin:' "$build_log" && \
    grep -Fq '       make package' "$build_log" && \
    grep -Fq '       claude --plugin-dir' "$build_log" && \
-   grep -Fq 'Replace org-profile/context/organization.md with your organization context.' "$build_log" && \
-   grep -Fq 'Add organization skills or enable, disable, and remove packaged skills.' "$build_log" && \
-   grep -Fq 'Adjust requirements, presets, banner, baseline, policy, and guardrails as needed.' "$build_log" && \
+   grep -Fq '       - org-profile/org-profile.yaml' "$build_log" && \
+   grep -Fq '       - org-profile/context/organization.md' "$build_log" && \
+   grep -Fq '       - org-profile/package-policy.yaml' "$build_log" && \
+   grep -Fq '       - org-profile/actors/custom-actors.yaml' "$build_log" && \
+   grep -Fq '       - org-profile/hooks/*.py' "$build_log" && \
+   grep -Fq '       - org-skills/<skill-id>/SKILL.md' "$build_log" && \
+   grep -Fq '       - Makefile' "$build_log" && \
    grep -Fq 'See docs/MAINTAINER-RUNBOOK.md#organization-configuration' "$build_log" && \
    grep -Fq '  4. Share it with developers:' "$build_log" && \
    grep -Fq '       make release-package' "$build_log" && \
