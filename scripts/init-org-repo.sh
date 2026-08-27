@@ -198,6 +198,13 @@ valid_upstream_ref() {
   git check-ref-format "refs/appsec-advisor/$1" >/dev/null 2>&1
 }
 
+valid_baseline_id() {
+  case "$1" in
+    ""|[!A-Za-z0-9]*|*[!A-Za-z0-9._+-]*) return 1 ;;
+  esac
+  [ "${#1}" -le 80 ]
+}
+
 is_commit_ref() {
   case "$1" in *[!0-9a-f]*) return 1 ;; esac
   [ "${#1}" -eq 40 ] || [ "${#1}" -eq 64 ]
@@ -1047,6 +1054,24 @@ if [ "${BASELINE_ENABLED}" = false ]; then
     "${PROFILE_CANDIDATE}" > "${PROFILE_EDITED}"
   mv "${PROFILE_EDITED}" "${PROFILE_CANDIDATE}"
 fi
+if [ "${BASELINE_ENABLED}" = true ] && [ -f "${TEMPLATE_BASE}/scripts/resolve-baseline-id.py" ]; then
+  # The pin in the template ages between releases, so read the id the published
+  # baseline declares right now. The template value stands when it cannot be
+  # read, and the remote id is validated before it reaches sed.
+  if RESOLVED_BASELINE_ID="$(python3 "${TEMPLATE_BASE}/scripts/resolve-baseline-id.py")" &&
+     valid_baseline_id "${RESOLVED_BASELINE_ID}"; then
+    PROFILE_EDITED="${CANDIDATE_DIR}/org-profile-baseline-id.yaml"
+    E_BASELINE_ID="$(sed_escape "${RESOLVED_BASELINE_ID}")"
+    sed "/^baseline:/,/^[^ ]/ s/^  id: .*$/  id: ${E_BASELINE_ID}/" \
+      "${PROFILE_CANDIDATE}" > "${PROFILE_EDITED}"
+    mv "${PROFILE_EDITED}" "${PROFILE_CANDIDATE}"
+    echo "==> Secure-coding baseline pinned to ${RESOLVED_BASELINE_ID}"
+  else
+    echo "WARNING: could not read the published baseline id; keeping the id this template pins." >&2
+    echo "         Run 'make baseline-check' in the new repository to compare it later." >&2
+  fi
+fi
+
 if [ "${STATUSLINE_ENABLED}" = false ]; then
   PROFILE_EDITED="${CANDIDATE_DIR}/org-profile-banner.yaml"
   sed '/^banner:/,/^[^ ]/ s/^  enabled: true$/  enabled: false/' \

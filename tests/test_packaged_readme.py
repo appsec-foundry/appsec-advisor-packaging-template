@@ -73,7 +73,7 @@ class PackagedReadmeTests(unittest.TestCase):
                 },
                 "baseline": {
                     "enabled": True,
-                    "id": "aisec-0.1.7",
+                    "id": "aisec-0.1.8",
                     "name": "AI Secure Coding Baseline",
                 },
                 "skill_toggles": {
@@ -125,7 +125,7 @@ class PackagedReadmeTests(unittest.TestCase):
         self.assertIn("Update it after relevant design or code changes.", rendered)
         self.assertIn("you should see its startup status", rendered)
         self.assertIn("It is not another scanner.", normalized)
-        self.assertIn("aisec-0.1.7", rendered)
+        self.assertIn("aisec-0.1.8", rendered)
         self.assertIn("| `/pruf-appsec:verify-requirements` | Disabled |", rendered)
         self.assertNotIn("Check code and changes against the security requirements", rendered)
         self.assertIn("| `/pruf-appsec:org-review` | Available |", rendered)

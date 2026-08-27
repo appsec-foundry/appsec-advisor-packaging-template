@@ -140,6 +140,16 @@ update using the exact commit reported by the check.
 
 `scripts/init-org-repo.sh` is a standalone generator (run via curl or locally) that scaffolds a *new* packaging repo: it prompts for org name/id/plugin name, then copies+`sed`-substitutes the placeholders into a fresh git repo. It is not part of the build. When editing template files, keep its substitution targets intact — it `sed`-replaces literal strings like `acme-appsec`, `Acme Corp`, `Acme AppSec Team`, `id: acme`, `profile_version: "2026.06.1"`, and specific `requirements_yaml_url`/`label` lines. The scaffolded repo's `README.md` is rendered from `README.example.md`, and `docs/MAINTAINER-RUNBOOK.md` from `docs/MAINTAINER-RUNBOOK.example.md` (copied + `sed`-substituted). Edit those source templates to change the generated repository documentation.
 
+When the baseline is kept, the initializer pins the id that the published
+baseline declares rather than the one in the template: it reads
+`baseline-id:` from
+`https://raw.githubusercontent.com/appsec-foundry/ai-secure-coding-baseline/main/secure-coding-baseline.md`
+through `scripts/resolve-baseline-id.py` and writes it into the generated
+`org-profile.yaml`. Without network access, or with an unreadable document, the
+template's pin stands and the initializer says so. Keep `org-profile.yaml`'s
+`baseline.id` current anyway — it is the fallback, and `make baseline-check`
+compares it against the published document.
+
 ## Agent guidance
 
 `AGENTS.md` contains the repository-wide operating instructions and the same

@@ -20,8 +20,12 @@ import yaml
 
 MAX_FETCH_BYTES = 1_048_576
 FETCH_TIMEOUT_SECONDS = 15
+# The id opens its own line; whatever sentence follows it — an em dash, a full
+# stop — is not part of the id, and an id never ends in punctuation.
 MARKER_PATTERN = re.compile(
-    r"(?m)^\s*`?baseline-id:\s*`?([A-Za-z0-9][A-Za-z0-9._+-]{0,79})`?\s*(?:—.*)?$"
+    r"(?m)^\s*`?baseline-id:\s*`?"
+    r"([A-Za-z0-9](?:[A-Za-z0-9._+-]{0,78}[A-Za-z0-9])?)`?"
+    r"(?:[ \t.,;:—-].*)?$"
 )
 LEGACY_BASELINE_URL = (
     "https://raw.githubusercontent.com/matthiasrohr/"

@@ -38,6 +38,7 @@ PACKAGED_README_TEST="$HERE/test_packaged_readme.py"
 SESSION_BANNER_PRUNE_TEST="$HERE/test_prune_packaged_session_banner.py"
 ARCHIVE_TEST="$HERE/test_archive_built_plugin.py"
 BASELINE_UPSTREAM_TEST="$HERE/test_baseline_upstream_check.py"
+BASELINE_RESOLVE_TEST="$HERE/test_resolve_baseline_id.py"
 PACKAGE_VERSION_TEST="$HERE/test_finalize_package_version.py"
 PACKAGED_ORIGINS_TEST="$HERE/test_rewrite_packaged_origins.py"
 LATEST_RELEASE_TEST="$HERE/test_select_latest_release.py"
@@ -52,6 +53,7 @@ ORG_HOOK_COLLISION_TEST="$HERE/test_org_hook_collisions.py"
 /usr/bin/python3 -B "$SESSION_BANNER_PRUNE_TEST"
 /usr/bin/python3 -B "$ARCHIVE_TEST"
 /usr/bin/python3 -B "$BASELINE_UPSTREAM_TEST"
+/usr/bin/python3 -B "$BASELINE_RESOLVE_TEST"
 /usr/bin/python3 -B "$PACKAGE_VERSION_TEST"
 /usr/bin/python3 -B "$PACKAGED_ORIGINS_TEST"
 /usr/bin/python3 -B "$LATEST_RELEASE_TEST"
@@ -185,7 +187,7 @@ if [ "$rc" = 0 ] && [ -f "$d/dist/acme-appsec-0.1.0.tgz" ] && \
    tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/config.json | \
      grep -Fq 'https://raw.githubusercontent.com/appsec-foundry/ai-secure-coding-baseline/main/secure-coding-baseline.md' && \
    tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/config.json | \
-     grep -Fq '"id": "aisec-0.1.7"' && \
+     grep -Fq '"id": "aisec-0.1.8"' && \
    tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/config.json | \
      grep -Fq '"name": "AI Secure Coding Baseline"' && \
    tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/config.json | \
@@ -658,6 +660,47 @@ if grep -Fq 'glab release create "${CI_COMMIT_TAG}"' \
   pass "ci: tagged builds publish tested archives as platform releases"
 else fail "ci: tagged builds publish tested archives as platform releases" "release job incomplete"; fi
 
+# The initializer pins the id the published baseline declares, not the one the
+# template carries — and keeps the template's when the baseline cannot be read.
+d="$(newdir)"
+tgt="$d/out"
+baseline_log="$d/baseline-pin.log"
+printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\nn\n' "$tgt" | \
+  (cd "$ROOT" && env PYSTUB_BASELINE_ID=aisec-9.9.9 timeout 20 bash -x "$INIT") \
+  >"$baseline_log" 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && \
+   grep -Fqx '  id: aisec-9.9.9' "$tgt/org-profile/org-profile.yaml" && \
+   grep -Fq '==> Secure-coding baseline pinned to aisec-9.9.9' "$baseline_log"; then
+  pass "init: baseline id is pinned from the published baseline"
+else fail "init: baseline id is pinned from the published baseline" "rc=$rc"; fi
+
+d="$(newdir)"
+tgt="$d/out"
+baseline_log="$d/baseline-fallback.log"
+printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\nn\n' "$tgt" | \
+  (cd "$ROOT" && env PYSTUB_FAIL=baseline timeout 20 bash -x "$INIT") \
+  >"$baseline_log" 2>"$d/baseline-fallback.err"
+rc=$?
+cat "$d/baseline-fallback.err" >>"$COV"
+if [ "$rc" = 0 ] && \
+   grep -Fqx '  id: aisec-0.1.8' "$tgt/org-profile/org-profile.yaml" && \
+   grep -Fq 'keeping the id this template pins' "$d/baseline-fallback.err"; then
+  pass "init: unreadable baseline keeps the template pin"
+else fail "init: unreadable baseline keeps the template pin" "rc=$rc"; fi
+
+d="$(newdir)"
+tgt="$d/out"
+printf 'Test Org\n\n\n\n\n%s\nn\nn\n\n\nn\n' "$tgt" | \
+  (cd "$ROOT" && env PYSTUB_BASELINE_ID=aisec-9.9.9 timeout 20 bash -x "$INIT") \
+  >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && \
+   grep -Fqx '  enabled: false' "$tgt/org-profile/org-profile.yaml" && \
+   grep -Fqx '  id: aisec-0.1.8' "$tgt/org-profile/org-profile.yaml"; then
+  pass "init: a declined baseline is not resolved"
+else fail "init: a declined baseline is not resolved" "rc=$rc"; fi
+
 # demo=yes; leading empty answer exercises the "(required)" retry on org-name.
 d="$(newdir)"
 tgt="$d/out"
@@ -667,7 +710,7 @@ rc=$?
 if [ "$rc" = 0 ] && [ -f "$tgt/org-profile/requirements.yaml" ] && \
    [ -f "$tgt/org-skills/README.md" ] && \
    [ -f "$tgt/ci-requirements.lock" ] && \
-   grep -Fqx '  id: aisec-0.1.7' "$tgt/org-profile/org-profile.yaml" && \
+   grep -Fqx '  id: aisec-0.1.8' "$tgt/org-profile/org-profile.yaml" && \
    grep -Fqx '  name: AI Secure Coding Baseline' "$tgt/org-profile/org-profile.yaml" && \
    grep -Fqx '  url: https://raw.githubusercontent.com/appsec-foundry/ai-secure-coding-baseline/main/secure-coding-baseline.md' \
      "$tgt/org-profile/org-profile.yaml" && \

@@ -8,6 +8,8 @@ this same file and loop forever.
 Intercepts the upstream packaging/smoke scripts so no real upstream is needed.
   PYSTUB_FAIL=package   -> package_internal_plugin.py exits non-zero
   PYSTUB_FAIL=smoke     -> smoke_test_package.py exits non-zero
+  PYSTUB_FAIL=baseline  -> resolve-baseline-id.py exits non-zero
+  PYSTUB_BASELINE_ID=…  -> id that resolve-baseline-id.py prints
 Anything else is delegated to the real python3 so normal use is unaffected.
 """
 
@@ -27,6 +29,13 @@ if args[:1] == ["-c"]:
     if os.environ.get("PYSTUB_MISSING_BUILD_MODULES") and "importlib.util" in source:
         print(os.environ["PYSTUB_MISSING_BUILD_MODULES"])
         sys.exit(0)
+
+if script.endswith("resolve-baseline-id.py"):
+    if fail == "baseline":
+        sys.stderr.write("ERROR: cannot fetch the baseline source\n")
+        sys.exit(2)
+    print(os.environ.get("PYSTUB_BASELINE_ID", "aisec-0.1.8"))
+    sys.exit(0)
 
 if script.endswith("package_internal_plugin.py"):
     # Create the expected build output dir so a following smoke step has a target.

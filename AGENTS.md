@@ -151,6 +151,13 @@ release tag) to update deliberately. Use the exact commit reported by the check,
 not the moving branch name. A successful reinitialization persists that exact
 revision again.
 
+When the baseline is kept, the initializer pins the id the published baseline
+declares — read from the appsec-foundry baseline through
+`scripts/resolve-baseline-id.py` — instead of the id the template carries. The
+template's pin is the fallback when the document cannot be read, so keep it
+current; `make baseline-check` compares the configured id against the published
+one.
+
 Reinitialization refreshes infrastructure directly. For each differing
 user-editable template file, it prompts to overwrite, keep, overwrite all
 remaining, or keep all remaining. The default is keep; overwritten files are

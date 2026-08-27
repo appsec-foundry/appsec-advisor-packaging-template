@@ -74,6 +74,27 @@ class BaselineUpstreamCheckTests(unittest.TestCase):
             checker.check(self.profile, self.core, document_path=self.document), 0
         )
 
+    def test_marker_is_read_whatever_sentence_follows_it(self) -> None:
+        for line in (
+            "`baseline-id: aisec-0.1.7`. When asked whether a baseline is loaded, answer.",
+            "`baseline-id: aisec-0.1.7` — when asked whether a baseline is loaded",
+            "baseline-id: aisec-0.1.7",
+            "  `baseline-id: aisec-0.1.7`",
+        ):
+            with self.subTest(line=line):
+                self.document.write_text(f"# Baseline\n\n{line}\n", encoding="utf-8")
+                self.assertEqual(
+                    checker.check(self.profile, self.core, document_path=self.document), 0
+                )
+
+    def test_prose_mention_is_not_a_marker(self) -> None:
+        self.document.write_text(
+            "The line baseline-id: aisec-0.1.7 is the marker this document carries.\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(checker.BaselineCheckError, "exactly one"):
+            checker.check(self.profile, self.core, document_path=self.document)
+
     def test_ambiguous_marker_is_an_error(self) -> None:
         self.document.write_text(
             "baseline-id: aisec-0.1.7\nbaseline-id: aisec-0.1.8\n",
