@@ -145,10 +145,10 @@ baseline declares rather than the one in the template: it reads
 `baseline-id:` from
 `https://raw.githubusercontent.com/appsec-foundry/ai-secure-coding-baseline/main/secure-coding-baseline.md`
 through `scripts/resolve-baseline-id.py` and writes it into the generated
-`org-profile.yaml`. Without network access, or with an unreadable document, the
-template's pin stands and the initializer says so. Keep `org-profile.yaml`'s
-`baseline.id` current anyway — it is the fallback, and `make baseline-check`
-compares it against the published document.
+`org-profile.yaml`. That happens before the target directory is touched, and an
+unreadable document ends the run with exit 2 — no repository is created on a
+stale id. Declining the baseline skips the lookup. `make baseline-check`
+compares the configured id against the published document later.
 
 ## Agent guidance
 

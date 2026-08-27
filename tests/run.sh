@@ -671,23 +671,21 @@ printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\nn\n' "$tgt" | \
 rc=$?
 if [ "$rc" = 0 ] && \
    grep -Fqx '  id: aisec-9.9.9' "$tgt/org-profile/org-profile.yaml" && \
-   grep -Fq '==> Secure-coding baseline pinned to aisec-9.9.9' "$baseline_log"; then
+   grep -Fq '==> Published secure-coding baseline: aisec-9.9.9 (pinned)' "$baseline_log"; then
   pass "init: baseline id is pinned from the published baseline"
 else fail "init: baseline id is pinned from the published baseline" "rc=$rc"; fi
 
 d="$(newdir)"
 tgt="$d/out"
-baseline_log="$d/baseline-fallback.log"
 printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\nn\n' "$tgt" | \
   (cd "$ROOT" && env PYSTUB_FAIL=baseline timeout 20 bash -x "$INIT") \
-  >"$baseline_log" 2>"$d/baseline-fallback.err"
+  >/dev/null 2>"$d/baseline-fail.err"
 rc=$?
-cat "$d/baseline-fallback.err" >>"$COV"
-if [ "$rc" = 0 ] && \
-   grep -Fqx '  id: aisec-0.1.8' "$tgt/org-profile/org-profile.yaml" && \
-   grep -Fq 'keeping the id this template pins' "$d/baseline-fallback.err"; then
-  pass "init: unreadable baseline keeps the template pin"
-else fail "init: unreadable baseline keeps the template pin" "rc=$rc"; fi
+cat "$d/baseline-fail.err" >>"$COV"
+if [ "$rc" = 2 ] && [ ! -e "$tgt" ] && \
+   grep -Fq 'could not read the published secure-coding baseline id' "$d/baseline-fail.err"; then
+  pass "init: unreadable baseline stops before the repository is created"
+else fail "init: unreadable baseline stops before the repository is created" "rc=$rc"; fi
 
 d="$(newdir)"
 tgt="$d/out"

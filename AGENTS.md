@@ -153,10 +153,11 @@ revision again.
 
 When the baseline is kept, the initializer pins the id the published baseline
 declares — read from the appsec-foundry baseline through
-`scripts/resolve-baseline-id.py` — instead of the id the template carries. The
-template's pin is the fallback when the document cannot be read, so keep it
-current; `make baseline-check` compares the configured id against the published
-one.
+`scripts/resolve-baseline-id.py` — instead of the id the template carries. It
+resolves before writing anything and stops with exit 2 when the document cannot
+be read, so no repository starts on a stale id; declining the baseline skips the
+lookup. `make baseline-check` compares the configured id against the published
+one afterwards.
 
 Reinitialization refreshes infrastructure directly. For each differing
 user-editable template file, it prompts to overwrite, keep, overwrite all

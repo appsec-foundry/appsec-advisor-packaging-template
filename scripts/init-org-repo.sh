@@ -228,6 +228,22 @@ resolve_latest_upstream_release() {
   printf '%s\n' "${latest}"
 }
 
+resolve_published_baseline_id() {
+  local script="${TEMPLATE_BASE}/scripts/resolve-baseline-id.py" resolved
+  if [ ! -f "${script}" ]; then
+    echo "ERROR: the packaging template is missing scripts/resolve-baseline-id.py." >&2
+    return 2
+  fi
+  if ! resolved="$(python3 "${script}")" || ! valid_baseline_id "${resolved}"; then
+    echo "ERROR: could not read the published secure-coding baseline id." >&2
+    echo "Without it the repository would start on the id this template carries, which ages" >&2
+    echo "between releases. Restore access to the baseline source and retry, or decline the" >&2
+    echo "baseline when asked for it." >&2
+    return 2
+  fi
+  printf '%s\n' "${resolved}"
+}
+
 select_upstream_ref() {
   local configured reply
   configured="${APPSEC_ADVISOR_REF:-}"
@@ -749,6 +765,15 @@ if [ "${REINIT_MODE}" != true ] && [ "${UPSTREAM_REF}" = latest ]; then
   echo "==> Latest stable appsec-advisor release: ${UPSTREAM_REF} (pinned)"
 fi
 
+# The id the published baseline declares, resolved before the target directory
+# is touched: a repository that keeps the baseline must not start on the id this
+# template happens to carry.
+RESOLVED_BASELINE_ID=""
+if [ "${BASELINE_ENABLED}" = true ]; then
+  RESOLVED_BASELINE_ID="$(resolve_published_baseline_id)" || exit 2
+  echo "==> Published secure-coding baseline: ${RESOLVED_BASELINE_ID} (pinned)"
+fi
+
 # ── Create repo ───────────────────────────────────────────────────────────────
 
 REINIT=false
@@ -1054,22 +1079,12 @@ if [ "${BASELINE_ENABLED}" = false ]; then
     "${PROFILE_CANDIDATE}" > "${PROFILE_EDITED}"
   mv "${PROFILE_EDITED}" "${PROFILE_CANDIDATE}"
 fi
-if [ "${BASELINE_ENABLED}" = true ] && [ -f "${TEMPLATE_BASE}/scripts/resolve-baseline-id.py" ]; then
-  # The pin in the template ages between releases, so read the id the published
-  # baseline declares right now. The template value stands when it cannot be
-  # read, and the remote id is validated before it reaches sed.
-  if RESOLVED_BASELINE_ID="$(python3 "${TEMPLATE_BASE}/scripts/resolve-baseline-id.py")" &&
-     valid_baseline_id "${RESOLVED_BASELINE_ID}"; then
-    PROFILE_EDITED="${CANDIDATE_DIR}/org-profile-baseline-id.yaml"
-    E_BASELINE_ID="$(sed_escape "${RESOLVED_BASELINE_ID}")"
-    sed "/^baseline:/,/^[^ ]/ s/^  id: .*$/  id: ${E_BASELINE_ID}/" \
-      "${PROFILE_CANDIDATE}" > "${PROFILE_EDITED}"
-    mv "${PROFILE_EDITED}" "${PROFILE_CANDIDATE}"
-    echo "==> Secure-coding baseline pinned to ${RESOLVED_BASELINE_ID}"
-  else
-    echo "WARNING: could not read the published baseline id; keeping the id this template pins." >&2
-    echo "         Run 'make baseline-check' in the new repository to compare it later." >&2
-  fi
+if [ -n "${RESOLVED_BASELINE_ID}" ]; then
+  PROFILE_EDITED="${CANDIDATE_DIR}/org-profile-baseline-id.yaml"
+  E_BASELINE_ID="$(sed_escape "${RESOLVED_BASELINE_ID}")"
+  sed "/^baseline:/,/^[^ ]/ s/^  id: .*$/  id: ${E_BASELINE_ID}/" \
+    "${PROFILE_CANDIDATE}" > "${PROFILE_EDITED}"
+  mv "${PROFILE_EDITED}" "${PROFILE_CANDIDATE}"
 fi
 
 if [ "${STATUSLINE_ENABLED}" = false ]; then

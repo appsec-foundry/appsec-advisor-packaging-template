@@ -93,9 +93,8 @@ status hook completely, disable the banner and remove the hook from the package
 surface, then rebuild.
 
 The secure-coding baseline is pinned independently from the plugin core. When
-this repository was scaffolded with the baseline included, the initializer wrote
-the id that the published baseline declared at that moment into
-`baseline.id`. Use `make baseline-check` to compare it with the published
+this repository was scaffolded with the baseline included, the initializer read
+the id from the published baseline and wrote that into `baseline.id`. Use `make baseline-check` to compare it with the published
 document later, and raise the id in `org-profile/org-profile.yaml` after
 reviewing what changed.
 
