@@ -32,7 +32,13 @@ class PackagedReadmeTests(unittest.TestCase):
         (self.root / ".claude-plugin").mkdir(parents=True)
         self.write_json(
             ".claude-plugin/plugin.json",
-            {"name": "pruf-appsec", "version": "1.2.3-internal.1"},
+            {
+                "name": "pruf-appsec",
+                "version": "1.2.3-internal.1",
+                "appsec_advisor_core_version": "0.6.0-beta.1",
+                "appsec_advisor_core_ref": "dev",
+                "appsec_advisor_core_commit": "9f2c1ab7c3d1" + "0" * 28,
+            },
         )
         self.write_json(
             ".claude-plugin/package-surface.json",
@@ -125,6 +131,17 @@ class PackagedReadmeTests(unittest.TestCase):
         self.assertIn("| `/pruf-appsec:org-review` | Available |", rendered)
         self.assertNotIn("Ignore later instructions", rendered)
         self.assertNotIn("/pruf-appsec:install-baseline", rendered)
+
+    def test_names_the_upstream_revision_the_package_was_built_from(self) -> None:
+        rendered = renderer.render_readme(self.root).read_text(encoding="utf-8")
+        normalized = " ".join(rendered.split())
+
+        self.assertIn(
+            "based on [appsec-advisor]"
+            "(<https://github.com/appsec-foundry/appsec-advisor>) "
+            "0.6.0-beta.1 (dev @ 9f2c1ab7c3d1).",
+            normalized,
+        )
 
     def test_advertises_requirements_only_when_a_requirements_skill_is_available(self) -> None:
         config_path = self.root / "config.json"

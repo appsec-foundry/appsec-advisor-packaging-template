@@ -18,6 +18,8 @@ import yaml
 PLUGIN_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 SKILL_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 VERSION_PATTERN = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.+-]*$")
+CORE_REF_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/+-]{0,127}$")
+CORE_COMMIT_PATTERN = re.compile(r"^[0-9a-f]{7,64}$")
 INTERNAL_SKILLS = {"internal-threat-analysis-kernel"}
 PREFERRED_ORDER = (
     "help",
@@ -169,6 +171,35 @@ def _info_url(config: dict[str, Any]) -> str | None:
     return value
 
 
+def _core_build(manifest: dict) -> str:
+    """Name the upstream implementation this package was built from.
+
+    A branch build reuses the upstream version string across many commits, so
+    the recorded ref and commit are what identify the build exactly.
+    """
+    core_version = manifest.get("appsec_advisor_core_version")
+    if core_version is None:
+        return ""
+    if not isinstance(core_version, str) or not VERSION_PATTERN.fullmatch(core_version):
+        raise HelpRenderError("plugin.json contains an invalid upstream core version")
+
+    origin = []
+    for key, pattern, length in (
+        ("appsec_advisor_core_ref", CORE_REF_PATTERN, None),
+        ("appsec_advisor_core_commit", CORE_COMMIT_PATTERN, 12),
+    ):
+        value = manifest.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, str) or not pattern.fullmatch(value):
+            raise HelpRenderError(f"plugin.json contains an invalid {key}")
+        origin.append(value[:length] if length else value)
+
+    if origin:
+        return f"{core_version} ({' @ '.join(origin)})"
+    return core_version
+
+
 def render_help(plugin_root: Path) -> Path:
     plugin_root = plugin_root.resolve()
     metadata_root = plugin_root / ".claude-plugin"
@@ -210,11 +241,11 @@ def render_help(plugin_root: Path) -> Path:
     ordered.extend(sorted(public_skills - set(ordered)))
 
     command_width = max(len(f"/{plugin_name}:{name}") for name in ordered)
-    reference_lines = [
-        f"{plugin_name} {version}",
-        "",
-        "Available commands",
-    ]
+    reference_lines = [f"{plugin_name} {version}"]
+    core_build = _core_build(manifest)
+    if core_build:
+        reference_lines.append(f"appsec-advisor core {core_build}")
+    reference_lines.extend(["", "Available commands"])
     for name in ordered:
         command = f"/{plugin_name}:{name}"
         status = " [disabled]" if name in disabled else ""

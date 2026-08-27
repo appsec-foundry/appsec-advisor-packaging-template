@@ -169,6 +169,7 @@ assert_rc "package: invalid SOURCE -> error" 2 "$?"
 
 d="$(newdir)"
 mkfake "$d/src"
+mkdir -p "$d/src/.git"
 (cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" ARCHIVE=1 INTERNAL_NAME=acme-appsec \
   timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
 rc=$?
@@ -177,6 +178,10 @@ if [ "$rc" = 0 ] && [ -f "$d/dist/acme-appsec-0.1.0.tgz" ] && \
    [ -f "$d/dist/acme-appsec-0.1.0.zip.sha256" ] && \
    tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/.claude-plugin/plugin.json | \
      grep -Fq '"appsec_advisor_core_version": "0.6.0-beta.1"' && \
+   tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/.claude-plugin/plugin.json | \
+     grep -Fq '"appsec_advisor_core_commit": "abc1234"' && \
+   ! tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/.claude-plugin/plugin.json | \
+     grep -Fq 'appsec_advisor_core_ref' && \
    tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/config.json | \
      grep -Fq 'https://raw.githubusercontent.com/appsec-foundry/ai-secure-coding-baseline/main/secure-coding-baseline.md' && \
    tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/config.json | \
@@ -195,6 +200,23 @@ if [ "$rc" = 0 ] && [ -f "$d/dist/acme-appsec-0.1.0.tgz" ] && \
      grep -Fq '/acme-appsec:create-threat-model'; then
   pass "package: organization version is used in archive and generated help"
 else fail "package: organization version is used in archive and generated help" "rc=$rc"; fi
+
+d="$(newdir)"
+cp -r "$ROOT/scripts" "$d/scripts"
+mkfake "$d/upstream"
+mkdir -p "$d/upstream/.git"
+(cd "$d" && env APPSEC_ADVISOR_DEST="$d/upstream" APPSEC_ADVISOR_REF=dev \
+  GITSTUB_HEADS="dev" GITSTUB_IS_CHECKOUT=1 GITSTUB_HAS_ORIGIN=1 \
+  INTERNAL_NAME=acme-appsec timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
+rc=$?
+manifest="$d/build/acme-appsec/.claude-plugin/plugin.json"
+if [ "$rc" = 0 ] && [ "$(cat "$d/upstream.ref")" = dev ] && \
+   grep -Fq '"appsec_advisor_core_ref": "dev"' "$manifest" && \
+   grep -Fq '"appsec_advisor_core_commit": "abc1234"' "$manifest" && \
+   grep -Fq 'appsec-advisor core 0.6.0-beta.1 (dev @ abc1234)' \
+     "$d/build/acme-appsec/skills/help/SKILL.md"; then
+  pass "package: branch build records the upstream ref and commit"
+else fail "package: branch build records the upstream ref and commit" "rc=$rc"; fi
 
 d="$(newdir)"
 mkfake "$d/src"

@@ -36,7 +36,13 @@ class PackagedHelpTests(unittest.TestCase):
         (self.root / ".claude-plugin").mkdir(parents=True)
         self.write_json(
             ".claude-plugin/plugin.json",
-            {"name": "pruf-appsec", "version": "0.6.0-beta.2+pruf.7"},
+            {
+                "name": "pruf-appsec",
+                "version": "0.6.0-beta.2+pruf.7",
+                "appsec_advisor_core_version": "0.6.0-beta.1",
+                "appsec_advisor_core_ref": "dev",
+                "appsec_advisor_core_commit": "9f2c1ab7c3d1" + "0" * 28,
+            },
         )
         self.write_json(
             ".claude-plugin/package-surface.json",
@@ -98,6 +104,7 @@ class PackagedHelpTests(unittest.TestCase):
         rendered = destination.read_text(encoding="utf-8")
 
         self.assertIn("pruf-appsec 0.6.0-beta.2+pruf.7", rendered)
+        self.assertIn("appsec-advisor core 0.6.0-beta.1 (dev @ 9f2c1ab7c3d1)", rendered)
         self.assertIn("/pruf-appsec:create-threat-model", rendered)
         self.assertIn("/pruf-appsec:org-review", rendered)
         self.assertIn("/pruf-appsec:verify-requirements", rendered)
@@ -110,6 +117,21 @@ class PackagedHelpTests(unittest.TestCase):
         self.assertNotIn("internal-threat-analysis-kernel", rendered)
         self.assertNotIn("`org`", rendered)
         self.assertNotIn("<here>", rendered)
+
+    def test_core_build_is_optional_and_validated(self) -> None:
+        manifest_path = self.root / ".claude-plugin" / "plugin.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        for key in ("appsec_advisor_core_ref", "appsec_advisor_core_commit"):
+            manifest.pop(key)
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        rendered = help_renderer.render_help(self.root).read_text(encoding="utf-8")
+        self.assertIn("appsec-advisor core 0.6.0-beta.1\n", rendered)
+
+        manifest["appsec_advisor_core_commit"] = "not a commit ```"
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        with self.assertRaisesRegex(help_renderer.HelpRenderError, "core_commit"):
+            help_renderer.render_help(self.root)
 
     def test_render_is_deterministic(self) -> None:
         first = help_renderer.render_help(self.root).read_bytes()

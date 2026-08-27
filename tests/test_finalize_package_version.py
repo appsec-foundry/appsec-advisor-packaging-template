@@ -109,9 +109,53 @@ def test_missing_manifest_has_contextual_error() -> None:
             raise AssertionError("missing manifest was accepted")
 
 
+def test_branch_build_records_ref_and_commit() -> None:
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        plugin_tree(root)
+        MODULE.finalize(root, "1.2.0", "0.6.0-beta.1", "dev", "9f2c1ab" + "0" * 33)
+
+        manifest = json.loads((root / ".claude-plugin" / "plugin.json").read_text())
+        assert manifest["appsec_advisor_core_ref"] == "dev"
+        assert manifest["appsec_advisor_core_commit"] == "9f2c1ab" + "0" * 33
+
+
+def test_missing_revision_leaves_no_placeholder_keys() -> None:
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        plugin_tree(root)
+        MODULE.finalize(root, "1.2.0", "0.6.0-beta.1", "", "")
+
+        manifest = json.loads((root / ".claude-plugin" / "plugin.json").read_text())
+        assert "appsec_advisor_core_ref" not in manifest
+        assert "appsec_advisor_core_commit" not in manifest
+
+
+def test_unusable_revision_fails_before_file_changes() -> None:
+    for ref, commit in (("dev branch", ""), ("", "not-a-commit"), ("", "abc")):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            plugin_tree(root)
+            validator_before = (root / "scripts" / "validate_org_profile.py").read_text()
+
+            try:
+                MODULE.finalize(root, "1.2.0", "0.6.0-beta.1", ref, commit)
+            except MODULE.FinalizeError:
+                pass
+            else:
+                raise AssertionError(f"unusable revision was accepted: {ref!r} {commit!r}")
+
+            manifest = json.loads((root / ".claude-plugin" / "plugin.json").read_text())
+            assert manifest["version"] == "0.6.0-beta.1"
+            assert (root / "scripts" / "validate_org_profile.py").read_text() == validator_before
+
+
 if __name__ == "__main__":
     test_visible_and_core_versions_are_separate()
     test_unknown_upstream_validator_fails_before_manifest_change()
     test_core_version_mismatch_fails_before_file_changes()
     test_missing_manifest_has_contextual_error()
+    test_branch_build_records_ref_and_commit()
+    test_missing_revision_leaves_no_placeholder_keys()
+    test_unusable_revision_fails_before_file_changes()
     print("finalize-package-version tests: OK")

@@ -70,6 +70,21 @@ one-off compatibility override. The final manifest stores the implementation
 separately as `appsec_advisor_core_version`, so `compatibility.core` continues
 to validate the upstream core.
 
+Next to it the manifest records which upstream revision produced the package:
+`appsec_advisor_core_ref` (the tag or branch) and `appsec_advisor_core_commit`
+(the exact commit). A branch build such as `dev` shares its version string with
+every commit between two upstream bumps, so the commit is what identifies it.
+Both are omitted when the source is not a Git checkout. The same information is
+printed in packaged help and the packaged README:
+
+```
+acme-appsec 1.2.0
+appsec-advisor core 0.6.0-beta.1 (dev @ 9f2c1ab7c3d1)
+```
+
+To read it from an installed plugin:
+`cat "$CLAUDE_PLUGIN_ROOT/.claude-plugin/plugin.json"`.
+
 ### Tracking upstream: release vs branch
 
 `APPSEC_ADVISOR_REF` is the single knob for "what do I build from". It accepts a `v*` tag, the literal `latest`, **or any branch name** — `fetch-upstream.sh` checks tags and heads, and a branch ref is re-fetched to its current tip on every run (a `--depth 1` detached checkout = effectively a pull).

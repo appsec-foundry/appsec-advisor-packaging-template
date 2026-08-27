@@ -5,6 +5,14 @@ URL="${APPSEC_ADVISOR_URL:-https://github.com/appsec-foundry/appsec-advisor.git}
 REF="${APPSEC_ADVISOR_REF:-latest}"
 DEST="${APPSEC_ADVISOR_DEST:-upstream/appsec-advisor}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# The checkout is detached, so the ref name it came from is not recoverable
+# from it afterwards. Keep it beside the checkout, not inside it, so the
+# packager never copies it into the built plugin.
+REF_STATE="${DEST%/}.ref"
+
+_record_ref() {
+  printf '%s\n' "$1" >"${REF_STATE}"
+}
 
 case "${URL}" in
   *"github.com/appsec-foundry?tab=repositories"*)
@@ -43,6 +51,7 @@ _use_trunk() {
   echo "==> Fetching trunk (default branch) from ${URL}"
   git -C "${DEST}" fetch --depth 1 origin HEAD
   git -C "${DEST}" checkout --detach FETCH_HEAD
+  _record_ref "HEAD"
   echo "==> Upstream ready at ${DEST} (trunk): $(git -C "${DEST}" rev-parse --short HEAD)"
   exit 0
 }
@@ -103,4 +112,5 @@ else
   git -C "${DEST}" checkout --detach FETCH_HEAD
 fi
 
+_record_ref "${RESOLVED_REF}"
 echo "==> Upstream ready at ${DEST}: $(git -C "${DEST}" rev-parse --short HEAD)"

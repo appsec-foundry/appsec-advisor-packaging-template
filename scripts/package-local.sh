@@ -11,6 +11,7 @@ VERSION="${VERSION:-}"
 ARCHIVE="${ARCHIVE:-0}"
 DESCRIPTION="${DESCRIPTION:-Internal packaged build of appsec-advisor with Acme Corp defaults.}"
 ORG_SKILLS_DIR="${ORG_SKILLS_DIR:-org-skills}"
+FETCHED=0
 TEMP_SOURCE=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -125,6 +126,7 @@ PY
 if [ -z "${SOURCE}" ]; then
   scripts/fetch-upstream.sh
   SOURCE="${DEST}"
+  FETCHED=1
 fi
 
 if [ ! -f "${SOURCE}/scripts/package_internal_plugin.py" ]; then
@@ -144,7 +146,24 @@ if ! validate_version "${CORE_VERSION}"; then
   echo "ERROR: upstream plugin version is not valid SemVer: ${CORE_VERSION}" >&2
   exit 2
 fi
+# The upstream version string is shared by every commit between two version
+# bumps, so a branch build such as `dev` is only identified by its revision.
+# Read it before the org-skills overlay replaces SOURCE with a temporary copy.
+CORE_COMMIT=""
+CORE_REF=""
+if [ -e "${SOURCE}/.git" ]; then
+  CORE_COMMIT="$(git -C "${SOURCE}" rev-parse HEAD 2>/dev/null || true)"
+  if [ "${FETCHED}" = 1 ] && [ -f "${DEST%/}.ref" ]; then
+    CORE_REF="$(head -n 1 "${DEST%/}.ref")"
+  else
+    CORE_REF="$(git -C "${SOURCE}" describe --tags --exact-match HEAD 2>/dev/null || true)"
+  fi
+fi
+
 echo "==> Package VERSION=${VERSION} (appsec-advisor core ${CORE_VERSION})"
+if [ -n "${CORE_COMMIT}" ]; then
+  echo "==> Upstream revision: ${CORE_REF:+${CORE_REF} @ }${CORE_COMMIT}"
+fi
 
 PYTHONDONTWRITEBYTECODE=1 python3 "${SCRIPT_DIR}/check-org-hook-collisions.py" \
   --source "${SOURCE}" \
@@ -186,7 +205,9 @@ python3 "${SCRIPT_DIR}/rewrite-packaged-origins.py" \
 python3 "${SCRIPT_DIR}/finalize-package-version.py" \
   --plugin-root "build/${INTERNAL_NAME}" \
   --package-version "${VERSION}" \
-  --core-version "${CORE_VERSION}"
+  --core-version "${CORE_VERSION}" \
+  --core-ref "${CORE_REF}" \
+  --core-commit "${CORE_COMMIT}"
 
 # Prove that runtime profile resolution still checks compatibility against the
 # upstream core after the visible manifest version has changed.
