@@ -30,6 +30,10 @@ APPSEC_ADVISOR_TEMPLATE_SOURCE ?=
 REINIT_BUILD ?= 1
 export APPSEC_ADVISOR_TEMPLATE_URL APPSEC_ADVISOR_TEMPLATE_REF APPSEC_ADVISOR_TEMPLATE_SOURCE REINIT_BUILD
 
+# Printed by the read-only check targets when they exit 1, so the Make error
+# that follows reads as the drift signal it is.
+DRIFT_NOTE := NOTE: the finding above is the result — these checks report drift by failing, so the 'Error 1' below is that signal and not a broken build.
+
 ifeq ($(APPSEC_ADVISOR_SOURCE),$(APPSEC_ADVISOR_DEST))
 FETCH_TARGET := fetch-upstream
 else
@@ -69,13 +73,28 @@ release-check: ## Release-boundary gate: check + validate + build a clean plugin
 	@$(MAKE) --no-print-directory package
 
 upstream-check: ## Read-only drift check for the appsec-advisor ref and releases
-	@APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" scripts/upstream-check.sh
+	@status=0; \
+	APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" scripts/upstream-check.sh || status=$$?; \
+	if [ "$$status" -eq 1 ]; then \
+		echo "$(DRIFT_NOTE)"; \
+	fi; \
+	exit $$status
 
 packaging-template-check: ## Read-only check for a newer packaging-template revision
-	APPSEC_ADVISOR_TEMPLATE_URL="$(APPSEC_ADVISOR_TEMPLATE_URL)" APPSEC_ADVISOR_TEMPLATE_REF="$(APPSEC_ADVISOR_TEMPLATE_REF)" scripts/packaging-template-check.sh
+	@status=0; \
+	APPSEC_ADVISOR_TEMPLATE_URL="$(APPSEC_ADVISOR_TEMPLATE_URL)" APPSEC_ADVISOR_TEMPLATE_REF="$(APPSEC_ADVISOR_TEMPLATE_REF)" scripts/packaging-template-check.sh || status=$$?; \
+	if [ "$$status" -eq 1 ]; then \
+		echo "$(DRIFT_NOTE)"; \
+	fi; \
+	exit $$status
 
 baseline-check: ## Read-only drift check for the configured secure-coding baseline
-	python3 scripts/baseline-upstream-check.py --profile org-profile/org-profile.yaml --core-config "$(APPSEC_ADVISOR_SOURCE)/config.json"
+	@status=0; \
+	python3 scripts/baseline-upstream-check.py --profile org-profile/org-profile.yaml --core-config "$(APPSEC_ADVISOR_SOURCE)/config.json" || status=$$?; \
+	if [ "$$status" -eq 1 ]; then \
+		echo "$(DRIFT_NOTE)"; \
+	fi; \
+	exit $$status
 
 check-updates: ## Check appsec-advisor and secure-coding baseline for updates
 	@status=0; \
@@ -87,7 +106,8 @@ check-updates: ## Check appsec-advisor and secure-coding baseline for updates
 		echo "ERROR: at least one upstream check could not complete" >&2; exit 2; \
 	fi; \
 	if [ "$$status" -eq 1 ] || [ "$$baseline_status" -eq 1 ]; then \
-		echo "DRIFT: at least one upstream source has changed"; exit 1; \
+		echo "DRIFT: at least one upstream source has changed"; \
+		echo "$(DRIFT_NOTE)"; exit 1; \
 	fi; \
 	echo "OK: appsec-advisor and baseline are current"
 
