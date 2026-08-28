@@ -186,17 +186,19 @@ The finished manifest records the pinned implementation separately as
 upstream core rather than the organization release number.
 
 It also records which upstream revision the package was built from:
-`appsec_advisor_core_ref` (tag or branch) and `appsec_advisor_core_commit` (the
-exact commit), both omitted when the source is not a Git checkout. A branch
-build such as `dev` reuses the same upstream version string across many
-commits, so the commit is the only exact identifier. Packaged help and the
-packaged README show the same line, and
+`appsec_advisor_core_ref` (tag or branch), `appsec_advisor_core_commit` (the
+exact commit) and `appsec_advisor_core_committed_at` (that commit's date), all
+omitted when the source is not a Git checkout. A branch build such as `dev`
+reuses the same upstream version string across many commits, so the commit is
+the only exact identifier and its date dates the packaged code. Deliberately no
+build wall-clock timestamp: the same commit must keep producing the same
+package. Packaged help and the packaged README show the same line, and
 `cat "$CLAUDE_PLUGIN_ROOT/.claude-plugin/plugin.json"` reads it from an
 installed plugin:
 
 ```
 acme-appsec 1.2.0
-appsec-advisor core 0.6.0-beta.1 (dev @ 9f2c1ab7c3d1)
+appsec-advisor core 0.6.0-beta.1 (dev @ 9f2c1ab7c3d1, 2026-08-23)
 ```
 
 ### Following upstream: release or branch

@@ -21,6 +21,11 @@ class FinalizeError(ValueError):
 # version bumps, so only the revision identifies it exactly.
 CORE_REF_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/+-]{0,127}$")
 CORE_COMMIT_PATTERN = re.compile(r"^[0-9a-f]{7,64}$")
+# `git show -s --format=%cI`: the commit date, which dates the code in the
+# package without making a rebuild from the same commit differ.
+CORE_DATE_PATTERN = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})$"
+)
 
 VERSION_READER = 'return json.loads(meta.read_text()).get("version", "0.0.0")'
 CORE_VERSION_READER = """data = json.loads(meta.read_text())
@@ -62,17 +67,23 @@ def finalize(
     core_version: str,
     core_ref: str = "",
     core_commit: str = "",
+    core_committed_at: str = "",
 ) -> None:
     manifest_path = plugin_root / ".claude-plugin" / "plugin.json"
     validator_path = plugin_root / "scripts" / "validate_org_profile.py"
 
     core_ref = core_ref.strip()
     core_commit = core_commit.strip()
+    core_committed_at = core_committed_at.strip()
     if core_ref and not CORE_REF_PATTERN.fullmatch(core_ref):
         raise FinalizeError(f"upstream core ref is not a plain Git ref name: {core_ref!r}")
     if core_commit and not CORE_COMMIT_PATTERN.fullmatch(core_commit):
         raise FinalizeError(
             f"upstream core commit is not a Git object id: {core_commit!r}"
+        )
+    if core_committed_at and not CORE_DATE_PATTERN.fullmatch(core_committed_at):
+        raise FinalizeError(
+            f"upstream core commit date is not an ISO-8601 timestamp: {core_committed_at!r}"
         )
 
     manifest = _read_json(manifest_path)
@@ -101,6 +112,7 @@ def finalize(
     for key, value in (
         ("appsec_advisor_core_ref", core_ref),
         ("appsec_advisor_core_commit", core_commit),
+        ("appsec_advisor_core_committed_at", core_committed_at),
     ):
         if value:
             manifest[key] = value
@@ -132,6 +144,11 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="exact upstream commit the package was built from (optional)",
     )
+    parser.add_argument(
+        "--core-committed-at",
+        default="",
+        help="commit date of that upstream commit, ISO-8601 (optional)",
+    )
     return parser.parse_args()
 
 
@@ -144,6 +161,7 @@ def main() -> int:
             args.core_version,
             args.core_ref,
             args.core_commit,
+            args.core_committed_at,
         )
     except FinalizeError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

@@ -22,6 +22,9 @@ SURFACE_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 VERSION_PATTERN = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.+-]*$")
 CORE_REF_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/+-]{0,127}$")
 CORE_COMMIT_PATTERN = re.compile(r"^[0-9a-f]{7,64}$")
+CORE_DATE_PATTERN = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})$"
+)
 INTERNAL_SKILLS = {"internal-threat-analysis-kernel"}
 PREFERRED_ORDER = (
     "help",
@@ -196,7 +199,7 @@ def _core_build(manifest: dict) -> str:
     """Name the upstream implementation this package was built from.
 
     A branch build reuses the upstream version string across many commits, so
-    the recorded ref and commit are what identify the build exactly.
+    the recorded ref, commit and commit date are what identify the build.
     """
     core_version = manifest.get("appsec_advisor_core_version")
     if core_version is None:
@@ -204,21 +207,22 @@ def _core_build(manifest: dict) -> str:
     if not isinstance(core_version, str) or not VERSION_PATTERN.fullmatch(core_version):
         raise ReadmeRenderError("plugin.json contains an invalid upstream core version")
 
-    origin = []
-    for key, pattern, length in (
-        ("appsec_advisor_core_ref", CORE_REF_PATTERN, None),
-        ("appsec_advisor_core_commit", CORE_COMMIT_PATTERN, 12),
-    ):
+    def field(key, pattern) -> str:
         value = manifest.get(key)
         if value is None:
-            continue
+            return ""
         if not isinstance(value, str) or not pattern.fullmatch(value):
             raise ReadmeRenderError(f"plugin.json contains an invalid {key}")
-        origin.append(value[:length] if length else value)
+        return value
 
-    if origin:
-        return f"{core_version} ({' @ '.join(origin)})"
-    return core_version
+    ref = field("appsec_advisor_core_ref", CORE_REF_PATTERN)
+    commit = field("appsec_advisor_core_commit", CORE_COMMIT_PATTERN)[:12]
+    committed_at = field("appsec_advisor_core_committed_at", CORE_DATE_PATTERN)[:10]
+
+    origin = " @ ".join(part for part in (ref, commit) if part)
+    if committed_at:
+        origin = f"{origin}, {committed_at}" if origin else committed_at
+    return f"{core_version} ({origin})" if origin else core_version
 
 
 def render_readme(plugin_root: Path) -> Path:

@@ -71,15 +71,19 @@ separately as `appsec_advisor_core_version`, so `compatibility.core` continues
 to validate the upstream core.
 
 Next to it the manifest records which upstream revision produced the package:
-`appsec_advisor_core_ref` (the tag or branch) and `appsec_advisor_core_commit`
-(the exact commit). A branch build such as `dev` shares its version string with
-every commit between two upstream bumps, so the commit is what identifies it.
-Both are omitted when the source is not a Git checkout. The same information is
-printed in packaged help and the packaged README:
+`appsec_advisor_core_ref` (the tag or branch), `appsec_advisor_core_commit` (the
+exact commit) and `appsec_advisor_core_committed_at` (that commit's date, from
+`git show -s --format=%cI`). A branch build such as `dev` shares its version
+string with every commit between two upstream bumps, so the commit is what
+identifies it and the date says how old the packaged code is. The commit date
+keeps rebuilds from the same commit byte-identical — no wall-clock build
+timestamp is recorded. All three are omitted when the source is not a Git
+checkout. The same information is printed in packaged help and the packaged
+README:
 
 ```
 acme-appsec 1.2.0
-appsec-advisor core 0.6.0-beta.1 (dev @ 9f2c1ab7c3d1)
+appsec-advisor core 0.6.0-beta.1 (dev @ 9f2c1ab7c3d1, 2026-08-23)
 ```
 
 To read it from an installed plugin:

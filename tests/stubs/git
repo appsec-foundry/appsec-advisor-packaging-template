@@ -9,6 +9,7 @@ upstream state without any network:
   GITSTUB_TAGS="v0.3.0 v0.4.0"   tags that exist upstream
   GITSTUB_HEADS="main dev"       branches that exist upstream
   GITSTUB_LOCAL_SHA=abc1234      `rev-parse HEAD` of the local checkout
+  GITSTUB_COMMIT_DATE=…          `show -s --format=%cI` of that commit
   GITSTUB_REMOTE_SHA=abc1234     sha for a bare `ls-remote <url> <ref>`
 """
 import os
@@ -51,6 +52,10 @@ if sub == "rev-parse":
         sys.exit(0)
     # plain `rev-parse HEAD` -> local checkout commit
     out(os.environ.get("GITSTUB_LOCAL_SHA", SHA))
+    sys.exit(0)
+
+if sub == "show" and "--format=%cI" in rest:
+    out(os.environ.get("GITSTUB_COMMIT_DATE", "2026-08-23T19:09:53+02:00"))
     sys.exit(0)
 
 if sub == "var" and rest == ["GIT_AUTHOR_IDENT"]:

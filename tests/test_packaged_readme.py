@@ -38,6 +38,7 @@ class PackagedReadmeTests(unittest.TestCase):
                 "appsec_advisor_core_version": "0.6.0-beta.1",
                 "appsec_advisor_core_ref": "dev",
                 "appsec_advisor_core_commit": "9f2c1ab7c3d1" + "0" * 28,
+                "appsec_advisor_core_committed_at": "2026-08-23T19:09:53+02:00",
             },
         )
         self.write_json(
@@ -139,7 +140,7 @@ class PackagedReadmeTests(unittest.TestCase):
         self.assertIn(
             "based on [appsec-advisor]"
             "(<https://github.com/appsec-foundry/appsec-advisor>) "
-            "0.6.0-beta.1 (dev @ 9f2c1ab7c3d1).",
+            "0.6.0-beta.1 (dev @ 9f2c1ab7c3d1, 2026-08-23).",
             normalized,
         )
 

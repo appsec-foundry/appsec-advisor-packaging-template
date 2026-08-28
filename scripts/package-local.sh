@@ -150,9 +150,11 @@ fi
 # bumps, so a branch build such as `dev` is only identified by its revision.
 # Read it before the org-skills overlay replaces SOURCE with a temporary copy.
 CORE_COMMIT=""
+CORE_COMMITTED_AT=""
 CORE_REF=""
 if [ -e "${SOURCE}/.git" ]; then
   CORE_COMMIT="$(git -C "${SOURCE}" rev-parse HEAD 2>/dev/null || true)"
+  CORE_COMMITTED_AT="$(git -C "${SOURCE}" show -s --format=%cI HEAD 2>/dev/null || true)"
   if [ "${FETCHED}" = 1 ] && [ -f "${DEST%/}.ref" ]; then
     CORE_REF="$(head -n 1 "${DEST%/}.ref")"
   else
@@ -162,7 +164,7 @@ fi
 
 echo "==> Package VERSION=${VERSION} (appsec-advisor core ${CORE_VERSION})"
 if [ -n "${CORE_COMMIT}" ]; then
-  echo "==> Upstream revision: ${CORE_REF:+${CORE_REF} @ }${CORE_COMMIT}"
+  echo "==> Upstream revision: ${CORE_REF:+${CORE_REF} @ }${CORE_COMMIT}${CORE_COMMITTED_AT:+ (${CORE_COMMITTED_AT})}"
 fi
 
 PYTHONDONTWRITEBYTECODE=1 python3 "${SCRIPT_DIR}/check-org-hook-collisions.py" \
@@ -207,7 +209,8 @@ python3 "${SCRIPT_DIR}/finalize-package-version.py" \
   --package-version "${VERSION}" \
   --core-version "${CORE_VERSION}" \
   --core-ref "${CORE_REF}" \
-  --core-commit "${CORE_COMMIT}"
+  --core-commit "${CORE_COMMIT}" \
+  --core-committed-at "${CORE_COMMITTED_AT}"
 
 # Prove that runtime profile resolution still checks compatibility against the
 # upstream core after the visible manifest version has changed.

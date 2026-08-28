@@ -113,11 +113,15 @@ def test_branch_build_records_ref_and_commit() -> None:
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
         plugin_tree(root)
-        MODULE.finalize(root, "1.2.0", "0.6.0-beta.1", "dev", "9f2c1ab" + "0" * 33)
+        MODULE.finalize(
+            root, "1.2.0", "0.6.0-beta.1", "dev", "9f2c1ab" + "0" * 33,
+            "2026-08-23T19:09:53+02:00",
+        )
 
         manifest = json.loads((root / ".claude-plugin" / "plugin.json").read_text())
         assert manifest["appsec_advisor_core_ref"] == "dev"
         assert manifest["appsec_advisor_core_commit"] == "9f2c1ab" + "0" * 33
+        assert manifest["appsec_advisor_core_committed_at"] == "2026-08-23T19:09:53+02:00"
 
 
 def test_missing_revision_leaves_no_placeholder_keys() -> None:
@@ -129,21 +133,30 @@ def test_missing_revision_leaves_no_placeholder_keys() -> None:
         manifest = json.loads((root / ".claude-plugin" / "plugin.json").read_text())
         assert "appsec_advisor_core_ref" not in manifest
         assert "appsec_advisor_core_commit" not in manifest
+        assert "appsec_advisor_core_committed_at" not in manifest
 
 
 def test_unusable_revision_fails_before_file_changes() -> None:
-    for ref, commit in (("dev branch", ""), ("", "not-a-commit"), ("", "abc")):
+    for ref, commit, committed_at in (
+        ("dev branch", "", ""),
+        ("", "not-a-commit", ""),
+        ("", "abc", ""),
+        ("", "", "2026-08-23"),
+        ("", "", "yesterday"),
+    ):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             plugin_tree(root)
             validator_before = (root / "scripts" / "validate_org_profile.py").read_text()
 
             try:
-                MODULE.finalize(root, "1.2.0", "0.6.0-beta.1", ref, commit)
+                MODULE.finalize(root, "1.2.0", "0.6.0-beta.1", ref, commit, committed_at)
             except MODULE.FinalizeError:
                 pass
             else:
-                raise AssertionError(f"unusable revision was accepted: {ref!r} {commit!r}")
+                raise AssertionError(
+                    f"unusable revision was accepted: {ref!r} {commit!r} {committed_at!r}"
+                )
 
             manifest = json.loads((root / ".claude-plugin" / "plugin.json").read_text())
             assert manifest["version"] == "0.6.0-beta.1"

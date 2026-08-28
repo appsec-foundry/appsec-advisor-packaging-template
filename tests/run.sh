@@ -182,6 +182,8 @@ if [ "$rc" = 0 ] && [ -f "$d/dist/acme-appsec-0.1.0.tgz" ] && \
      grep -Fq '"appsec_advisor_core_version": "0.6.0-beta.1"' && \
    tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/.claude-plugin/plugin.json | \
      grep -Fq '"appsec_advisor_core_commit": "abc1234"' && \
+   tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/.claude-plugin/plugin.json | \
+     grep -Fq '"appsec_advisor_core_committed_at": "2026-08-23T19:09:53+02:00"' && \
    ! tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/.claude-plugin/plugin.json | \
      grep -Fq 'appsec_advisor_core_ref' && \
    tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/config.json | \
@@ -215,7 +217,7 @@ manifest="$d/build/acme-appsec/.claude-plugin/plugin.json"
 if [ "$rc" = 0 ] && [ "$(cat "$d/upstream.ref")" = dev ] && \
    grep -Fq '"appsec_advisor_core_ref": "dev"' "$manifest" && \
    grep -Fq '"appsec_advisor_core_commit": "abc1234"' "$manifest" && \
-   grep -Fq 'appsec-advisor core 0.6.0-beta.1 (dev @ abc1234)' \
+   grep -Fq 'appsec-advisor core 0.6.0-beta.1 (dev @ abc1234, 2026-08-23)' \
      "$d/build/acme-appsec/skills/help/SKILL.md"; then
   pass "package: branch build records the upstream ref and commit"
 else fail "package: branch build records the upstream ref and commit" "rc=$rc"; fi

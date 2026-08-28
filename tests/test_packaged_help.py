@@ -42,6 +42,7 @@ class PackagedHelpTests(unittest.TestCase):
                 "appsec_advisor_core_version": "0.6.0-beta.1",
                 "appsec_advisor_core_ref": "dev",
                 "appsec_advisor_core_commit": "9f2c1ab7c3d1" + "0" * 28,
+                "appsec_advisor_core_committed_at": "2026-08-23T19:09:53+02:00",
             },
         )
         self.write_json(
@@ -104,7 +105,9 @@ class PackagedHelpTests(unittest.TestCase):
         rendered = destination.read_text(encoding="utf-8")
 
         self.assertIn("pruf-appsec 0.6.0-beta.2+pruf.7", rendered)
-        self.assertIn("appsec-advisor core 0.6.0-beta.1 (dev @ 9f2c1ab7c3d1)", rendered)
+        self.assertIn(
+            "appsec-advisor core 0.6.0-beta.1 (dev @ 9f2c1ab7c3d1, 2026-08-23)", rendered
+        )
         self.assertIn("/pruf-appsec:create-threat-model", rendered)
         self.assertIn("/pruf-appsec:org-review", rendered)
         self.assertIn("/pruf-appsec:verify-requirements", rendered)
@@ -121,7 +124,11 @@ class PackagedHelpTests(unittest.TestCase):
     def test_core_build_is_optional_and_validated(self) -> None:
         manifest_path = self.root / ".claude-plugin" / "plugin.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        for key in ("appsec_advisor_core_ref", "appsec_advisor_core_commit"):
+        for key in (
+            "appsec_advisor_core_ref",
+            "appsec_advisor_core_commit",
+            "appsec_advisor_core_committed_at",
+        ):
             manifest.pop(key)
         manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
