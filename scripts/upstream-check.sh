@@ -22,10 +22,13 @@ _latest_tag() {
 }
 
 _remote_sha() { # _remote_sha <ref> -> commit sha (peels annotated tags)
-  # ls-remote appends a `<sha> refs/tags/<t>^{}` line for annotated tags; the
-  # last line is the commit the local checkout resolves to. NR==1 would be the
-  # tag-object sha and produce false commit drift.
-  git ls-remote "${URL}" "$1" | awk 'END {print $1}'
+  # ls-remote appends a `<sha> refs/tags/<t>^{}` line for annotated tags, but a
+  # pattern argument is matched against the ref name, so that peel line is
+  # filtered out unless it is requested explicitly. Ask for both and take the
+  # last line: it is the commit the local checkout resolves to. Without the peel
+  # pattern the tag object's own sha comes back and every annotated tag looks
+  # like commit drift.
+  git ls-remote "${URL}" "$1" "$1^{}" | awk 'END {print $1}'
 }
 
 LATEST_TAG="$(_latest_tag)"

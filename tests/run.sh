@@ -156,6 +156,23 @@ fetch_tty "fetch: missing ref no tags -> trunk" 0 0 $'y' \
 fetch_run "fetch: missing ref no tags noninteractive" 2 0 \
   APPSEC_ADVISOR_REF=v9.9.9 GITSTUB_HAS_ORIGIN=1
 
+# A re-pointed release tag must reach the checkout. Git refuses to overwrite an
+# existing local tag without --force, so a fetch without it either fails with
+# "would clobber existing tag" or leaves the build on the commit the tag used to
+# name.
+d="$(newdir)"
+mkdir -p "$d/dest"
+fetch_log="$d/fetch.log"
+(cd "$d" && env APPSEC_ADVISOR_REF=v0.4.0 GITSTUB_TAGS="v0.4.0" \
+  GITSTUB_IS_CHECKOUT=1 GITSTUB_HAS_ORIGIN=1 GITSTUB_TAG_MOVED=1 \
+  APPSEC_ADVISOR_DEST="$d/dest" timeout 15 bash -x "$FETCH") \
+  </dev/null >/dev/null 2>"$fetch_log"
+rc=$?
+cat "$fetch_log" >>"$COV"
+if [ "$rc" = 0 ] && grep -Fq 'WARN: upstream tag v0.4.0 moved from old0000 to def5678' "$fetch_log"; then
+  pass "fetch: moved release tag is followed and reported"
+else fail "fetch: moved release tag is followed and reported" "rc=$rc"; fi
+
 # ── package-local.sh ─────────────────────────────────────────────────────────
 echo "--- package-local.sh ---"
 # SOURCE empty -> relative fetch (needs scripts/ in cwd) then build.
@@ -1422,6 +1439,15 @@ check_run "check: pinned behind latest, no checkout (CI)" 1 0 \
 check_run "check: latest no tags -> error" 2 0 APPSEC_ADVISOR_REF=latest
 check_run "check: pinned ref not found -> error" 2 0 \
   APPSEC_ADVISOR_REF=v9.9.9 GITSTUB_TAGS="v0.4.0"
+# An annotated tag resolves to a tag object, not to a commit. Comparing that
+# object's sha against the local checkout's commit reports drift on a release
+# that never moved.
+check_run "check: annotated tag is peeled, not reported as drift" 0 1 \
+  APPSEC_ADVISOR_REF=v0.4.0 GITSTUB_TAGS="v0.4.0" GITSTUB_IS_CHECKOUT=1 \
+  GITSTUB_REMOTE_SHA=def5678 GITSTUB_TAG_COMMIT_SHA=abc1234
+check_run "check: annotated tag that really moved is still drift" 1 1 \
+  APPSEC_ADVISOR_REF=v0.4.0 GITSTUB_TAGS="v0.4.0" GITSTUB_IS_CHECKOUT=1 \
+  GITSTUB_REMOTE_SHA=def5678 GITSTUB_TAG_COMMIT_SHA=999aaaa
 
 # ── packaging-template-check.sh ─────────────────────────────────────────────
 echo "--- packaging-template-check.sh ---"

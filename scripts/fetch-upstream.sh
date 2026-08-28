@@ -102,7 +102,17 @@ else
 fi
 
 if git -C "${DEST}" ls-remote --exit-code --tags origin "refs/tags/${RESOLVED_REF}" >/dev/null 2>&1; then
-  git -C "${DEST}" fetch --depth 1 origin "refs/tags/${RESOLVED_REF}:refs/tags/${RESOLVED_REF}"
+  # A release tag can be re-pointed upstream. Git refuses to overwrite a local
+  # tag without --force, so the checkout would keep building the commit the tag
+  # named when it was first fetched — either silently, or as a "would clobber
+  # existing tag" failure. Follow the tag and report the move; it changes what
+  # the same pin builds, and 'make upstream-check' reports it as drift.
+  PREVIOUS_TAG_COMMIT="$(git -C "${DEST}" rev-parse -q --verify "refs/tags/${RESOLVED_REF}" 2>/dev/null || true)"
+  git -C "${DEST}" fetch --depth 1 --force origin "refs/tags/${RESOLVED_REF}:refs/tags/${RESOLVED_REF}"
+  CURRENT_TAG_COMMIT="$(git -C "${DEST}" rev-parse -q --verify "refs/tags/${RESOLVED_REF}" 2>/dev/null || true)"
+  if [ -n "${PREVIOUS_TAG_COMMIT}" ] && [ "${PREVIOUS_TAG_COMMIT}" != "${CURRENT_TAG_COMMIT}" ]; then
+    echo "WARN: upstream tag ${RESOLVED_REF} moved from ${PREVIOUS_TAG_COMMIT} to ${CURRENT_TAG_COMMIT}" >&2
+  fi
   git -C "${DEST}" checkout --detach "refs/tags/${RESOLVED_REF}"
 elif git -C "${DEST}" ls-remote --exit-code --heads origin "refs/heads/${RESOLVED_REF}" >/dev/null 2>&1; then
   git -C "${DEST}" fetch --depth 1 origin "refs/heads/${RESOLVED_REF}"
