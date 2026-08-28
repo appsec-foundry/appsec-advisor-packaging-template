@@ -81,6 +81,19 @@ Add organization-owned skills under `org-skills/<skill-id>/SKILL.md` and include
 their ids in the package policy. An organization skill must not overwrite an
 upstream skill name.
 
+Every id under `plugin_surface` has to exist in the upstream ref you build from;
+the build fails otherwise, which is how a typo is caught. An upstream skill that
+exists only on a branch therefore cannot be listed there before its release. Put
+it under the top-level `optional_skills:` list instead — an equally explicit
+decision to ship it, but one that tolerates a ref without it: builds from a ref
+that has the skill include it, older refs skip it with a note.
+
+```yaml
+# org-profile/package-policy.yaml
+optional_skills:
+  - security-score
+```
+
 The built `.claude-plugin/package-surface.json`, `config.json`, packaged help,
 and packaged README describe the resolved result. They are generated outputs;
 do not edit them in place.

@@ -43,6 +43,7 @@ PACKAGE_VERSION_TEST="$HERE/test_finalize_package_version.py"
 PACKAGED_ORIGINS_TEST="$HERE/test_rewrite_packaged_origins.py"
 LATEST_RELEASE_TEST="$HERE/test_select_latest_release.py"
 ORG_HOOK_COLLISION_TEST="$HERE/test_org_hook_collisions.py"
+RESOLVE_POLICY_TEST="$HERE/test_resolve_package_policy.py"
 
 # -B: importing guard.py must not leave __pycache__ in org-profile/hooks/,
 # which the packager would copy and the smoke test rejects.
@@ -58,6 +59,7 @@ ORG_HOOK_COLLISION_TEST="$HERE/test_org_hook_collisions.py"
 /usr/bin/python3 -B "$PACKAGED_ORIGINS_TEST"
 /usr/bin/python3 -B "$LATEST_RELEASE_TEST"
 /usr/bin/python3 -B "$ORG_HOOK_COLLISION_TEST"
+/usr/bin/python3 -B "$RESOLVE_POLICY_TEST"
 
 COV="$(mktemp)"
 WORKROOT="$(mktemp -d)"
@@ -83,6 +85,8 @@ mkfake() { # a minimal appsec-advisor checkout
     'import os' \
     'def _available_hook_ids(_source):' \
     '    return {item for item in os.environ.get("PYSTUB_UPSTREAM_HOOK_IDS", "").split(",") if item}' \
+    'def _available_skills(_source):' \
+    '    return {item for item in os.environ.get("PYSTUB_UPSTREAM_SKILL_IDS", "").split(",") if item}' \
     >>"$1/scripts/package_internal_plugin.py"
   printf '%s\n' \
     'import json' \
@@ -284,6 +288,46 @@ printf '%s\n' 'description: Bad name.' >"$d/org-skills/BadName/SKILL.md"
 (cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" INTERNAL_NAME=acme-appsec \
   timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
 assert_rc "package: org skill name validation" 2 "$?"
+
+# An optional skill is an explicit allowlist entry that may be absent from the
+# selected ref: present -> packaged, absent -> skipped, never a failed build.
+# The policy in org-profile/ must survive both unchanged.
+write_optional_policy() { # write_optional_policy <dir> <optional-name>
+  printf '%s\n' 'plugin_surface:' '  skills:' '    include:' '      - help' \
+    'optional_skills:' "  - $2" >"$1/org-profile/package-policy.yaml"
+}
+
+d="$(newdir)"
+mkfake "$d/src"
+write_optional_policy "$d" security-score
+policy_before="$(cat "$d/org-profile/package-policy.yaml")"
+(cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" \
+  PYSTUB_UPSTREAM_SKILL_IDS="help,security-score" \
+  PYSTUB_EXPECT_POLICY_SKILL=security-score \
+  INTERNAL_NAME=acme-appsec timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && [ "$(cat "$d/org-profile/package-policy.yaml")" = "$policy_before" ]; then
+  pass "package: optional skill in the ref is allowlisted, source policy untouched"
+else fail "package: optional skill in the ref is allowlisted, source policy untouched" "rc=$rc"; fi
+
+d="$(newdir)"
+mkfake "$d/src"
+write_optional_policy "$d" security-score
+(cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" \
+  PYSTUB_UPSTREAM_SKILL_IDS="help" \
+  PYSTUB_REJECT_POLICY_SKILL=security-score \
+  INTERNAL_NAME=acme-appsec timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
+assert_rc "package: optional skill absent from the ref is skipped, not fatal" 0 "$?"
+
+d="$(newdir)"
+mkfake "$d/src"
+printf '%s\n' 'plugin_surface:' '  skills:' '    include:' '      - help' \
+  '      - security-score' 'optional_skills:' '  - security-score' \
+  >"$d/org-profile/package-policy.yaml"
+(cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" \
+  PYSTUB_UPSTREAM_SKILL_IDS="help,security-score" \
+  INTERNAL_NAME=acme-appsec timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
+assert_rc "package: a skill listed as required and optional is rejected" 2 "$?"
 
 d="$(newdir)"
 mkfake "$d/src"
@@ -1261,6 +1305,7 @@ for f in scripts/fetch-upstream.sh scripts/upstream-check.sh scripts/packaging-t
          scripts/baseline-upstream-check.py \
          scripts/select-latest-release.py \
          scripts/check-org-hook-collisions.py \
+         scripts/resolve-package-policy.py \
          scripts/archive-built-plugin.py scripts/finalize-package-version.py \
          scripts/rewrite-packaged-origins.py scripts/release.sh \
          scripts/reinit-org-repo.sh \

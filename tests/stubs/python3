@@ -61,6 +61,24 @@ if script.endswith("package_internal_plugin.py"):
         if not os.path.isfile(skill_md):
             print(f"expected source skill not found: {skill_md}", file=sys.stderr)
             sys.exit(5)
+    # The resolved policy the packager is handed decides which optional skills
+    # this build ships; assert on it rather than on the untouched source policy.
+    policy_path = None
+    for i, a in enumerate(args):
+        if a == "--package-policy" and i + 1 < len(args):
+            policy_path = args[i + 1]
+    policy_text = ""
+    if policy_path and os.path.isfile(policy_path):
+        with open(policy_path, encoding="utf-8") as file:
+            policy_text = file.read()
+    wanted = os.environ.get("PYSTUB_EXPECT_POLICY_SKILL", "")
+    if wanted and wanted not in policy_text:
+        print(f"expected skill in resolved policy: {wanted}", file=sys.stderr)
+        sys.exit(6)
+    unwanted = os.environ.get("PYSTUB_REJECT_POLICY_SKILL", "")
+    if unwanted and unwanted in policy_text:
+        print(f"unexpected skill in resolved policy: {unwanted}", file=sys.stderr)
+        sys.exit(6)
     if name:
         root = os.path.join("build", name)
         metadata = os.path.join(root, ".claude-plugin")

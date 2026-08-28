@@ -38,3 +38,15 @@ plugin_surface:
     include:
       # Add server ids declared under mcp.servers in org-profile.yaml, for example:
       # - acme-sast
+
+# Skills that the selected upstream ref may not have yet. Listing one here is
+# the same explicit decision to ship it as an entry above — it is only allowed
+# to be absent: a build from a ref that has the skill includes it, a build from
+# an older ref skips it with a note instead of failing. Use this only for a
+# skill upstream has on a branch but not yet in a release; everything already
+# released belongs under plugin_surface.skills.include, where a typo still stops
+# the build. What a build actually shipped is recorded in package-surface.json.
+optional_skills:
+  # Deterministic 0-100 score from the scanner layer; upstream has it on `dev`,
+  # no release tag carries it yet. Included by APPSEC_ADVISOR_REF=dev builds.
+  - security-score

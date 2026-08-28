@@ -105,7 +105,7 @@ claude plugin install <plugin-name>@<marketplace-name>
 | `org-profile/hooks/*.py` | Organization-owned Claude Code event hooks |
 | `org-skills/<skill-id>/SKILL.md` | Organization-owned skills packaged alongside upstream skills |
 
-`org-profile/package-policy.yaml` controls what is included in the package. `skill_toggles` in `org-profile/org-profile.yaml` controls whether an included skill is available at runtime. Add every organization-owned skill, hook, and MCP server to the package allowlist, and do not reuse an upstream skill name.
+`org-profile/package-policy.yaml` controls what is included in the package. Its top-level `optional_skills:` list holds ids that a selected upstream ref may not have yet, so an unreleased upstream skill can be allowlisted without breaking builds from the pinned release. `skill_toggles` in `org-profile/org-profile.yaml` controls whether an included skill is available at runtime. Add every organization-owned skill, hook, and MCP server to the package allowlist, and do not reuse an upstream skill name.
 
 Declare MCP servers only in the profile's `mcp:` block. Reference secrets with `${ENV_VAR}`; never commit tokens or put credentials in server URLs.
 

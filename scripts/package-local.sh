@@ -13,11 +13,15 @@ DESCRIPTION="${DESCRIPTION:-Internal packaged build of appsec-advisor with Acme 
 ORG_SKILLS_DIR="${ORG_SKILLS_DIR:-org-skills}"
 FETCHED=0
 TEMP_SOURCE=""
+TEMP_POLICY=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cleanup() {
   if [ -n "${TEMP_SOURCE}" ]; then
     rm -rf "${TEMP_SOURCE}"
+  fi
+  if [ -n "${TEMP_POLICY}" ]; then
+    rm -rf "${TEMP_POLICY}"
   fi
 }
 trap cleanup EXIT
@@ -173,6 +177,21 @@ PYTHONDONTWRITEBYTECODE=1 python3 "${SCRIPT_DIR}/check-org-hook-collisions.py" \
 
 overlay_org_skills "${ORG_SKILLS_DIR}" "${SOURCE}"
 
+# `optional_skills` in the package policy names skills that the selected ref may
+# not have yet — an upstream skill still on a branch would otherwise abort every
+# build from the pinned release. Resolve them against the ref actually being
+# built and hand the packager the resolved copy; org-profile/package-policy.yaml
+# is never modified.
+POLICY_ARGS=()
+if [ -f org-profile/package-policy.yaml ]; then
+  TEMP_POLICY="$(mktemp -d "${TMPDIR:-/tmp}/appsec-advisor-policy.XXXXXX")"
+  PYTHONDONTWRITEBYTECODE=1 python3 "${SCRIPT_DIR}/resolve-package-policy.py" \
+    --source "${SOURCE}" \
+    --policy org-profile/package-policy.yaml \
+    --out "${TEMP_POLICY}/package-policy.yaml"
+  POLICY_ARGS=(--package-policy "${TEMP_POLICY}/package-policy.yaml")
+fi
+
 # Do not leave an older same-version release artifact behind if regeneration
 # fails before the new archive is ready.
 if [ "${ARCHIVE}" = "1" ] || [ "${ARCHIVE}" = "true" ]; then
@@ -192,6 +211,7 @@ python3 "${SOURCE}/scripts/package_internal_plugin.py" \
   --upstream-url "${UPSTREAM_URL}" \
   --info-url "${INTERNAL_REPOSITORY_URL}" \
   --readme "build/${INTERNAL_NAME}/README.md" \
+  ${POLICY_ARGS[@]+"${POLICY_ARGS[@]}"} \
   --skip-archive
 
 # v0.6.0-beta.1 still contains links to the former personal repository

@@ -101,6 +101,7 @@ check_template_layout() {
     scripts/upstream-check.sh \
     scripts/select-latest-release.py \
     scripts/check-org-hook-collisions.py \
+    scripts/resolve-package-policy.py \
     scripts/package-local.sh \
     scripts/release.sh \
     org-profile/org-profile.yaml \
@@ -935,6 +936,7 @@ for helper in \
   baseline-upstream-check.py \
   select-latest-release.py \
   check-org-hook-collisions.py \
+  resolve-package-policy.py \
   archive-built-plugin.py \
   finalize-package-version.py \
   rewrite-packaged-origins.py \

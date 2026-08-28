@@ -71,6 +71,14 @@ to your own skills — the threat-model pipeline does not query it.
   MCP server declared under `mcp.servers` reach the internal package only once
   their ids are listed under `plugin_surface.skills`, `hooks`, or
   `mcp_servers`.
+- A name under `plugin_surface` must exist in the ref being built; the upstream
+  packager aborts otherwise, which is what catches a typo. A skill upstream has
+  only on a branch therefore cannot be listed there ahead of its release. Put it
+  under the top-level **`optional_skills:`** list instead: still an explicit
+  decision to ship it, but allowed to be absent. `scripts/resolve-package-policy.py`
+  appends it to the allowlist for a ref that has it and drops it with a note for
+  one that does not, without touching the file in `org-profile/`. Which skills a
+  build actually shipped is recorded in `.claude-plugin/package-surface.json`.
 - The packaged `help` skill and developer-facing README are generated from the final
   `.claude-plugin/package-surface.json` and `config.json` after upstream
   packaging. It lists only included public skills and marks runtime-disabled
