@@ -50,7 +50,7 @@ _ask_yn() {
 _use_trunk() {
   echo "==> Fetching trunk (default branch) from ${URL}"
   git -C "${DEST}" fetch --depth 1 origin HEAD
-  git -C "${DEST}" checkout --detach FETCH_HEAD
+  git -C "${DEST}" checkout --quiet --detach FETCH_HEAD
   _record_ref "HEAD"
   echo "==> Upstream ready at ${DEST} (trunk): $(git -C "${DEST}" rev-parse --short HEAD)"
   exit 0
@@ -113,13 +113,13 @@ if git -C "${DEST}" ls-remote --exit-code --tags origin "refs/tags/${RESOLVED_RE
   if [ -n "${PREVIOUS_TAG_COMMIT}" ] && [ "${PREVIOUS_TAG_COMMIT}" != "${CURRENT_TAG_COMMIT}" ]; then
     echo "WARN: upstream tag ${RESOLVED_REF} moved from ${PREVIOUS_TAG_COMMIT} to ${CURRENT_TAG_COMMIT}" >&2
   fi
-  git -C "${DEST}" checkout --detach "refs/tags/${RESOLVED_REF}"
+  git -C "${DEST}" checkout --quiet --detach "refs/tags/${RESOLVED_REF}"
 elif git -C "${DEST}" ls-remote --exit-code --heads origin "refs/heads/${RESOLVED_REF}" >/dev/null 2>&1; then
   git -C "${DEST}" fetch --depth 1 origin "refs/heads/${RESOLVED_REF}"
-  git -C "${DEST}" checkout --detach FETCH_HEAD
+  git -C "${DEST}" checkout --quiet --detach FETCH_HEAD
 else
   git -C "${DEST}" fetch --depth 1 origin "${RESOLVED_REF}"
-  git -C "${DEST}" checkout --detach FETCH_HEAD
+  git -C "${DEST}" checkout --quiet --detach FETCH_HEAD
 fi
 
 _record_ref "${RESOLVED_REF}"
