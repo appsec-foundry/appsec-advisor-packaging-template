@@ -235,6 +235,12 @@ rewrite `Makefile`. With a `dev` ref, a normal `make package` or
 newer release tag; with a branch ref it reports when the branch tip has moved
 past your local checkout.
 
+Drift is reported by failing: Make prints `*** [Makefile:NN: upstream-check]
+Error 1` and exits 2, because every non-zero recipe status is a failure to Make.
+The scheduled CI jobs rely on that. `scripts/upstream-check.sh` itself
+distinguishes 0 = current, 1 = drift, 2 = error — call it directly (as
+`make check-updates` does) when you need to tell those apart.
+
 ## Testing the plugin locally
 
 ```bash

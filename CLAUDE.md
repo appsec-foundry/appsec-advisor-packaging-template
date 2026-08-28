@@ -32,7 +32,7 @@ make lint          # shellcheck scripts/ + tests/run.sh (skips gracefully if she
 make test          # shell-script test suite + coverage gate (skips if tests/ absent, e.g. scaffolded repos)
 make check         # offline gate: lint + test (no network, no upstream fetch)
 make release-check # release-boundary gate: check + check-updates (advisory) + validate + package (builds a clean plugin against upstream)
-make upstream-check # read-only drift check: reports if the build ref moved (new commit) or a newer v* release exists. Exit 0=current, 1=drift, 2=error. Does not touch upstream/
+make upstream-check # read-only drift check: reports if the build ref moved (new commit) or a newer v* release exists. Drift makes the target fail (`Error 1`); that is the signal, not a crash. Does not touch upstream/
 make validate      # validate org-profile.yaml against upstream schema only
 make package       # fetch + build + smoke test → build/<name>/
 make rebuild       # clean (removes upstream/ build/ dist/) then package
@@ -106,6 +106,8 @@ APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 ```
 
 `make upstream-check` adapts to the mode: with `REF=latest` it flags a newer release tag; with a branch ref it flags when the branch tip has moved past your local checkout.
+
+Drift is reported by failing: Make prints `*** [Makefile:NN: upstream-check] Error 1` and exits 2, because every non-zero recipe status is a failure to Make. The scheduled CI jobs rely on that. `scripts/upstream-check.sh` itself distinguishes 0 = current, 1 = drift, 2 = error — call it directly (as `make check-updates` does) when you need to tell those apart.
 
 Generated repositories pin the packaging template separately through
 `APPSEC_ADVISOR_TEMPLATE_REF`. `make packaging-template-check` reports drift without
