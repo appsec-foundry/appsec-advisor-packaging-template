@@ -123,6 +123,7 @@ Declare MCP servers only in the profile's `mcp:` block. Reference secrets with `
 | `make release-check` | Run the release gate and package build |
 | `make release-package` | Create ZIP/TGZ archives and checksums under `dist/` |
 | `make upstream-check` | Check whether the selected upstream source moved |
+| `make upstream-update` | Rebuild, but only when the selected upstream ref moved to a new commit |
 | `make packaging-template-check` | Check whether the packaging template has moved |
 | `make baseline-check` | Compare the configured baseline with its published document |
 | `make check-updates` | Check appsec-advisor and baseline updates |

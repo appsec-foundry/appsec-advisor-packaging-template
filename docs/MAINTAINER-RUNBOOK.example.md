@@ -296,8 +296,12 @@ make baseline-check  # check the secure-coding baseline id
 make check-updates   # check appsec-advisor and baseline together
 ```
 
-These checks require network access and do not modify configuration. Review an
-upstream update before changing the pinned ref and rebuilding the package. A
+These checks require network access and do not modify configuration.
+`make upstream-update` combines the first of them with a build: it rebuilds the
+package when the configured ref moved to a new commit, and only reports a newer
+release tag, because building that one requires raising `APPSEC_ADVISOR_REF`
+first. Review an upstream update before changing the pinned ref and rebuilding
+the package. A
 repository configured for `dev` is intentionally non-reproducible across branch
 updates; use a release tag for an internally released package.
 

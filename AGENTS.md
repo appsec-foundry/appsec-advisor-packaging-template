@@ -136,6 +136,7 @@ make test                             # shell test suite + coverage gate (skippe
 make check                            # offline gate: lint + test (no network, no upstream fetch)
 make release-check                    # release gate: check + check-updates (advisory) + validate + package
 make upstream-check                   # read-only drift check: has the build ref moved, is there a newer v* release
+make upstream-update                  # same check, then `make rebuild` only on commit drift (a newer release still needs the pin raised)
 make packaging-template-check         # read-only drift check for the pinned packaging-template commit
 make baseline-check                   # read-only drift check: does the configured baseline id match its published document
 make check-updates                    # check appsec-advisor and baseline updates

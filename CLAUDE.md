@@ -33,6 +33,7 @@ make test          # shell-script test suite + coverage gate (skips if tests/ ab
 make check         # offline gate: lint + test (no network, no upstream fetch)
 make release-check # release-boundary gate: check + check-updates (advisory) + validate + package (builds a clean plugin against upstream)
 make upstream-check # read-only drift check: reports if the build ref moved (new commit) or a newer v* release exists. Drift makes the target fail (`Error 1`); that is the signal, not a crash. Does not touch upstream/
+make upstream-update # run that check, then `make rebuild` only when the ref moved to a new commit (or no checkout exists yet). Release drift is reported but not built — raise APPSEC_ADVISOR_REF first. Exits 2 when the check itself fails
 make validate      # validate org-profile.yaml against upstream schema only
 make package       # fetch + build + smoke test → build/<name>/
 make rebuild       # clean (removes upstream/ build/ dist/) then package

@@ -42,7 +42,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint check release release-check fetch-upstream upstream-check packaging-template-check baseline-check check-updates drift-check validate package release-package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean rebuild reinit test
+.PHONY: help lint check release release-check fetch-upstream upstream-check packaging-template-check baseline-check check-updates drift-check upstream-update validate package release-package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean rebuild reinit test
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-28s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -113,6 +113,27 @@ check-updates: ## Check appsec-advisor and secure-coding baseline for updates
 
 drift-check: ## Deprecated alias for check-updates
 	@$(MAKE) --no-print-directory check-updates
+
+# 'upstream-check' reports commit drift and release drift through the same exit
+# status, but only commit drift is something a rebuild fixes: a newer release
+# tag is built only after APPSEC_ADVISOR_REF is raised by hand. So decide on the
+# kind of drift reported, not on the exit status alone.
+upstream-update: ## Rebuild only when the selected upstream ref moved to a new commit
+	@status=0; \
+	out="$$(APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" scripts/upstream-check.sh 2>&1)" || status=$$?; \
+	printf '%s\n' "$$out"; \
+	if [ "$$status" -ge 2 ]; then \
+		echo "ERROR: upstream check could not complete — nothing rebuilt" >&2; exit 2; \
+	fi; \
+	if printf '%s\n' "$$out" | grep -q '^DRIFT (release)'; then \
+		echo "NOTE: a newer release exists — raise APPSEC_ADVISOR_REF in the Makefile to build it"; \
+	fi; \
+	if printf '%s\n' "$$out" | grep -qE '^(DRIFT \(commit\)|NOTE: no local checkout)'; then \
+		echo "==> rebuilding from $(APPSEC_ADVISOR_REF)"; \
+		$(MAKE) --no-print-directory rebuild; \
+	else \
+		echo "OK: nothing to rebuild"; \
+	fi
 
 fetch-upstream: ## Clone/checkout upstream appsec-advisor at APPSEC_ADVISOR_REF
 	APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)" scripts/fetch-upstream.sh
