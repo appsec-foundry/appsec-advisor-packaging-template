@@ -1021,9 +1021,10 @@ if [ "$rc" = 0 ] && \
    grep -Fq '       - Makefile' "$build_log" && \
    grep -Fq 'See docs/MAINTAINER-RUNBOOK.md#organization-configuration' "$build_log" && \
    grep -Fq '  4. Share it with developers:' "$build_log" && \
-   grep -Fq '       make release-package' "$build_log" && \
-   grep -Fq '         claude --plugin-url "<direct HTTPS URL to to-appsec-0.1.0.zip>"' "$build_log" && \
-   grep -Fq "Publish the plugin through your organization's Marketplace." "$build_log" && \
+   grep -Fq '       a) make release-package' "$build_log" && \
+   grep -Fq '            claude --plugin-url "<direct HTTPS URL to to-appsec-0.1.0.zip>"' "$build_log" && \
+   grep -Fq '            claude plugin install to-appsec@<marketplace-name>' "$build_log" && \
+   grep -Fq '       make install-local' "$build_log" && \
    grep -Fq 'See docs/MAINTAINER-RUNBOOK.md#releases-and-distribution for rollout options.' "$build_log" && \
    ! grep -Fq 'Further steps (optional):' "$build_log" && \
    ! grep -Fq 'enabled: help, check-permissions' "$build_log"; then
