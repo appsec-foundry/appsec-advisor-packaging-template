@@ -1022,7 +1022,7 @@ if [ "${REINIT}" = true ] && [ -f "${PROFILE_PATH}" ] && \
     validate_utf8_file "${PROFILE_PATH}"
   fi
 
-  echo "WARNING: The existing organization profile contains invalid UTF-8." >&2
+  echo "WARN: The existing organization profile contains invalid UTF-8." >&2
   echo "         It may have been created by an older initializer." >&2
   read -r -p "Back it up and generate a fresh profile from the values entered above? [y/N]: " _profile_repair_reply || _profile_repair_reply=""
   case "${_profile_repair_reply}" in
@@ -1217,7 +1217,7 @@ fi
 if [ -n "${INTERNAL_REPOSITORY_URL}" ]; then
   if EXISTING_ORIGIN=$(git remote get-url origin 2>/dev/null); then
     if [ "${EXISTING_ORIGIN}" != "${INTERNAL_REPOSITORY_URL}" ]; then
-      echo "WARNING: existing origin differs from INTERNAL_REPOSITORY_URL; keeping ${EXISTING_ORIGIN}" >&2
+      echo "WARN: existing origin differs from INTERNAL_REPOSITORY_URL; keeping ${EXISTING_ORIGIN}" >&2
     fi
   else
     git remote add origin "${INTERNAL_REPOSITORY_URL}"
@@ -1257,13 +1257,13 @@ if [ "${_build_answered}" = true ]; then
       echo "==> Building plugin …"
       if ! check_build_python_modules; then
         BUILD_STATE=failed
-        echo "WARNING: The packaging repo is ready, but the initial plugin build was skipped." >&2
+        echo "WARN: The packaging repo is ready, but the initial plugin build was skipped." >&2
       elif make package; then
         BUILD_STATE=succeeded
       else
         BUILD_STATE=failed
         echo "" >&2
-        echo "WARNING: The packaging repo is ready, but the initial plugin build failed." >&2
+        echo "WARN: The packaging repo is ready, but the initial plugin build failed." >&2
         echo "         Fix the reported build error, then run: make package" >&2
       fi
       ;;

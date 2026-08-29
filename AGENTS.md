@@ -130,7 +130,7 @@ to your own skills — the threat-model pipeline does not query it.
 ## Common tasks
 
 ```bash
-make                                  # (or `make help`) lists every target with its description
+make                                  # (or `make help`) lists the targets by topic plus the current build settings
 make lint                             # shellcheck over scripts/ + tests/run.sh (skipped when shellcheck is absent)
 make test                             # shell test suite + coverage gate (skipped when tests/ is absent, e.g. in a scaffolded repo)
 make check                            # offline gate: lint + test (no network, no upstream fetch)

@@ -27,7 +27,7 @@ and installs the plugin with Claude Code's local scope. Neither target modifies
 an organization's central Marketplace.
 
 ```bash
-make               # (or `make help`) list all targets with descriptions
+make               # (or `make help`) list targets by topic + the current build settings
 make lint          # shellcheck scripts/ + tests/run.sh (skips gracefully if shellcheck absent)
 make test          # shell-script test suite + coverage gate (skips if tests/ absent, e.g. scaffolded repos)
 make check         # offline gate: lint + test (no network, no upstream fetch)

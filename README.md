@@ -115,7 +115,7 @@ Declare MCP servers only in the profile's `mcp:` block. Reference secrets with `
 
 | Command | Purpose |
 |---|---|
-| `make help` | List all targets |
+| `make help` | List the targets by topic and the current build settings |
 | `make check` | Run the offline lint and test gate |
 | `make validate` | Validate the organization profile |
 | `make package` | Build and smoke-test the plugin |
