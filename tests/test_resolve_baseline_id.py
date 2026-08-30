@@ -54,7 +54,7 @@ class ResolveBaselineIdTests(unittest.TestCase):
         self.assertEqual(
             resolver.BASELINE_URL,
             "https://raw.githubusercontent.com/appsec-foundry/"
-            "ai-secure-coding-baseline/main/secure-coding-baseline.md",
+            "aiscb/main/secure-coding-baseline.md",
         )
 
 

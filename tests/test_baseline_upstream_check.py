@@ -119,16 +119,19 @@ class BaselineUpstreamCheckTests(unittest.TestCase):
                 {"policy": {"url_allowlist": ["raw.githubusercontent.com", 123]}}
             )
 
-    def test_legacy_default_is_checked_against_appsec_foundry_source(self) -> None:
-        core = json.loads(self.core.read_text(encoding="utf-8"))
-        core["baseline"]["url"] = checker.LEGACY_BASELINE_URL
-        self.core.write_text(json.dumps(core), encoding="utf-8")
-        document = b"baseline-id: aisec-0.1.7\n"
-        with mock.patch.object(checker, "_fetch", return_value=document) as fetch:
-            self.assertEqual(checker.check(self.profile, self.core), 0)
-        fetch.assert_called_once_with(
-            checker.CURRENT_BASELINE_URL, mock.ANY, self.core
-        )
+    def test_legacy_defaults_are_checked_against_the_current_source(self) -> None:
+        self.assertEqual(len(checker.LEGACY_BASELINE_URLS), 2)
+        for legacy in checker.LEGACY_BASELINE_URLS:
+            with self.subTest(legacy=legacy):
+                core = json.loads(self.core.read_text(encoding="utf-8"))
+                core["baseline"]["url"] = legacy
+                self.core.write_text(json.dumps(core), encoding="utf-8")
+                document = b"baseline-id: aisec-0.1.7\n"
+                with mock.patch.object(checker, "_fetch", return_value=document) as fetch:
+                    self.assertEqual(checker.check(self.profile, self.core), 0)
+                fetch.assert_called_once_with(
+                    checker.CURRENT_BASELINE_URL, mock.ANY, self.core
+                )
 
     def test_https_fetch_is_bounded_and_uses_the_url_guard(self) -> None:
         class Verdict:

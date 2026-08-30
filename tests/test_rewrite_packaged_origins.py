@@ -21,8 +21,12 @@ LEGACY_BASELINE_RAW = (
     "https://raw.githubusercontent.com/matthiasrohr/ai-secure-coding-baseline/"
     "main/secure-coding-baseline.md"
 )
-BASELINE_RAW = (
+FORMER_BASELINE_RAW = (
     "https://raw.githubusercontent.com/appsec-foundry/ai-secure-coding-baseline/"
+    "main/secure-coding-baseline.md"
+)
+BASELINE_RAW = (
+    "https://raw.githubusercontent.com/appsec-foundry/aiscb/"
     "main/secure-coding-baseline.md"
 )
 
@@ -62,9 +66,25 @@ def test_verified_origins_are_normalized() -> None:
         assert "org-profile/package-policy.yaml" in config["_comment"]
         assert "docs/MAINTAINER-RUNBOOK.md#organization-configuration" in config["_comment"]
         documentation = (root / "docs" / "origins.md").read_text(encoding="utf-8")
-        assert "https://github.com/appsec-foundry/ai-secure-coding-baseline" in documentation
+        assert "https://github.com/appsec-foundry/aiscb" in documentation
         assert "https://github.com/appsec-foundry/appsec-advisor" in documentation
         assert "matthiasrohr" not in documentation
+
+
+def test_former_organization_baseline_name_is_renamed() -> None:
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        write_package(root, FORMER_BASELINE_RAW)
+        (root / "docs" / "origins.md").write_text(
+            "https://github.com/appsec-foundry/ai-secure-coding-baseline\n",
+            encoding="utf-8",
+        )
+        assert MODULE.rewrite(root) == 2
+
+        config = json.loads((root / "config.json").read_text(encoding="utf-8"))
+        assert config["baseline"]["url"] == BASELINE_RAW
+        documentation = (root / "docs" / "origins.md").read_text(encoding="utf-8")
+        assert documentation == "https://github.com/appsec-foundry/aiscb\n"
 
 
 def test_organization_baseline_url_is_not_changed() -> None:
@@ -112,6 +132,7 @@ def test_symlink_is_rejected() -> None:
 
 if __name__ == "__main__":
     test_verified_origins_are_normalized()
+    test_former_organization_baseline_name_is_renamed()
     test_organization_baseline_url_is_not_changed()
     test_unknown_personal_origin_fails_before_writing()
     test_symlink_is_rejected()

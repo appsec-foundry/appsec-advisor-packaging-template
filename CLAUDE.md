@@ -151,7 +151,7 @@ update using the exact commit reported by the check.
 When the baseline is kept, the initializer pins the id that the published
 baseline declares rather than the one in the template: it reads
 `baseline-id:` from
-`https://raw.githubusercontent.com/appsec-foundry/ai-secure-coding-baseline/main/secure-coding-baseline.md`
+`https://raw.githubusercontent.com/appsec-foundry/aiscb/main/secure-coding-baseline.md`
 through `scripts/resolve-baseline-id.py` and writes it into the generated
 `org-profile.yaml`. That happens before the target directory is touched, and an
 unreadable document ends the run with exit 2 — no repository is created on a

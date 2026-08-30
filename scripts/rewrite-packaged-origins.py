@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Normalize legacy personal GitHub origins in a finished internal package."""
+"""Normalize legacy personal and renamed GitHub origins in a finished package."""
 
 from __future__ import annotations
 
@@ -21,12 +21,16 @@ ORGANIZATION_RAW_NAMESPACE = "https://raw.githubusercontent.com/appsec-foundry/"
 # rewritten. An unexpected personal link fails the package instead of silently
 # producing a plausible-looking 404 URL.
 REPOSITORIES = (
-    "ai-secure-coding-baseline",
     "appsec-advisor-packaging-template",
     "appsec-advisor-fixtures",
     "appsec-advisor-examples",
     "appsec-advisor",
 )
+# The baseline repository was renamed. GitHub's rename redirect keeps the former
+# name working, so a packaged link is not broken; it is rewritten under both
+# namespaces so the package documents the current name.
+BASELINE_FORMER_NAME = "ai-secure-coding-baseline"
+BASELINE_NAME = "aiscb"
 REPLACEMENTS = tuple(
     (
         f"{LEGACY_NAMESPACE}{repository}",
@@ -35,8 +39,20 @@ REPLACEMENTS = tuple(
     for repository in REPOSITORIES
 ) + (
     (
-        f"{LEGACY_RAW_NAMESPACE}ai-secure-coding-baseline",
-        f"{ORGANIZATION_RAW_NAMESPACE}ai-secure-coding-baseline",
+        f"{LEGACY_NAMESPACE}{BASELINE_FORMER_NAME}",
+        f"{ORGANIZATION_NAMESPACE}{BASELINE_NAME}",
+    ),
+    (
+        f"{LEGACY_RAW_NAMESPACE}{BASELINE_FORMER_NAME}",
+        f"{ORGANIZATION_RAW_NAMESPACE}{BASELINE_NAME}",
+    ),
+    (
+        f"{ORGANIZATION_NAMESPACE}{BASELINE_FORMER_NAME}",
+        f"{ORGANIZATION_NAMESPACE}{BASELINE_NAME}",
+    ),
+    (
+        f"{ORGANIZATION_RAW_NAMESPACE}{BASELINE_FORMER_NAME}",
+        f"{ORGANIZATION_RAW_NAMESPACE}{BASELINE_NAME}",
     ),
 )
 CONFIGURATION_HELP = (
@@ -77,7 +93,12 @@ def rewrite(plugin_root: Path) -> int:
 
     updates: list[tuple[Path, str]] = []
     unexpected: list[str] = []
-    needles = (LEGACY_NAMESPACE.encode(), LEGACY_RAW_NAMESPACE.encode())
+    needles = (
+        LEGACY_NAMESPACE.encode(),
+        LEGACY_RAW_NAMESPACE.encode(),
+        f"{ORGANIZATION_NAMESPACE}{BASELINE_FORMER_NAME}".encode(),
+        f"{ORGANIZATION_RAW_NAMESPACE}{BASELINE_FORMER_NAME}".encode(),
+    )
 
     for path in sorted(plugin_root.rglob("*")):
         if path.is_symlink():

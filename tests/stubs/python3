@@ -34,7 +34,7 @@ if script.endswith("resolve-baseline-id.py"):
     if fail == "baseline":
         sys.stderr.write("ERROR: cannot fetch the baseline source\n")
         sys.exit(2)
-    print(os.environ.get("PYSTUB_BASELINE_ID", "aisec-0.1.8"))
+    print(os.environ.get("PYSTUB_BASELINE_ID", "aiscb-0.1.10"))
     sys.exit(0)
 
 if script.endswith("package_internal_plugin.py"):

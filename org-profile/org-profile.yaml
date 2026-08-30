@@ -25,9 +25,9 @@ banner:
 # `make baseline-check` reports when the document publishes a newer id.
 baseline:
   enabled: true
-  id: aisec-0.1.8
+  id: aiscb-0.1.10
   name: AI Secure Coding Baseline
-  url: https://raw.githubusercontent.com/appsec-foundry/ai-secure-coding-baseline/main/secure-coding-baseline.md
+  url: https://raw.githubusercontent.com/appsec-foundry/aiscb/main/secure-coding-baseline.md
 
 compatibility:
   core: ">=0.6 <0.7"

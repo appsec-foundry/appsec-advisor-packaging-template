@@ -208,9 +208,9 @@ if [ "$rc" = 0 ] && [ -f "$d/dist/acme-appsec-0.1.0.tgz" ] && \
    ! tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/.claude-plugin/plugin.json | \
      grep -Fq 'appsec_advisor_core_ref' && \
    tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/config.json | \
-     grep -Fq 'https://raw.githubusercontent.com/appsec-foundry/ai-secure-coding-baseline/main/secure-coding-baseline.md' && \
+     grep -Fq 'https://raw.githubusercontent.com/appsec-foundry/aiscb/main/secure-coding-baseline.md' && \
    tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/config.json | \
-     grep -Fq '"id": "aisec-0.1.8"' && \
+     grep -Fq '"id": "aiscb-0.1.10"' && \
    tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/config.json | \
      grep -Fq '"name": "AI Secure Coding Baseline"' && \
    tar -xOf "$d/dist/acme-appsec-0.1.0.tgz" acme-appsec/config.json | \
@@ -729,12 +729,12 @@ d="$(newdir)"
 tgt="$d/out"
 baseline_log="$d/baseline-pin.log"
 printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\nn\n' "$tgt" | \
-  (cd "$ROOT" && env PYSTUB_BASELINE_ID=aisec-9.9.9 timeout 20 bash -x "$INIT") \
+  (cd "$ROOT" && env PYSTUB_BASELINE_ID=aiscb-9.9.9 timeout 20 bash -x "$INIT") \
   >"$baseline_log" 2>>"$COV"
 rc=$?
 if [ "$rc" = 0 ] && \
-   grep -Fqx '  id: aisec-9.9.9' "$tgt/org-profile/org-profile.yaml" && \
-   grep -Fq '==> Published secure-coding baseline: aisec-9.9.9 (pinned)' "$baseline_log"; then
+   grep -Fqx '  id: aiscb-9.9.9' "$tgt/org-profile/org-profile.yaml" && \
+   grep -Fq '==> Published secure-coding baseline: aiscb-9.9.9 (pinned)' "$baseline_log"; then
   pass "init: baseline id is pinned from the published baseline"
 else fail "init: baseline id is pinned from the published baseline" "rc=$rc"; fi
 
@@ -753,12 +753,12 @@ else fail "init: unreadable baseline stops before the repository is created" "rc
 d="$(newdir)"
 tgt="$d/out"
 printf 'Test Org\n\n\n\n\n%s\nn\nn\n\n\nn\n' "$tgt" | \
-  (cd "$ROOT" && env PYSTUB_BASELINE_ID=aisec-9.9.9 timeout 20 bash -x "$INIT") \
+  (cd "$ROOT" && env PYSTUB_BASELINE_ID=aiscb-9.9.9 timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
 rc=$?
 if [ "$rc" = 0 ] && \
    grep -Fqx '  enabled: false' "$tgt/org-profile/org-profile.yaml" && \
-   grep -Fqx '  id: aisec-0.1.8' "$tgt/org-profile/org-profile.yaml"; then
+   grep -Fqx '  id: aiscb-0.1.10' "$tgt/org-profile/org-profile.yaml"; then
   pass "init: a declined baseline is not resolved"
 else fail "init: a declined baseline is not resolved" "rc=$rc"; fi
 
@@ -771,9 +771,9 @@ rc=$?
 if [ "$rc" = 0 ] && [ -f "$tgt/org-profile/requirements.yaml" ] && \
    [ -f "$tgt/org-skills/README.md" ] && \
    [ -f "$tgt/ci-requirements.lock" ] && \
-   grep -Fqx '  id: aisec-0.1.8' "$tgt/org-profile/org-profile.yaml" && \
+   grep -Fqx '  id: aiscb-0.1.10' "$tgt/org-profile/org-profile.yaml" && \
    grep -Fqx '  name: AI Secure Coding Baseline' "$tgt/org-profile/org-profile.yaml" && \
-   grep -Fqx '  url: https://raw.githubusercontent.com/appsec-foundry/ai-secure-coding-baseline/main/secure-coding-baseline.md' \
+   grep -Fqx '  url: https://raw.githubusercontent.com/appsec-foundry/aiscb/main/secure-coding-baseline.md' \
      "$tgt/org-profile/org-profile.yaml" && \
    grep -Fq -- '--require-hashes -r ci-requirements.lock' \
      "$tgt/ci-templates/github/workflows/package.yml" && \

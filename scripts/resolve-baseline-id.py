@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 
 BASELINE_URL = (
     "https://raw.githubusercontent.com/appsec-foundry/"
-    "ai-secure-coding-baseline/main/secure-coding-baseline.md"
+    "aiscb/main/secure-coding-baseline.md"
 )
 MAX_FETCH_BYTES = 1_048_576
 FETCH_TIMEOUT_SECONDS = 15

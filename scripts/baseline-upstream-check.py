@@ -27,13 +27,17 @@ MARKER_PATTERN = re.compile(
     r"([A-Za-z0-9](?:[A-Za-z0-9._+-]{0,78}[A-Za-z0-9])?)`?"
     r"(?:[ \t.,;:—-].*)?$"
 )
-LEGACY_BASELINE_URL = (
-    "https://raw.githubusercontent.com/matthiasrohr/"
-    "ai-secure-coding-baseline/main/secure-coding-baseline.md"
-)
 CURRENT_BASELINE_URL = (
     "https://raw.githubusercontent.com/appsec-foundry/"
-    "ai-secure-coding-baseline/main/secure-coding-baseline.md"
+    "aiscb/main/secure-coding-baseline.md"
+)
+# Sources that still resolve through GitHub's rename and transfer redirects. A
+# profile configured against one of them is checked against the current URL.
+LEGACY_BASELINE_URLS = (
+    "https://raw.githubusercontent.com/matthiasrohr/"
+    "ai-secure-coding-baseline/main/secure-coding-baseline.md",
+    "https://raw.githubusercontent.com/appsec-foundry/"
+    "ai-secure-coding-baseline/main/secure-coding-baseline.md",
 )
 
 
@@ -230,7 +234,7 @@ def check(
             raise BaselineCheckError(
                 f"effective baseline uses {source_type}; this check currently requires a URL source"
             )
-        url = CURRENT_BASELINE_URL if url == LEGACY_BASELINE_URL else url.strip()
+        url = CURRENT_BASELINE_URL if url in LEGACY_BASELINE_URLS else url.strip()
         document = _fetch(url, profile, core_config_path)
         origin = url
 
