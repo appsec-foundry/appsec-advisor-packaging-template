@@ -19,6 +19,7 @@ branch or a pull request.
 | `org-profile/org-profile.yaml` | The central knob — see [What you can customize](#what-you-can-customize). Full reference upstream: [`docs/org-profiles.md`](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/org-profiles.md) |
 | `org-profile/context/organization.md` | Short organization context for the analysis (max. 50 KB) |
 | `org-profile/actors/*.yaml` | Your own enterprise actors for threat modeling |
+| `org-profile/baselines/*.md` | Secure-coding baseline text shipped in the package, selected by `baseline.file` |
 | `org-profile/hooks/*.py` | Scripts for the hooks declared in the profile's `hooks:` block, referenced via `${CLAUDE_PLUGIN_ROOT}/org-profile/hooks/...` |
 | `org-profile/package-policy.yaml` | Allow-list: which skills, hooks (including org hook ids), and MCP servers go into the internal package |
 | `org-skills/<skill-id>/SKILL.md` | Your own skills, packaged alongside the upstream ones |
@@ -53,7 +54,7 @@ branch pins. Against an older upstream ref, validation rejects them:
 | Block | What it does |
 |---|---|
 | `banner` | The line shown at session start: your own text, your own info URL, or off |
-| `baseline` | Your own secure-coding baseline instead of the bundled one, by URL or git repository |
+| `baseline` | Your own secure-coding baseline instead of the bundled one: `url` or `git` for what an install fetches, `file` for the reviewed copy shipped in the package |
 | `skills` | Ship your own skills — replaces `org-skills/` once available |
 
 On top of that, `package-policy.yaml` decides **what goes into the package at
@@ -173,11 +174,14 @@ revision again.
 
 When the baseline is kept, the initializer pins the id the published baseline
 declares — read from the appsec-foundry baseline through
-`scripts/resolve-baseline-id.py` — instead of the id the template carries. It
-resolves before writing anything and stops with exit 2 when the document cannot
-be read, so no repository starts on a stale id; declining the baseline skips the
-lookup. `make baseline-check` compares the configured id against the published
-one afterwards.
+`scripts/resolve-baseline-id.py` — instead of the id the template carries, and
+vendors the same document as `org-profile/baselines/<id>.md` with
+`baseline.file` pointing at it. Id and file move together because the packager
+rejects a profile where they disagree. It resolves before writing anything and
+stops with exit 2 when the document cannot be read, so no repository starts on a
+stale id; declining the baseline skips the lookup and keeps the template's
+vendored copy. `make baseline-check` compares the configured id against the
+published one afterwards.
 
 Reinitialization refreshes infrastructure directly. For each differing
 user-editable template file, it prompts to overwrite, keep, overwrite all

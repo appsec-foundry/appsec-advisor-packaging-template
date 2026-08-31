@@ -124,6 +124,7 @@ update using the exact commit reported by the check.
 | `org-profile/org-profile.yaml` | Org identity, presets, cost/time guardrails, requirements source, output formats — plus CI gates (`requirements.gate`, `guardrails.fail_on`), run policy (`policy.url_allowlist`), security coaching (`security_coach`), and org hooks (`hooks:`). See upstream [`docs/org-profiles.md`](https://github.com/appsec-foundry/appsec-advisor/blob/main/docs/org-profiles.md) |
 | `org-profile/context/organization.md` | Org context injected into analyses (max 50 KB, plain Markdown) |
 | `org-profile/actors/*.yaml` | Custom threat actors (globbed in via `actors.add`) |
+| `org-profile/baselines/*.md` | Secure-coding baseline text shipped in the package, selected by `baseline.file`. Ships the reviewed rules and is what an install writes when the configured `url` is unreachable or has moved to a newer id |
 | `org-profile/hooks/*.py` | Scripts for org-declared Claude Code hooks (`hooks:` in the profile), referenced via `${CLAUDE_PLUGIN_ROOT}/org-profile/hooks/...` |
 | `org-profile/package-policy.yaml` | Allowlist of skills, hooks (incl. org hook ids), and MCP servers to include |
 | `org-skills/<skill-id>/SKILL.md` | Optional org-owned skills packaged next to upstream skills |
@@ -154,9 +155,14 @@ baseline declares rather than the one in the template: it reads
 `baseline-id:` from
 `https://raw.githubusercontent.com/appsec-foundry/aiscb/main/secure-coding-baseline.md`
 through `scripts/resolve-baseline-id.py` and writes it into the generated
-`org-profile.yaml`. That happens before the target directory is touched, and an
-unreadable document ends the run with exit 2 — no repository is created on a
-stale id. Declining the baseline skips the lookup. `make baseline-check`
+`org-profile.yaml`. The same call keeps the document
+(`--write-document`) and vendors it as
+`org-profile/baselines/<id>.md`, with `baseline.file` pointing at it: the
+packager compares the pinned id against that file, so writing one without the
+other scaffolds a repository whose first `make validate` fails. That happens
+before the target directory is touched, and an unreadable document ends the run
+with exit 2 — no repository is created on a stale id. Declining the baseline
+skips the lookup and keeps the template's vendored copy. `make baseline-check`
 compares the configured id against the published document later.
 
 ## Agent guidance

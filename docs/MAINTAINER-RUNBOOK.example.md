@@ -39,6 +39,7 @@ it against the upstream organization-profile schema.
 | `org-profile/org-profile.yaml` | Identity, presets, requirements, policy, banner, baseline, context routing, security coach, actors, abuse cases, runtime skill toggles, hooks, and MCP servers |
 | `org-profile/context/*.md` | Factual organization context supplied to analyses as untrusted reference data |
 | `org-profile/actors/*.yaml` | Organization-specific threat actors selected by the profile |
+| `org-profile/baselines/*.md` | Secure-coding baseline text shipped in the package, selected by `baseline.file` |
 | `org-profile/abuse-cases/*.yaml` | Optional organization-specific abuse cases selected by the profile |
 | `org-profile/package-policy.yaml` | Allowlist for packaged skills, hooks, and MCP servers |
 | `org-profile/hooks/*.py` | Organization-owned Claude Code event hooks |
@@ -107,9 +108,26 @@ surface, then rebuild.
 
 The secure-coding baseline is pinned independently from the plugin core. When
 this repository was scaffolded with the baseline included, the initializer read
-the id from the published baseline and wrote that into `baseline.id`. Use `make baseline-check` to compare it with the published
-document later, and raise the id in `org-profile/org-profile.yaml` after
-reviewing what changed.
+the id from the published baseline, wrote it into `baseline.id`, and vendored
+the document it read it from as `org-profile/baselines/<id>.md`, referenced by
+`baseline.file`.
+
+Both entries matter and move together. `url` is what an install fetches; `file`
+is the copy shipped inside the package, and it is what an install writes when
+the URL cannot be reached or has moved on to a newer id. Without `file` an
+install fails outright in both cases, in every package already distributed —
+`make validate` therefore rejects a `file` that is missing or declares a
+different id than `baseline.id`.
+
+Use `make baseline-check` to compare the pinned id against the published
+document. On drift, write the new document into `org-profile/baselines/`, point
+`baseline.id` and `baseline.file` at it, review the diff, then raise
+`PACKAGE_VERSION` and rebuild. The diff is the point: it is the last place
+anyone reads the rules before they reach a developer machine.
+
+To ship an organization baseline instead, replace the file and set `baseline.id`
+to the id it declares. Any filename works — `baseline.file` selects it. Point
+`url` at your own source, or leave it out to install only the reviewed copy.
 
 ### Customize hooks
 

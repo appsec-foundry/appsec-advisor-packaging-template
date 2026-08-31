@@ -34,7 +34,14 @@ if script.endswith("resolve-baseline-id.py"):
     if fail == "baseline":
         sys.stderr.write("ERROR: cannot fetch the baseline source\n")
         sys.exit(2)
-    print(os.environ.get("PYSTUB_BASELINE_ID", "aiscb-0.1.10"))
+    baseline_id = os.environ.get("PYSTUB_BASELINE_ID", "aiscb-0.1.10")
+    # The real resolver writes the document the id was read out of, so the
+    # scaffold vendors the same text it pins.
+    for i, a in enumerate(args):
+        if a == "--write-document" and i + 1 < len(args):
+            with open(args[i + 1], "w", encoding="utf-8") as handle:
+                handle.write(f"`baseline-id: {baseline_id}`. Stubbed baseline document.\n")
+    print(baseline_id)
     sys.exit(0)
 
 if script.endswith("package_internal_plugin.py"):

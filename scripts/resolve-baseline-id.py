@@ -4,11 +4,17 @@
 The initializer pins this id into a new organization profile, so a scaffolded
 repository starts on the current baseline instead of whatever the template
 happened to carry.
+
+``--write-document`` writes the same fetched text to a file. The profile pins an
+id *and* vendors the document that declares it, and the packager fails the build
+when the two disagree — so resolving the id without keeping the bytes it came
+from would scaffold a repository that cannot build.
 """
 
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 import re
 import sys
 import urllib.error
@@ -92,6 +98,23 @@ def resolve(url: str) -> str:
     return marker(fetch(url), url)
 
 
+def write_document(document: bytes, path: Path) -> None:
+    """Write the fetched baseline to ``path``, creating its directory.
+
+    Written through a temporary file in the same directory: a scaffold that was
+    interrupted mid-write would otherwise carry a truncated document that still
+    passes the id check on its first lines.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".partial")
+    try:
+        temporary.write_bytes(document)
+        temporary.replace(path)
+    except OSError as error:
+        temporary.unlink(missing_ok=True)
+        raise ResolveError(f"cannot write the baseline document to {path}: {error}") from error
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Print the baseline id declared by the published secure-coding baseline."
@@ -101,12 +124,22 @@ def main() -> int:
         default=BASELINE_URL,
         help="HTTPS source of the baseline document (default: the appsec-foundry baseline)",
     )
+    parser.add_argument(
+        "--write-document",
+        default=None,
+        metavar="PATH",
+        help="also write the fetched document there, so the profile can vendor the text it pins",
+    )
     args = parser.parse_args()
     try:
-        print(resolve(args.url))
+        document = fetch(args.url)
+        baseline_id = marker(document, args.url)
+        if args.write_document:
+            write_document(document, Path(args.write_document))
     except ResolveError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
+    print(baseline_id)
     return 0
 
 

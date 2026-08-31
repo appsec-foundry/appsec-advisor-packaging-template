@@ -230,12 +230,16 @@ resolve_latest_upstream_release() {
 }
 
 resolve_published_baseline_id() {
+  # $1: where to keep the fetched document. The profile pins an id and vendors
+  # the text declaring it; keeping only the id would scaffold a repository whose
+  # first `make validate` fails on the mismatch.
+  local document="$1"
   local script="${TEMPLATE_BASE}/scripts/resolve-baseline-id.py" resolved
   if [ ! -f "${script}" ]; then
     echo "ERROR: the packaging template is missing scripts/resolve-baseline-id.py." >&2
     return 2
   fi
-  if ! resolved="$(python3 "${script}")" || ! valid_baseline_id "${resolved}"; then
+  if ! resolved="$(python3 "${script}" --write-document "${document}")" || ! valid_baseline_id "${resolved}"; then
     echo "ERROR: could not read the published secure-coding baseline id." >&2
     echo "Without it the repository would start on the id this template carries, which ages" >&2
     echo "between releases. Restore access to the baseline source and retry, or decline the" >&2
@@ -770,9 +774,11 @@ fi
 # is touched: a repository that keeps the baseline must not start on the id this
 # template happens to carry.
 RESOLVED_BASELINE_ID=""
+RESOLVED_BASELINE_DOCUMENT=""
 if [ "${BASELINE_ENABLED}" = true ]; then
-  RESOLVED_BASELINE_ID="$(resolve_published_baseline_id)" || exit 2
-  echo "==> Published secure-coding baseline: ${RESOLVED_BASELINE_ID} (pinned)"
+  RESOLVED_BASELINE_DOCUMENT="$(mktemp "${TMPDIR:-/tmp}/appsec-baseline.XXXXXX")"
+  RESOLVED_BASELINE_ID="$(resolve_published_baseline_id "${RESOLVED_BASELINE_DOCUMENT}")" || exit 2
+  echo "==> Published secure-coding baseline: ${RESOLVED_BASELINE_ID} (pinned and vendored)"
 fi
 
 # ── Create repo ───────────────────────────────────────────────────────────────
@@ -908,6 +914,7 @@ CANDIDATE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/appsec-reinit-candidates.XXXXXX")"
 mkdir -p \
   "${TARGET_DIR}/org-profile/context" \
   "${TARGET_DIR}/org-profile/actors" \
+  "${TARGET_DIR}/org-profile/baselines" \
   "${TARGET_DIR}/org-profile/hooks" \
   "${TARGET_DIR}/org-skills" \
   "${TARGET_DIR}/docs" \
@@ -978,6 +985,39 @@ refresh_user_file \
   "${TEMPLATE_BASE}/org-profile/package-policy.yaml" \
   "${TARGET_DIR}/org-profile/package-policy.yaml" \
   "org-profile/package-policy.yaml"
+
+# The profile's baseline.file points into org-profile/baselines/, and the
+# packager compares that document's id with the pinned one — so the text has to
+# reach the scaffold, or the first `make validate` fails on a dangling file.
+BASELINE_FILE_NAME=""
+if [ -f "${TEMPLATE_BASE}/org-profile/baselines/README.md" ]; then
+  refresh_user_file \
+    "${TEMPLATE_BASE}/org-profile/baselines/README.md" \
+    "${TARGET_DIR}/org-profile/baselines/README.md" \
+    "org-profile/baselines/README.md"
+fi
+if [ -n "${RESOLVED_BASELINE_DOCUMENT}" ]; then
+  # The published document rather than the template's copy: the id was read out
+  # of these exact bytes, and the profile pins both together.
+  BASELINE_FILE_NAME="${RESOLVED_BASELINE_ID}.md"
+  refresh_user_file \
+    "${RESOLVED_BASELINE_DOCUMENT}" \
+    "${TARGET_DIR}/org-profile/baselines/${BASELINE_FILE_NAME}" \
+    "org-profile/baselines/${BASELINE_FILE_NAME}"
+  rm -f "${RESOLVED_BASELINE_DOCUMENT}"
+else
+  # Baseline declined: keep the template's vendored copy anyway, so the
+  # profile's file reference still resolves with the block disabled.
+  for vendored_baseline in "${TEMPLATE_BASE}"/org-profile/baselines/*.md; do
+    [ -f "${vendored_baseline}" ] || continue
+    vendored_name="$(basename "${vendored_baseline}")"
+    [ "${vendored_name}" = "README.md" ] && continue
+    refresh_user_file \
+      "${vendored_baseline}" \
+      "${TARGET_DIR}/org-profile/baselines/${vendored_name}" \
+      "org-profile/baselines/${vendored_name}"
+  done
+fi
 
 if [ "${DEMO_CONTENT}" = true ]; then
   refresh_user_file \
@@ -1083,9 +1123,14 @@ if [ "${BASELINE_ENABLED}" = false ]; then
   mv "${PROFILE_EDITED}" "${PROFILE_CANDIDATE}"
 fi
 if [ -n "${RESOLVED_BASELINE_ID}" ]; then
+  # Id and vendored file move together. Rewriting one without the other leaves a
+  # profile the packager rejects, which is the whole reason the document is kept.
   PROFILE_EDITED="${CANDIDATE_DIR}/org-profile-baseline-id.yaml"
   E_BASELINE_ID="$(sed_escape "${RESOLVED_BASELINE_ID}")"
-  sed "/^baseline:/,/^[^ ]/ s/^  id: .*$/  id: ${E_BASELINE_ID}/" \
+  E_BASELINE_FILE="$(sed_escape "${BASELINE_FILE_NAME}")"
+  sed \
+    -e "/^baseline:/,/^[^ ]/ s/^  id: .*$/  id: ${E_BASELINE_ID}/" \
+    -e "/^baseline:/,/^[^ ]/ s|^  file: .*$|  file: baselines/${E_BASELINE_FILE}|" \
     "${PROFILE_CANDIDATE}" > "${PROFILE_EDITED}"
   mv "${PROFILE_EDITED}" "${PROFILE_CANDIDATE}"
 fi
