@@ -23,8 +23,8 @@ immutable commit, verifies it before execution, and then starts its prompts:
 curl --proto '=https' \
   --fail --silent --show-error \
   --output appsec-advisor-init.sh \
-  https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/ac717bf5f0d83a149d32202b1957ccec3c3b1f5f/scripts/init-org-repo.sh &&
-echo 'a331c4d285793aa8977beb9bc21d2452e77e96717d0a4f4e6b1aeaf7c9e810c5  appsec-advisor-init.sh' |
+  https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/ae44e1bf0f48c7c333f45a0cc1e49e3d4cbd43f7/scripts/init-org-repo.sh &&
+echo 'e8c2c871b1502fa72f157a2c41ad6ff1eee79a7a995da8287e7ae4581753938b  appsec-advisor-init.sh' |
   if command -v sha256sum >/dev/null 2>&1; then
     sha256sum --check
   else
