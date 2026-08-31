@@ -32,11 +32,13 @@ lint:
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
 
-# Read-only: fails (exit 1) when the tracked upstream branch has moved.
+# Read-only: fails (exit 1) when the tracked upstream ref has moved or the
+# secure-coding baseline publishes a newer id. The baseline half needs the
+# upstream checkout on disk, because it runs its URL through the core's guard.
 upstream-check:
   stage: check
   script:
-    - make upstream-check
+    - make check-updates
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
 

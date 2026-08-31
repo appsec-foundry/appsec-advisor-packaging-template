@@ -32,15 +32,17 @@ jobs:
       - name: Lint shell scripts
         run: make lint
 
-  # Read-only: fails (exit 1) when the tracked upstream branch has moved.
+  # Read-only: fails (exit 1) when the tracked upstream ref has moved or the
+  # secure-coding baseline publishes a newer id. The baseline half needs the
+  # upstream checkout on disk, because it runs its URL through the core's guard.
   upstream-check:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout packaging repo
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Check upstream for drift
-        run: make upstream-check
+      - name: Check upstream and baseline for drift
+        run: make check-updates
 
   package:
     if: github.event_name != 'schedule'

@@ -141,7 +141,11 @@ upstream-update: ## Rebuild only when the selected upstream ref moved to a new c
 		echo "OK: nothing to rebuild"; \
 	fi
 
-check-updates: ## Check appsec-advisor and secure-coding baseline for updates
+# Depends on the upstream checkout: the baseline check runs its URL through the
+# core's SSRF guard, so a scheduled run has to have the core on disk. With
+# APPSEC_ADVISOR_SOURCE pointing elsewhere, FETCH_TARGET is empty and nothing is
+# fetched.
+check-updates: $(FETCH_TARGET) ## Check appsec-advisor and secure-coding baseline for updates
 	@status=0; \
 	$(UPSTREAM_ENV) scripts/upstream-check.sh || status=$$?; \
 	echo; \
