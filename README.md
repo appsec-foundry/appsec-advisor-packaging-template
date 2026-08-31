@@ -9,16 +9,28 @@ Template for building an internal [`appsec-advisor`](https://github.com/appsec-f
 
 ## Quick start
 
-**Prerequisites:** Git, Python 3.10+, Make, and a Bash 3.2+ environment
-(macOS/Linux or WSL on Windows). Local builds also require `PyYAML` and
-`jsonschema`. The initializer checks the required tools before building.
+**Prerequisites:** Git, curl, `sha256sum` (or `shasum` on macOS), Python 3.10+,
+Make, and a Bash 3.2+ environment (macOS/Linux or WSL on Windows). Local builds
+also require `PyYAML` and `jsonschema`. The initializer checks the required tools
+before building.
 
 ### 1. Create your packaging repository
 
-Run the initializer and follow its prompts:
+Copy and run the complete command block. It downloads the initializer from an
+immutable commit, verifies it before execution, and then starts its prompts:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh)
+curl --proto '=https' \
+  --fail --silent --show-error \
+  --output appsec-advisor-init.sh \
+  https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/ac717bf5f0d83a149d32202b1957ccec3c3b1f5f/scripts/init-org-repo.sh &&
+echo 'a331c4d285793aa8977beb9bc21d2452e77e96717d0a4f4e6b1aeaf7c9e810c5  appsec-advisor-init.sh' |
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum --check
+  else
+    shasum -a 256 --check
+  fi &&
+bash appsec-advisor-init.sh
 ```
 
 It creates and commits a local Git repository and can build the plugin. It does not push the repository or install the plugin.

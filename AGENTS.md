@@ -66,6 +66,12 @@ to your own skills — the threat-model pipeline does not query it.
 
 ## Invariants that matter
 
+- The `README.md` quick-start downloads `scripts/init-org-repo.sh` from an exact
+  Git commit and verifies its embedded SHA-256 before execution. Whenever the
+  initializer changes, commit that change first, then update the README URL and
+  checksum in a follow-up commit to reference those exact published bytes. Do
+  not replace the commit with a mutable branch or tag, and do not restore direct
+  execution of an unverified download.
 - `package-policy.yaml` is an **allow-list**. A new upstream skill, one of your
   own from `org-skills/`, any hook declared in the profile (`hooks:`), and any
   MCP server declared under `mcp.servers` reach the internal package only once
