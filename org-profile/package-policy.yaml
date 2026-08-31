@@ -21,6 +21,12 @@ plugin_surface:
       - clean-run-state
       - fix-run-issues
       - threat-model-health
+      # Secure-coding baseline. Without install-baseline the session status
+      # reports a missing or outdated baseline and offers no command to fix it,
+      # because the banner only names a skill the build actually ships.
+      - install-baseline
+      - verify-baseline
+      - remove-baseline
       # Add organization-owned skills from org-skills/<name>/ here, for example:
       # - acme-architecture-review
   hooks:
@@ -50,3 +56,7 @@ optional_skills:
   # Deterministic 0-100 score from the scanner layer; upstream has it on `dev`,
   # no release tag carries it yet. Included by APPSEC_ADVISOR_REF=dev builds.
   - security-score
+  # Refreshes an installed baseline in place, wherever it is loaded from.
+  # install-baseline picks a scope and wires an import; this one only rewrites
+  # the file the rules already come from. No release tag carries it yet.
+  - update-baseline
