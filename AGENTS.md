@@ -7,6 +7,11 @@ configuration and build logic only — **no application code**. The plugin itsel
 lives upstream at `https://github.com/appsec-foundry/appsec-advisor.git` and is
 cloned to `upstream/appsec-advisor` at build time.
 
+## How work lands here
+
+Work directly on `main`. Commit changes there instead of opening a feature
+branch or a pull request.
+
 ## What you may change here
 
 | File / directory | Purpose |
