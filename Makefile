@@ -48,7 +48,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint check release release-check fetch-upstream upstream-check packaging-template-check baseline-check check-updates drift-check upstream-update validate package release-package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean rebuild reinit test
+.PHONY: help lint check release release-check fetch-upstream upstream-check packaging-template-check baseline-check baseline-sync baseline-sync-check check-updates drift-check upstream-update validate package release-package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean rebuild reinit test
 
 help: ## Show this help
 	@if [ -t 1 ] && [ -z "$${NO_COLOR:-}" ]; then \
@@ -151,6 +151,20 @@ check-updates: $(FETCH_TARGET) ## Check appsec-advisor and secure-coding baselin
 	echo; \
 	baseline_status=0; \
 	python3 scripts/baseline-upstream-check.py --profile org-profile/org-profile.yaml --core-config "$(APPSEC_ADVISOR_SOURCE)/config.json" || baseline_status=$$?; \
+	echo; \
+	if python3 $(BASELINE_SYNC) --help 2>/dev/null | grep -q -- --profile; then \
+		sync_rc=0; \
+		sync_out="$$(python3 $(BASELINE_SYNC) --profile org-profile/org-profile.yaml --dry-run 2>&1)" || sync_rc=$$?; \
+		printf '%s\n' "$$sync_out"; \
+		if [ "$$sync_rc" -eq 3 ] || printf '%s\n' "$$sync_out" | grep -q '^would write'; then \
+			echo "DRIFT (baseline text): the vendored copy no longer matches its source"; \
+			baseline_status=1; \
+		elif [ "$$sync_rc" -ne 0 ]; then \
+			baseline_status=2; \
+		fi; \
+	else \
+		echo "NOTE: $(APPSEC_ADVISOR_REF) has no sync_baseline.py --profile — vendored-copy drift not checked"; \
+	fi; \
 	if [ "$$status" -eq 2 ] || [ "$$baseline_status" -eq 2 ]; then \
 		echo "ERROR: at least one upstream check could not complete" >&2; exit 2; \
 	fi; \
@@ -159,6 +173,47 @@ check-updates: $(FETCH_TARGET) ## Check appsec-advisor and secure-coding baselin
 		echo "$(DRIFT_NOTE)"; exit 1; \
 	fi; \
 	echo "OK: appsec-advisor and baseline are current"
+
+# Re-vendors baseline.file from the source the same profile declares, so the
+# copy the package ships cannot drift behind the URL it advertises. The id-only
+# check above cannot see that: text edited under an unchanged id passes it.
+# Carried by the upstream core, so it is available exactly when the selected ref
+# has it — a branch ref is a supported pin, not a lesser one.
+BASELINE_SYNC := "$(APPSEC_ADVISOR_SOURCE)/scripts/sync_baseline.py"
+BASELINE_SYNC_MISSING := \
+	echo "ERROR: the selected upstream ($(APPSEC_ADVISOR_REF)) has no sync_baseline.py --profile" >&2; \
+	echo "Pin APPSEC_ADVISOR_REF to a ref that carries it — a release tag or a branch such as dev." >&2; \
+	exit 2
+
+baseline-sync: $(FETCH_TARGET) ## Re-vendor baseline.file from the source the profile declares
+	@python3 $(BASELINE_SYNC) --help 2>/dev/null | grep -q -- --profile || { $(BASELINE_SYNC_MISSING); }; \
+	status=0; \
+	python3 $(BASELINE_SYNC) --profile org-profile/org-profile.yaml \
+		$${ACCEPT_ID:+--accept-id "$${ACCEPT_ID}"} || status=$$?; \
+	if [ "$$status" -eq 3 ]; then \
+		echo "NOTE: a new baseline id is a decision — re-run with ACCEPT_ID=<id> to move file and profile together."; \
+	fi; \
+	exit $$status
+
+# The dry run reports a pending rewrite on stdout and still exits 0, which would
+# make a scheduled job green while the vendored copy lags its source. Translated
+# here into the exit contract the other read-only checks use: 0 current, 1 drift,
+# 2 error.
+baseline-sync-check: $(FETCH_TARGET) ## Read-only: has the vendored baseline drifted from its source?
+	@python3 $(BASELINE_SYNC) --help 2>/dev/null | grep -q -- --profile || { $(BASELINE_SYNC_MISSING); }; \
+	status=0; \
+	out="$$(python3 $(BASELINE_SYNC) --profile org-profile/org-profile.yaml --dry-run 2>&1)" || status=$$?; \
+	printf '%s\n' "$$out"; \
+	if [ "$$status" -eq 3 ]; then \
+		echo "DRIFT (baseline text): the source publishes a new id"; \
+		echo "$(DRIFT_NOTE)"; exit 1; \
+	fi; \
+	if [ "$$status" -ne 0 ]; then exit 2; fi; \
+	if printf '%s\n' "$$out" | grep -q '^would write'; then \
+		echo "DRIFT (baseline text): the vendored copy no longer matches its source under the same id"; \
+		echo "$(DRIFT_NOTE)"; exit 1; \
+	fi; \
+	exit 0
 
 baseline-check: ## Read-only drift check for the configured secure-coding baseline
 	@status=0; \

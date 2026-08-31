@@ -151,7 +151,9 @@ make upstream-check                   # read-only drift check: has the build ref
 make upstream-update                  # same check, then `make rebuild` only on commit drift (a newer release still needs the pin raised)
 make packaging-template-check         # read-only drift check for the pinned packaging-template commit
 make baseline-check                   # read-only drift check: does the configured baseline id match its published document
-make check-updates                    # check appsec-advisor and baseline updates
+make baseline-sync-check              # read-only: has the vendored baseline.file drifted from its source under the same id
+make baseline-sync                    # re-vendor baseline.file from that source (ACCEPT_ID=<id> to move to a new id)
+make check-updates                    # check appsec-advisor and baseline updates, including vendored-copy drift
 make package                          # fetch upstream + build the package + smoke-test it
 APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package # pin a specific release
 make validate                         # validate org-profile.yaml only

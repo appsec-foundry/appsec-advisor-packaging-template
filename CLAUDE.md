@@ -35,6 +35,9 @@ make check         # offline gate: lint + test (no network, no upstream fetch)
 make release-check # release-boundary gate: check + quick-start pin + check-updates (advisory) + validate + package (builds a clean plugin against upstream)
 make upstream-check # read-only drift check: reports if the build ref moved (new commit) or a newer v* release exists. Drift makes the target fail (`Error 1`); that is the signal, not a crash. Does not touch upstream/
 make upstream-update # run that check, then `make rebuild` only when the ref moved to a new commit (or no checkout exists yet). Release drift is reported but not built — raise APPSEC_ADVISOR_REF first. Exits 2 when the check itself fails
+make baseline-check # read-only: does the configured baseline id still match its published document
+make baseline-sync-check # read-only: has the vendored baseline.file drifted from its source under the same id
+make baseline-sync # re-vendor baseline.file from that source (ACCEPT_ID=<id> to accept a new id)
 make validate      # validate org-profile.yaml against upstream schema only
 make package       # fetch + build + smoke test → build/<name>/
 make rebuild       # clean (removes upstream/ build/ dist/) then package
@@ -98,6 +101,13 @@ To read it from an installed plugin:
 The packaging repository currently uses only `main`, which pins
 `APPSEC_ADVISOR_REF=v0.6.0-beta.1`. Raise that pin in the `Makefile` when
 upstream tags a new release.
+
+A branch is a supported pin, not a lesser one. A release tag is the
+recommendation because it makes a build reproducible, but pinning `dev` or
+`main` is a first-class choice and nothing here requires a release to exist:
+`optional_skills` ships a skill the selected ref happens to carry, and
+`make baseline-sync` works whenever that ref carries `sync_baseline.py
+--profile`, reporting what is missing instead of failing when it does not.
 
 ```bash
 make package                              # upstream v0.6.0-beta.1 (default)

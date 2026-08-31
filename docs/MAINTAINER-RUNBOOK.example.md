@@ -119,11 +119,18 @@ install fails outright in both cases, in every package already distributed —
 `make validate` therefore rejects a `file` that is missing or declares a
 different id than `baseline.id`.
 
-Use `make baseline-check` to compare the pinned id against the published
-document. On drift, write the new document into `org-profile/baselines/`, point
-`baseline.id` and `baseline.file` at it, review the diff, then raise
-`PACKAGE_VERSION` and rebuild. The diff is the point: it is the last place
-anyone reads the rules before they reach a developer machine.
+Two checks cover the two ways this drifts. `make baseline-check` compares the
+pinned id against the published document. `make baseline-sync-check` compares
+the vendored copy with that same source, which is the case the id cannot show:
+text edited under an unchanged id leaves the id check green while the copy the
+package ships falls behind. Both run in `make check-updates` and on the CI
+schedule; the second is skipped with a note when the selected upstream ref does
+not carry `sync_baseline.py --profile`.
+
+`make baseline-sync` re-vendors the file. On a new published id it stops and
+asks for `ACCEPT_ID=<id>`, which moves file and profile together. Review the
+diff, then raise `PACKAGE_VERSION` and rebuild. The diff is the point: it is the
+last place anyone reads the rules before they reach a developer machine.
 
 To ship an organization baseline instead, replace the file and set `baseline.id`
 to the id it declares. Any filename works — `baseline.file` selects it. Point
