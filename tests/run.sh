@@ -723,6 +723,26 @@ if grep -Fq 'glab release create "${CI_COMMIT_TAG}"' \
   pass "ci: tagged builds publish tested archives as platform releases"
 else fail "ci: tagged builds publish tested archives as platform releases" "release job incomplete"; fi
 
+if grep -Fq 'os: [ubuntu-latest, ubuntu-24.04-arm]' \
+     "$ROOT/.github/workflows/ci.yml" && \
+   grep -Fq 'package-arm64:' "$ROOT/ci-templates/github/workflows/package.yml" && \
+   grep -Fq 'runs-on: ubuntu-24.04-arm' "$ROOT/ci-templates/github/workflows/package.yml" && \
+   grep -Fq 'needs: [package, package-arm64]' "$ROOT/ci-templates/github/workflows/package.yml" && \
+   grep -Fq 'package-arm64:' "$ROOT/ci-templates/gitlab-ci.yml" && \
+   grep -Fq 'saas-linux-small-arm64' "$ROOT/ci-templates/gitlab-ci.yml" && \
+   grep -Fq 'job: package-arm64' "$ROOT/ci-templates/gitlab-ci.yml"; then
+  pass "ci: amd64 and ARM64 packaging paths are gated"
+else fail "ci: amd64 and ARM64 packaging paths are gated" "ARM64 job incomplete"; fi
+
+if grep -Fq 'CPython 3.11 on Linux amd64 and arm64' "$ROOT/ci-requirements.lock" && \
+   grep -Fq 'sha256:10892704fc220243f5305762e276552a0395f7beb4dbf9b14ec8fd43b57f126c' \
+     "$ROOT/ci-requirements.lock" && \
+   grep -Fq 'sha256:acc992ab27b15f852c76755eb2ab7dce86585ddadba6fa5946e58556088845b4' \
+     "$ROOT/ci-requirements.lock" && \
+   grep -Fq -- '--only-binary=:all:' "$ROOT/ci-requirements.lock"; then
+  pass "ci: ARM64 wheels remain hash-pinned and binary-only"
+else fail "ci: ARM64 wheels remain hash-pinned and binary-only" "lockfile incomplete"; fi
+
 # The initializer pins the id the published baseline declares, not the one the
 # template carries — and keeps the template's when the baseline cannot be read.
 d="$(newdir)"

@@ -7,6 +7,8 @@ variables:
   INTERNAL_NAME: "acme-appsec"
   PACKAGE_VERSION: "0.1.0"
   APPSEC_ADVISOR_URL: "https://github.com/appsec-foundry/appsec-advisor.git"
+  # Override for self-managed runners; GitLab.com provides this hosted tag.
+  ARM64_RUNNER_TAG: "saas-linux-small-arm64"
   # PACKAGE_VERSION is organization-owned. A v* pipeline tag overrides it below;
   # VERSION remains available as a one-off CI/CD override.
   PYTHONDONTWRITEBYTECODE: "1"
@@ -59,6 +61,17 @@ package:
       - "dist/${INTERNAL_NAME}-*.zip.sha256"
     expire_in: 30 days
 
+# The package is platform-neutral, so ARM64 verifies the packaging path
+# without publishing a duplicate archive with the same filename.
+package-arm64:
+  stage: package
+  tags:
+    - $ARM64_RUNNER_TAG
+  rules:
+    - if: $CI_PIPELINE_SOURCE != "schedule"
+  script:
+    - make package
+
 # Tag releases require the project's Package Registry.
 release:
   stage: release
@@ -67,6 +80,8 @@ release:
   needs:
     - job: package
       artifacts: true
+    - job: package-arm64
+      artifacts: false
   variables:
     GLAB_ENABLE_CI_AUTOLOGIN: "true"
   rules:

@@ -219,7 +219,11 @@ make ci-gitlab
 
 Both pipelines install reviewed Python dependencies from
 `ci-requirements.lock`, execute `make release-package`, retain build artifacts,
-and publish versioned archives for `v*` tags.
+and publish versioned archives for `v*` tags. They additionally run the
+platform-neutral packaging and smoke test on Linux ARM64. GitHub Actions uses
+`ubuntu-24.04-arm`; GitLab.com uses `saas-linux-small-arm64`. Set
+`ARM64_RUNNER_TAG` to the corresponding tag when using a self-managed GitLab
+runner.
 
 GitHub Actions supports manual runs, `v*` tag pushes, and a weekly upstream
 drift check. Normal branch pushes and pull requests do not trigger the supplied
