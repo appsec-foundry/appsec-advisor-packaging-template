@@ -1,9 +1,9 @@
 # Vendored secure-coding baselines
 
 The file named by `baseline.file` in `org-profile/org-profile.yaml` travels with
-the built package and is what `install-baseline` writes. It is the source, not a
-fallback: the profile declares no `url`, so nothing is fetched at install time
-and no machine installs rules that were never reviewed here.
+the built package. `baseline.url` is what an install fetches; this copy is what
+it writes when that URL is unreachable or has moved on to a newer id. Without it
+an install fails outright in both cases, in every package already distributed.
 
 Replace the file to ship your organization's own baseline. Any name works —
 `baseline.file` decides which one is used, and `make validate` fails when the
@@ -17,6 +17,31 @@ file is missing or declares an id other than `baseline.id`.
 
 A tag rather than a branch: a protected branch is not an immutable release, so
 `main` gives a later reader nothing to compare against.
+
+## Adding your own rules
+
+One file, one id. The plugin installs a single baseline file and wires a single
+import, so an overlay is your rules appended to the baseline text rather than a
+second document beside it. Mark the result as a derivative by changing the one
+`baseline-id:` line to `<base>+<org>`, for example `aiscb-0.1.10+acme`: it
+counts as installed and is reported with its suffix, so a reader sees the
+adaptation.
+
+```
+AI Secure Coding Baseline · aiscb-0.1.10+acme · this machine
+```
+
+Three things to get right:
+
+- Leave `baseline.id` on the base id. `make baseline-check` compares it with the
+  published document exactly, so `aiscb-0.1.10+acme` there reports drift forever.
+  The file carries the suffix; the profile keeps naming what it was derived from.
+- Keep one `baseline-id:` line. Two — the baseline's and your overlay's — read as
+  a second, foreign baseline loaded beside the configured one, and the session
+  status says `also acme-sec-1.0.0 in this machine` in every session.
+- Point `baseline.url` at your own document, or drop it. Left on the upstream
+  source, `make baseline-sync` overwrites your combined file with the plain
+  upstream text, and the id check does not stop it because a derivative matches.
 
 ## Updating
 
