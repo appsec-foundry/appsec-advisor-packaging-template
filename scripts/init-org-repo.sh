@@ -940,6 +940,7 @@ for helper in \
   archive-built-plugin.py \
   finalize-package-version.py \
   rewrite-packaged-origins.py \
+  rewrite-packaged-plugin-paths.py \
   release.sh \
   reinit-org-repo.sh; do
   if [ -f "${TEMPLATE_BASE}/scripts/${helper}" ]; then

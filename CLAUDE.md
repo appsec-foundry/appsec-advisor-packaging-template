@@ -8,7 +8,8 @@ A **packaging template** for building an internal `appsec-advisor` Claude Code p
 
 The core packaging, profile validation, and smoke-test scripts live upstream. The
 local `scripts/` directory fetches and invokes that core, then finalizes the
-organization version, normalizes known legacy origins, generates package-specific
+organization version, normalizes known legacy origins, retargets the upstream
+plugin-directory fallbacks to the packaged name, generates package-specific
 help and README content, prunes disabled banner code, and optionally archives the
 verified result.
 

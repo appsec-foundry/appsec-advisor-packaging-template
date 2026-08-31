@@ -220,6 +220,14 @@ python3 "${SOURCE}/scripts/package_internal_plugin.py" \
 python3 "${SCRIPT_DIR}/rewrite-packaged-origins.py" \
   --plugin-root "build/${INTERNAL_NAME}"
 
+# Upstream skills and agents fall back to locating the plugin by its own
+# directory name when CLAUDE_PLUGIN_ROOT is unset. The packager renames the
+# plugin but leaves those globs on "appsec-advisor", so retarget them to the
+# packaged directory instead of shipping a fallback that can never match.
+python3 "${SCRIPT_DIR}/rewrite-packaged-plugin-paths.py" \
+  --plugin-root "build/${INTERNAL_NAME}" \
+  --name "${INTERNAL_NAME}"
+
 # Upstream currently uses plugin.json.version both as the user-facing package
 # identity and for compatibility.core checks. Preserve its version separately,
 # then make the organization-owned version authoritative for Claude Code,
