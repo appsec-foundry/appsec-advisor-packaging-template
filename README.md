@@ -113,6 +113,7 @@ claude plugin install <plugin-name>@<marketplace-name>
 | `org-profile/org-profile.yaml` | Identity, presets, requirements, policy, baseline, context, runtime toggles, hooks, and MCP servers |
 | `org-profile/context/organization.md` | Organization context supplied to analyses as untrusted reference data |
 | `org-profile/actors/*.yaml` | Organization-specific threat actors |
+| `org-profile/baselines/*.md` | The secure-coding baseline the package ships |
 | `org-profile/package-policy.yaml` | Allowlist for packaged skills, hooks, and MCP servers |
 | `org-profile/hooks/*.py` | Organization-owned Claude Code event hooks |
 | `org-skills/<skill-id>/SKILL.md` | Organization-owned skills packaged alongside upstream skills |
@@ -122,6 +123,23 @@ claude plugin install <plugin-name>@<marketplace-name>
 Declare MCP servers only in the profile's `mcp:` block. Reference secrets with `${ENV_VAR}`; never commit tokens or put credentials in server URLs.
 
 `upstream/`, `build/`, and `dist/` are generated and must not be committed. Generated `config.json`, package-surface metadata, help, and packaged READMEs must be changed through the profile or package policy rather than edited in place.
+
+## Secure-coding baseline
+
+The package ships a secure-coding baseline: coding rules the assistant has in
+context before it writes anything, so they apply to every prompt and not only to
+the ones that mention security. Developers install it with
+`/acme-appsec:install-baseline`, and the session status tells them whether it is
+loaded.
+
+The rules themselves travel inside the package, as a file under
+`org-profile/baselines/`. That copy is what gets installed whenever the
+published document cannot be reached or has moved on to a newer version, which
+is why it is committed here rather than fetched at build time.
+
+To ship your own rules, write them into that file and give it a derived id such
+as `aiscb-0.1.10+acme`. `org-profile/baselines/README.md` covers how, and what
+to watch out for.
 
 ## Common commands
 
@@ -138,6 +156,7 @@ Declare MCP servers only in the profile's `mcp:` block. Reference secrets with `
 | `make upstream-update` | Rebuild, but only when the selected upstream ref moved to a new commit |
 | `make packaging-template-check` | Check whether the packaging template has moved |
 | `make baseline-check` | Compare the configured baseline with its published document |
+| `make baseline-sync` | Refresh the shipped baseline file from that same source |
 | `make check-updates` | Check appsec-advisor and baseline updates |
 | `make reinit` | Reapply the pinned template while preserving organization settings |
 

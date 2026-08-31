@@ -110,9 +110,15 @@ After the plugin loads, start with:
 
 ```text
 /acme-appsec:help
+/acme-appsec:install-baseline
 /acme-appsec:check-permissions --update
 /acme-appsec:create-threat-model
 ```
+
+`install-baseline` puts our secure-coding rules where Claude Code reads them, so
+they apply to every prompt rather than only to the ones about security. The
+rules ship inside the plugin, so this works offline as well. The status line at
+the start of a session says whether they are loaded.
 
 The packaged README and `/acme-appsec:help` are generated from the actual
 package surface. They show the exact commands included by the Acme AppSec Team
