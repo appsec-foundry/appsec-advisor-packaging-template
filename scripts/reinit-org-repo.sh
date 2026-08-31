@@ -71,6 +71,17 @@ if [ ! -f "${REPO_ROOT}/Makefile" ] || [ ! -f "${REPO_ROOT}/org-profile/org-prof
   exit 2
 fi
 
+# The template checkout passes the check above: it carries the same Makefile and
+# org-profile. Reinitializing it would replace the template's own sources with a
+# rendered organization repository, so refuse on files only the template has.
+if [ -f "${REPO_ROOT}/README.example.md" ] &&
+   [ -f "${REPO_ROOT}/docs/MAINTAINER-RUNBOOK.example.md" ] &&
+   [ -f "${REPO_ROOT}/scripts/init-org-repo.sh" ]; then
+  echo "ERROR: this is the packaging template itself, not a repository generated from it" >&2
+  echo "Run 'make reinit' in a repository created by scripts/init-org-repo.sh." >&2
+  exit 2
+fi
+
 if ! valid_template_ref "${TEMPLATE_REF}"; then
   echo "ERROR: APPSEC_ADVISOR_TEMPLATE_REF is not a safe branch, tag, or commit: ${TEMPLATE_REF}" >&2
   exit 2

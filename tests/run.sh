@@ -1022,6 +1022,16 @@ if [ "$rc" = 2 ] && \
   pass "reinit: unsupported Python version fails clearly"
 else fail "reinit: unsupported Python version fails clearly" "rc=$rc"; fi
 
+d="$(newdir)"
+reinit_prereq_log="$d/reinit-template-root.log"
+(cd "$ROOT" && timeout 20 bash -x "$REINIT") </dev/null >"$reinit_prereq_log" 2>&1
+rc=$?
+cat "$reinit_prereq_log" >>"$COV"
+if [ "$rc" = 2 ] && \
+   grep -Fq 'this is the packaging template itself' "$reinit_prereq_log"; then
+  pass "reinit: the template checkout itself is refused"
+else fail "reinit: the template checkout itself is refused" "rc=$rc"; fi
+
 # Declining the optional initial build keeps it as a required next step.
 d="$(newdir)"
 tgt="$d/out"
