@@ -146,7 +146,7 @@ make                                  # (or `make help`) lists the targets by to
 make lint                             # shellcheck over scripts/ + tests/run.sh (skipped when shellcheck is absent)
 make test                             # shell test suite + coverage gate (skipped when tests/ is absent, e.g. in a scaffolded repo)
 make check                            # offline gate: lint + test (no network, no upstream fetch)
-make release-check                    # release gate: check + check-updates (advisory) + validate + package
+make release-check                    # release gate: check + quick-start pin + check-updates (advisory) + validate + package
 make upstream-check                   # read-only drift check: has the build ref moved, is there a newer v* release
 make upstream-update                  # same check, then `make rebuild` only on commit drift (a newer release still needs the pin raised)
 make packaging-template-check         # read-only drift check for the pinned packaging-template commit

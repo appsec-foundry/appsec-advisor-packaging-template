@@ -183,13 +183,23 @@ drift-check:
 ##@ Release
 
 release-check: ## Release-boundary gate: check + validate + build a clean plugin against upstream
-	@echo "==> [1/4] check (lint + test)"
+	@echo "==> [1/5] check (lint + test)"
 	@$(MAKE) --no-print-directory check
-	@echo "==> [2/4] check-updates (advisory)"
+	# Not in `make check`: the documented workflow commits the initializer first
+	# and repins the README after, so the two disagree in between. A release must
+	# not carry that state. Guarded because a scaffolded repository has no such
+	# pin and does not ship the script.
+	@if [ -f scripts/check-quickstart-pin.py ]; then \
+		echo "==> [2/5] quick-start pin"; \
+		python3 scripts/check-quickstart-pin.py; \
+	else \
+		echo "==> [2/5] quick-start pin (not applicable)"; \
+	fi
+	@echo "==> [3/5] check-updates (advisory)"
 	@$(MAKE) --no-print-directory check-updates || echo "NOTE: update available or check error (advisory) — not blocking release-check"
-	@echo "==> [3/4] validate"
+	@echo "==> [4/5] validate"
 	@$(MAKE) --no-print-directory validate
-	@echo "==> [4/4] package"
+	@echo "==> [5/5] package"
 	@$(MAKE) --no-print-directory package
 	@echo "OK: release-check passed"
 

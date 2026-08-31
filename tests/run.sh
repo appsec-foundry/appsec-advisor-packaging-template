@@ -45,6 +45,7 @@ PACKAGED_PATHS_TEST="$HERE/test_rewrite_packaged_plugin_paths.py"
 LATEST_RELEASE_TEST="$HERE/test_select_latest_release.py"
 ORG_HOOK_COLLISION_TEST="$HERE/test_org_hook_collisions.py"
 RESOLVE_POLICY_TEST="$HERE/test_resolve_package_policy.py"
+QUICKSTART_PIN_TEST="$HERE/test_check_quickstart_pin.py"
 
 # -B: importing guard.py must not leave __pycache__ in org-profile/hooks/,
 # which the packager would copy and the smoke test rejects.
@@ -62,6 +63,7 @@ RESOLVE_POLICY_TEST="$HERE/test_resolve_package_policy.py"
 /usr/bin/python3 -B "$LATEST_RELEASE_TEST"
 /usr/bin/python3 -B "$ORG_HOOK_COLLISION_TEST"
 /usr/bin/python3 -B "$RESOLVE_POLICY_TEST"
+/usr/bin/python3 -B "$QUICKSTART_PIN_TEST"
 
 COV="$(mktemp)"
 WORKROOT="$(mktemp -d)"
