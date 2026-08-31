@@ -1,57 +1,49 @@
-# Vendored secure-coding baselines
+# Baselines
 
-The file named by `baseline.file` in `org-profile/org-profile.yaml` travels with
-the built package. `baseline.url` is what an install fetches; this copy is what
-it writes when that URL is unreachable or has moved on to a newer id. Without it
-an install fails outright in both cases, in every package already distributed.
+This folder holds the secure-coding baseline that ships with the package.
+`baseline.file` in `org-profile/org-profile.yaml` picks the file, `baseline.url`
+says where an install fetches from.
 
-Replace the file to ship your organization's own baseline. Any name works —
-`baseline.file` decides which one is used, and `make validate` fails when the
-file is missing or declares an id other than `baseline.id`.
+The copy here is not a nice-to-have. It is what gets installed whenever the URL
+cannot be reached or has moved on to a newer version, and without it an install
+simply fails.
 
-## What is in here
+| File | Id | Source | Pinned at |
+|---|---|---|---|
+| `aiscb-0.1.10.md` | `aiscb-0.1.10` | https://github.com/appsec-foundry/aiscb | tag `v0.1.10` |
 
-| File | Id | Source | Pinned at | SHA-256 |
-|---|---|---|---|---|
-| `aiscb-0.1.10.md` | `aiscb-0.1.10` | https://github.com/appsec-foundry/aiscb | tag `v0.1.10` | `1d01542b50d29e649c56ba6d9ea896aa7988b9eb6af1b08f633cfa9d2361e5b6` |
+SHA-256: `1d01542b50d29e649c56ba6d9ea896aa7988b9eb6af1b08f633cfa9d2361e5b6`.
+Pinned to a tag rather than a branch, so there is something fixed to compare
+against later.
 
-A tag rather than a branch: a protected branch is not an immutable release, so
-`main` gives a later reader nothing to compare against.
+## Shipping your own rules
 
-## Adding your own rules
-
-One file, one id. The plugin installs a single baseline file and wires a single
-import, so an overlay is your rules appended to the baseline text rather than a
-second document beside it. Mark the result as a derivative by changing the one
-`baseline-id:` line to `<base>+<org>`, for example `aiscb-0.1.10+acme`: it
-counts as installed and is reported with its suffix, so a reader sees the
-adaptation.
+Write them into the baseline file and change its `baseline-id:` line to
+`aiscb-0.1.10+acme`. The suffix says these are your rules on top of that
+version, and the session status shows it:
 
 ```
 AI Secure Coding Baseline · aiscb-0.1.10+acme · this machine
 ```
 
-Three things to get right:
+Keep it to one `baseline-id:` line. Two of them look like two competing rule
+sets, and every session will complain about it.
 
-- Leave `baseline.id` on the base id. `make baseline-check` compares it with the
-  published document exactly, so `aiscb-0.1.10+acme` there reports drift forever.
-  The file carries the suffix; the profile keeps naming what it was derived from.
-- Keep one `baseline-id:` line. Two — the baseline's and your overlay's — read as
-  a second, foreign baseline loaded beside the configured one, and the session
-  status says `also acme-sec-1.0.0 in this machine` in every session.
-- Point `baseline.url` at your own document, or drop it. Left on the upstream
-  source, `make baseline-sync` overwrites your combined file with the plain
-  upstream text, and the id check does not stop it because a derivative matches.
+In the profile, leave `baseline.id` as `aiscb-0.1.10`, without the suffix. That
+is the version `make baseline-check` watches for updates.
+
+Point `baseline.url` at your own copy, or remove it. If it still points
+upstream, `make baseline-sync` replaces your file with the original text.
 
 ## Updating
 
-`make baseline-check` reports when the check source publishes a newer release.
-Updating is a reviewed change, not a fetch:
+`make baseline-check` tells you when a newer version has been published.
+Updating is a review, not a download:
 
-1. write the new document into this directory under its own id;
-2. point `baseline.file` and `baseline.id` in the profile at it;
-3. record the new row above and delete the row and file it replaces;
-4. `make validate`, then raise `PACKAGE_VERSION` and rebuild.
+1. put the new document in this folder, named after its id
+2. point `baseline.file` and `baseline.id` at it
+3. update the table above, delete the file it replaces
+4. run `make validate`, raise `PACKAGE_VERSION`, rebuild
 
-The diff of step 1 is the point of the exercise — it is the last place anyone
-reads the rules before they reach a developer machine.
+Read the diff in step 1. It is the last time anyone sees these rules before
+they reach a developer's machine.
