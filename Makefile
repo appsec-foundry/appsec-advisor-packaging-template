@@ -93,10 +93,23 @@ help: ## Show this help
 	@printf '\nCurrent settings (override on the command line or via env):\n'
 	@printf '  INTERNAL_NAME=%s\n  PACKAGE_VERSION=%s\n  APPSEC_ADVISOR_REF=%s\n  APPSEC_ADVISOR_TEMPLATE_REF=%s\n  BASELINE_SOURCE_KIND=%s\n' \
 		'$(INTERNAL_NAME)' '$(PACKAGE_VERSION)' '$(APPSEC_ADVISOR_REF)' '$(APPSEC_ADVISOR_TEMPLATE_REF)' '$(BASELINE_SOURCE_KIND)'
-	@if printf '%s' '$(BASELINE_SOURCE_KIND)' | grep -q '^organization'; then \
-		printf '  ORG_BASELINE_URL=%s\n  ORG_BASELINE_REF=%s\n  ORG_BASELINE_SOURCE=%s\n  ORG_BASELINE_DOC=%s\n  ORG_BASELINE_SKILLS_DIR=%s\n' \
-			'$(ORG_BASELINE_URL)' '$(ORG_BASELINE_REF)' '$(ORG_BASELINE_SOURCE)' '$(ORG_BASELINE_DOC)' '$(ORG_BASELINE_SKILLS_DIR)'; \
-	fi
+	@case '$(BASELINE_SOURCE_KIND)' in \
+		organization-git) \
+			printf '  ORG_BASELINE_URL=%s\n  ORG_BASELINE_REF=%s\n  ORG_BASELINE_SOURCE=%s (optional local override)\n  ORG_BASELINE_DOC=%s\n  ORG_BASELINE_SKILLS_DIR=%s\n' \
+				'$(ORG_BASELINE_URL)' '$(ORG_BASELINE_REF)' '$(ORG_BASELINE_SOURCE)' '$(ORG_BASELINE_DOC)' '$(ORG_BASELINE_SKILLS_DIR)' ;; \
+		organization-https) printf '  ORG_BASELINE_URL=%s\n' '$(ORG_BASELINE_URL)' ;; \
+		organization) \
+			printf '  ORG_BASELINE_SOURCE=%s\n  ORG_BASELINE_DOC=%s\n  ORG_BASELINE_SKILLS_DIR=%s\n' \
+				'$(ORG_BASELINE_SOURCE)' '$(ORG_BASELINE_DOC)' '$(ORG_BASELINE_SKILLS_DIR)' ;; \
+	esac
+	@printf '\nBaseline sources:\n'
+	@printf '  aiscb               Sync the generic AISCB document configured in org-profile.yaml.\n'
+	@printf '  organization-git    Temporarily fetch URL/ref; copy the composed document and optional skills.\n'
+	@printf '  organization-https  Download exactly one composed HTTPS document; no skills or archives.\n'
+	@printf '  disabled             Skip baseline checks and synchronization.\n'
+	@printf 'Packaging always uses the tracked reviewed copies; it never syncs a baseline implicitly.\n'
+	@printf 'Use baseline-sync-check before baseline-sync. A new baseline id requires ACCEPT_ID=<id>.\n'
+	@printf 'Synced org skills ship only after explicit inclusion in org-profile/package-policy.yaml.\n'
 
 ##@ Build
 
@@ -206,7 +219,7 @@ BASELINE_SYNC_MISSING := \
 	echo "Pin APPSEC_ADVISOR_REF to a ref that carries it — a release tag or a branch such as dev." >&2; \
 	exit 2
 
-baseline-sync: $(BASELINE_SYNC_TARGET) ## Sync baseline.file and optional org skills from the configured source
+baseline-sync: $(BASELINE_SYNC_TARGET) ## Sync baseline.file and optional org skills (ACCEPT_ID=<id> for a new id)
 
 baseline-sync-check: $(BASELINE_SYNC_CHECK_TARGET) ## Read-only drift check for the configured baseline source
 

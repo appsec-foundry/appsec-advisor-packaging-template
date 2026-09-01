@@ -945,7 +945,10 @@ org_check_rc=0
 (cd "$tgt" && env PATH="$org_git_bin:$PATH" GIT_SSH_COMMAND="$org_fake_ssh" GIT_SSH_VARIANT=ssh \
   ORG_BASELINE_TEST_REMOTE="$org_baseline_remote" make --no-print-directory baseline-sync-check) \
   >>"$org_init_log" 2>&1 || org_check_rc=$?
-if [ "$rc" = 0 ] && [ "$org_check_rc" = 0 ] && \
+org_help="$d/org-help.log"
+org_help_rc=0
+(cd "$tgt" && make --no-print-directory help) >"$org_help" 2>&1 || org_help_rc=$?
+if [ "$rc" = 0 ] && [ "$org_check_rc" = 0 ] && [ "$org_help_rc" = 0 ] && \
    grep -Fqx 'BASELINE_SOURCE_KIND ?= organization-git' "$tgt/Makefile" && \
    grep -Fqx 'ORG_BASELINE_URL ?= git@example.test:baseline.git' "$tgt/Makefile" && \
    grep -Fqx 'ORG_BASELINE_REF ?= main' "$tgt/Makefile" && \
@@ -959,9 +962,13 @@ if [ "$rc" = 0 ] && [ "$org_check_rc" = 0 ] && \
    [ -f "$tgt/org-skills/acme-secure-review/SKILL.md" ] && \
    grep -Fq '"acme-secure-review"' "$tgt/.org-baseline-sync-state.json" && \
    ! grep -Fqx '      - acme-secure-review' "$tgt/org-profile/package-policy.yaml" && \
-   grep -Fq '"kind": "git"' "$tgt/.org-baseline-sync-state.json"; then
+   grep -Fq '"kind": "git"' "$tgt/.org-baseline-sync-state.json" && \
+   grep -Fq 'ORG_BASELINE_URL=git@example.test:baseline.git' "$org_help" && \
+   grep -Fq 'Temporarily fetch URL/ref; copy the composed document and optional skills.' "$org_help" && \
+   grep -Fq 'Packaging always uses the tracked reviewed copies' "$org_help" && \
+   grep -Fq 'ACCEPT_ID=<id>' "$org_help"; then
   pass "init: organization Git baseline and optional skills are fetched and initialized"
-else fail "init: organization Git baseline and optional skills are fetched and initialized" "init_rc=$rc check_rc=$org_check_rc"; fi
+else fail "init: organization Git baseline and optional skills are fetched and initialized" "init_rc=$rc check_rc=$org_check_rc help_rc=$org_help_rc"; fi
 
 git_no_skills_tgt="$d/git-no-skills-out"
 printf 'Test Org\n\n\n\n\n%s\nn\n2\ngit@example.test:baseline.git\n\ndist/secure-coding-baseline.md\n\n\n\nn\n' \
@@ -1042,17 +1049,22 @@ cat "$d_https/https-init.err" >>"$COV"
 https_check_rc=0
 (cd "$https_tgt" && env PYSTUB_ORG_BASELINE_ID=test-https-1.0.0 \
   make --no-print-directory baseline-sync-check) >/dev/null 2>>"$COV" || https_check_rc=$?
-if [ "$rc" = 0 ] && [ "$https_check_rc" = 0 ] && \
+https_help="$d_https/https-help.log"
+https_help_rc=0
+(cd "$https_tgt" && make --no-print-directory help) >"$https_help" 2>&1 || https_help_rc=$?
+if [ "$rc" = 0 ] && [ "$https_check_rc" = 0 ] && [ "$https_help_rc" = 0 ] && \
    grep -Fq 'enter one HTTPS document URL without credentials' "$d_https/https-init.err" && \
    grep -Fqx 'BASELINE_SOURCE_KIND ?= organization-https' "$https_tgt/Makefile" && \
    grep -Fqx 'ORG_BASELINE_URL ?= https://security.example.test/baseline.md' "$https_tgt/Makefile" && \
    grep -Fqx 'ORG_BASELINE_SKILLS_DIR ?=' "$https_tgt/Makefile" && \
    grep -Fqx '  id: test-https-1.0.0' "$https_tgt/org-profile/org-profile.yaml" && \
    ! grep -A8 '^baseline:' "$https_tgt/org-profile/org-profile.yaml" | grep -Fq '  url:' && \
+   grep -Fq 'ORG_BASELINE_URL=https://security.example.test/baseline.md' "$https_help" && \
+   grep -Fq 'Download exactly one composed HTTPS document; no skills or archives.' "$https_help" && \
    grep -Fq 'baseline-id: test-https-1.0.0' \
      "$https_tgt/org-profile/baselines/secure-coding-baseline.md"; then
   pass "init: one organization HTTPS document is initialized without skills"
-else fail "init: one organization HTTPS document is initialized without skills" "rc=$rc"; fi
+else fail "init: one organization HTTPS document is initialized without skills" "rc=$rc help_rc=$https_help_rc"; fi
 
 https_reinit_rc=0
 (cd "$https_tgt" && env BASH_ENV="$TRACE_CHILD" APPSEC_ADVISOR_TEMPLATE_SOURCE="$ROOT" REINIT_BUILD=0 \
