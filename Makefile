@@ -30,11 +30,21 @@ APPSEC_ADVISOR_TEMPLATE_SOURCE ?=
 REINIT_BUILD ?= 1
 export APPSEC_ADVISOR_TEMPLATE_URL APPSEC_ADVISOR_TEMPLATE_REF APPSEC_ADVISOR_TEMPLATE_SOURCE REINIT_BUILD
 
+# Baseline source selected by the initializer: aiscb, organization, or disabled.
+# The organization mode consumes an already checked-out local repository. That
+# repository owns composition of the generic baseline and its org overlay.
+BASELINE_SOURCE_KIND ?= aiscb
+ORG_BASELINE_SOURCE ?=
+# Paths inside the local organization repository: its composed baseline and an
+# optional directory whose child directories are copied to org-skills/.
+ORG_BASELINE_DOC ?=
+ORG_BASELINE_SKILLS_DIR ?=
+
 # Environment passed to the fetch and packaging scripts. The recipes are
 # silenced with '@' so the scripts' own '==>' progress lines start the output
 # instead of a 200-character variable assignment.
 UPSTREAM_ENV := APPSEC_ADVISOR_URL="$(APPSEC_ADVISOR_URL)" APPSEC_ADVISOR_REF="$(APPSEC_ADVISOR_REF)" APPSEC_ADVISOR_DEST="$(APPSEC_ADVISOR_DEST)"
-PACKAGE_ENV := $(UPSTREAM_ENV) APPSEC_ADVISOR_SOURCE="$(APPSEC_ADVISOR_SOURCE)" INTERNAL_NAME="$(INTERNAL_NAME)"
+PACKAGE_ENV := $(UPSTREAM_ENV) APPSEC_ADVISOR_SOURCE="$(APPSEC_ADVISOR_SOURCE)" INTERNAL_NAME="$(INTERNAL_NAME)" BASELINE_SOURCE_KIND="$(BASELINE_SOURCE_KIND)"
 
 # Printed by the read-only check targets when they exit 1, so the Make error
 # that follows reads as the drift signal it is.
@@ -46,9 +56,23 @@ else
 FETCH_TARGET :=
 endif
 
+ifeq ($(BASELINE_SOURCE_KIND),aiscb)
+BASELINE_SYNC_TARGET := baseline-sync-aiscb
+BASELINE_SYNC_CHECK_TARGET := baseline-sync-check-aiscb
+else ifeq ($(BASELINE_SOURCE_KIND),organization)
+BASELINE_SYNC_TARGET := baseline-sync-organization
+BASELINE_SYNC_CHECK_TARGET := baseline-sync-check-organization
+else ifeq ($(BASELINE_SOURCE_KIND),disabled)
+BASELINE_SYNC_TARGET := baseline-sync-disabled
+BASELINE_SYNC_CHECK_TARGET := baseline-sync-check-disabled
+else
+BASELINE_SYNC_TARGET := baseline-sync-invalid
+BASELINE_SYNC_CHECK_TARGET := baseline-sync-invalid
+endif
+
 .DEFAULT_GOAL := help
 
-.PHONY: help lint check release release-check fetch-upstream upstream-check packaging-template-check baseline-check baseline-sync baseline-sync-check check-updates drift-check upstream-update validate package release-package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean rebuild reinit test
+.PHONY: help lint check release release-check fetch-upstream upstream-check packaging-template-check baseline-check baseline-sync baseline-sync-check baseline-sync-aiscb baseline-sync-check-aiscb baseline-sync-organization baseline-sync-check-organization baseline-sync-disabled baseline-sync-check-disabled baseline-sync-invalid check-updates drift-check upstream-update org-baseline-sync org-baseline-sync-check validate package release-package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean rebuild reinit test
 
 help: ## Show this help
 	@if [ -t 1 ] && [ -z "$${NO_COLOR:-}" ]; then \
@@ -58,8 +82,12 @@ help: ## Show this help
 		/^##@ / {printf "\n%s%s%s\n", hdr, substr($$0, 5), off; next} \
 		/^[a-zA-Z0-9_-]+:.*## / {printf "  %s%-26s%s %s\n", tgt, $$1, off, $$2}' $(MAKEFILE_LIST)
 	@printf '\nCurrent settings (override on the command line or via env):\n'
-	@printf '  INTERNAL_NAME=%s\n  PACKAGE_VERSION=%s\n  APPSEC_ADVISOR_REF=%s\n  APPSEC_ADVISOR_TEMPLATE_REF=%s\n' \
-		'$(INTERNAL_NAME)' '$(PACKAGE_VERSION)' '$(APPSEC_ADVISOR_REF)' '$(APPSEC_ADVISOR_TEMPLATE_REF)'
+	@printf '  INTERNAL_NAME=%s\n  PACKAGE_VERSION=%s\n  APPSEC_ADVISOR_REF=%s\n  APPSEC_ADVISOR_TEMPLATE_REF=%s\n  BASELINE_SOURCE_KIND=%s\n' \
+		'$(INTERNAL_NAME)' '$(PACKAGE_VERSION)' '$(APPSEC_ADVISOR_REF)' '$(APPSEC_ADVISOR_TEMPLATE_REF)' '$(BASELINE_SOURCE_KIND)'
+	@if [ '$(BASELINE_SOURCE_KIND)' = organization ]; then \
+		printf '  ORG_BASELINE_SOURCE=%s\n  ORG_BASELINE_DOC=%s\n  ORG_BASELINE_SKILLS_DIR=%s\n' \
+			'$(ORG_BASELINE_SOURCE)' '$(ORG_BASELINE_DOC)' '$(ORG_BASELINE_SKILLS_DIR)'; \
+	fi
 
 ##@ Build
 
@@ -141,30 +169,12 @@ upstream-update: ## Rebuild only when the selected upstream ref moved to a new c
 		echo "OK: nothing to rebuild"; \
 	fi
 
-# Depends on the upstream checkout: the baseline check runs its URL through the
-# core's SSRF guard, so a scheduled run has to have the core on disk. With
-# APPSEC_ADVISOR_SOURCE pointing elsewhere, FETCH_TARGET is empty and nothing is
-# fetched.
 check-updates: $(FETCH_TARGET) ## Check appsec-advisor and secure-coding baseline for updates
 	@status=0; \
 	$(UPSTREAM_ENV) scripts/upstream-check.sh || status=$$?; \
 	echo; \
 	baseline_status=0; \
-	python3 scripts/baseline-upstream-check.py --profile org-profile/org-profile.yaml --core-config "$(APPSEC_ADVISOR_SOURCE)/config.json" || baseline_status=$$?; \
-	echo; \
-	if python3 $(BASELINE_SYNC) --help 2>/dev/null | grep -q -- --profile; then \
-		sync_rc=0; \
-		sync_out="$$(python3 $(BASELINE_SYNC) --profile org-profile/org-profile.yaml --dry-run 2>&1)" || sync_rc=$$?; \
-		printf '%s\n' "$$sync_out"; \
-		if [ "$$sync_rc" -eq 3 ] || printf '%s\n' "$$sync_out" | grep -q '^would write'; then \
-			echo "DRIFT (baseline text): the vendored copy no longer matches its source"; \
-			baseline_status=1; \
-		elif [ "$$sync_rc" -ne 0 ]; then \
-			baseline_status=2; \
-		fi; \
-	else \
-		echo "NOTE: $(APPSEC_ADVISOR_REF) has no sync_baseline.py --profile — vendored-copy drift not checked"; \
-	fi; \
+	$(MAKE) --no-print-directory baseline-sync-check || baseline_status=$$?; \
 	if [ "$$status" -eq 2 ] || [ "$$baseline_status" -eq 2 ]; then \
 		echo "ERROR: at least one upstream check could not complete" >&2; exit 2; \
 	fi; \
@@ -174,18 +184,24 @@ check-updates: $(FETCH_TARGET) ## Check appsec-advisor and secure-coding baselin
 	fi; \
 	echo "OK: appsec-advisor and baseline are current"
 
-# Re-vendors baseline.file from the source the same profile declares, so the
-# copy the package ships cannot drift behind the URL it advertises. The id-only
-# check above cannot see that: text edited under an unchanged id passes it.
-# Carried by the upstream core, so it is available exactly when the selected ref
-# has it — a branch ref is a supported pin, not a lesser one.
+# Public baseline targets dispatch to the source kind persisted by the
+# initializer. Both source kinds have the same exit contract and ACCEPT_ID
+# acknowledgement; callers and CI do not need source-specific commands.
 BASELINE_SYNC := "$(APPSEC_ADVISOR_SOURCE)/scripts/sync_baseline.py"
 BASELINE_SYNC_MISSING := \
 	echo "ERROR: the selected upstream ($(APPSEC_ADVISOR_REF)) has no sync_baseline.py --profile" >&2; \
 	echo "Pin APPSEC_ADVISOR_REF to a ref that carries it — a release tag or a branch such as dev." >&2; \
 	exit 2
 
-baseline-sync: $(FETCH_TARGET) ## Re-vendor baseline.file from the source the profile declares
+baseline-sync: $(BASELINE_SYNC_TARGET) ## Sync baseline.file and optional org skills from the configured source
+
+baseline-sync-check: $(BASELINE_SYNC_CHECK_TARGET) ## Read-only drift check for the configured baseline source
+
+# Kept as a familiar read-only alias: it now checks both id and bytes, plus org
+# skills when organization mode is selected.
+baseline-check: baseline-sync-check ## Read-only drift check for the configured secure-coding baseline
+
+baseline-sync-aiscb: $(FETCH_TARGET)
 	@python3 $(BASELINE_SYNC) --help 2>/dev/null | grep -q -- --profile || { $(BASELINE_SYNC_MISSING); }; \
 	status=0; \
 	python3 $(BASELINE_SYNC) --profile org-profile/org-profile.yaml \
@@ -195,11 +211,7 @@ baseline-sync: $(FETCH_TARGET) ## Re-vendor baseline.file from the source the pr
 	fi; \
 	exit $$status
 
-# The dry run reports a pending rewrite on stdout and still exits 0, which would
-# make a scheduled job green while the vendored copy lags its source. Translated
-# here into the exit contract the other read-only checks use: 0 current, 1 drift,
-# 2 error.
-baseline-sync-check: $(FETCH_TARGET) ## Read-only: has the vendored baseline drifted from its source?
+baseline-sync-check-aiscb: $(FETCH_TARGET)
 	@python3 $(BASELINE_SYNC) --help 2>/dev/null | grep -q -- --profile || { $(BASELINE_SYNC_MISSING); }; \
 	status=0; \
 	out="$$(python3 $(BASELINE_SYNC) --profile org-profile/org-profile.yaml --dry-run 2>&1)" || status=$$?; \
@@ -215,13 +227,45 @@ baseline-sync-check: $(FETCH_TARGET) ## Read-only: has the vendored baseline dri
 	fi; \
 	exit 0
 
-baseline-check: ## Read-only drift check for the configured secure-coding baseline
-	@status=0; \
-	python3 scripts/baseline-upstream-check.py --profile org-profile/org-profile.yaml --core-config "$(APPSEC_ADVISOR_SOURCE)/config.json" || status=$$?; \
-	if [ "$$status" -eq 1 ]; then \
-		echo "$(DRIFT_NOTE)"; \
+ORG_BASELINE_CONFIG_MISSING := \
+	echo "ERROR: organization baseline mode requires ORG_BASELINE_SOURCE and ORG_BASELINE_DOC." >&2; \
+	exit 2
+
+baseline-sync-check-organization:
+	@if [ -z "$(ORG_BASELINE_SOURCE)" ] || [ -z "$(ORG_BASELINE_DOC)" ]; then $(ORG_BASELINE_CONFIG_MISSING); fi; \
+	skills_dir="$(ORG_BASELINE_SKILLS_DIR)"; status=0; \
+	python3 scripts/sync-org-baseline.py --org-profile org-profile --org-skills org-skills \
+		--checkout "$(ORG_BASELINE_SOURCE)" --doc "$(ORG_BASELINE_DOC)" \
+		$${skills_dir:+--skills-dir "$$skills_dir"} || status=$$?; \
+	if [ "$$status" -eq 1 ]; then echo "$(DRIFT_NOTE)"; fi; \
+	exit $$status
+
+baseline-sync-organization:
+	@if [ -z "$(ORG_BASELINE_SOURCE)" ] || [ -z "$(ORG_BASELINE_DOC)" ]; then $(ORG_BASELINE_CONFIG_MISSING); fi; \
+	skills_dir="$(ORG_BASELINE_SKILLS_DIR)"; status=0; \
+	python3 scripts/sync-org-baseline.py --org-profile org-profile --org-skills org-skills \
+		--checkout "$(ORG_BASELINE_SOURCE)" --doc "$(ORG_BASELINE_DOC)" \
+		$${skills_dir:+--skills-dir "$$skills_dir"} \
+		$${ACCEPT_ID:+--accept-id "$$ACCEPT_ID"} --write || status=$$?; \
+	if [ "$$status" -eq 3 ]; then \
+		echo "NOTE: a new baseline id is a decision — re-run with ACCEPT_ID=<id> to move file and profile together."; \
 	fi; \
 	exit $$status
+
+baseline-sync-disabled:
+	@echo "SKIP: secure-coding baseline is disabled"
+
+baseline-sync-check-disabled:
+	@echo "SKIP: secure-coding baseline is disabled"
+
+baseline-sync-invalid:
+	@echo "ERROR: BASELINE_SOURCE_KIND must be aiscb, organization, or disabled; got '$(BASELINE_SOURCE_KIND)'" >&2
+	@exit 2
+
+# Compatibility aliases for repositories that adopted the earlier WIP names.
+org-baseline-sync-check: baseline-sync-check-organization
+
+org-baseline-sync: baseline-sync-organization
 
 packaging-template-check: ## Read-only check for a newer packaging-template revision
 	@status=0; \

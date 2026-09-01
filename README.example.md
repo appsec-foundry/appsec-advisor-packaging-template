@@ -15,7 +15,7 @@ need the packaging toolchain or its Python build dependencies.
 ## Maintainer quick start
 
 The initializer has already set the organization identity, package name,
-version, owner, upstream channel, baseline choice, and startup-status choice.
+version, owner, upstream channel, baseline source, and startup-status choice.
 The default stable channel is resolved to a concrete release tag; the optional
 development channel follows the upstream `dev` branch. Review the remaining
 organization-specific content before rollout:
@@ -24,6 +24,9 @@ organization-specific content before rollout:
   context.
 - Configure requirements, presets, policy, banner, baseline, and guardrails in
   `org-profile/org-profile.yaml` as needed.
+- Run `make baseline-sync-check` to verify the configured generic AISCB source
+  or local organization repository. Use `make baseline-sync` after reviewing
+  source changes; a new ID requires `ACCEPT_ID=<id>`.
 - Add organization skills under `org-skills/`, and include or remove skills,
   hooks, and MCP servers through `org-profile/package-policy.yaml`.
 

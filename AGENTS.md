@@ -118,6 +118,15 @@ to your own skills — the threat-model pipeline does not query it.
   never stored in that file. The overlay must not add its own
   `baseline-id:` line — a composed document with anything other than exactly
   one is rejected.
+- **Baseline source mode is explicit.** `BASELINE_SOURCE_KIND` is `aiscb`,
+  `organization`, or `disabled`. Organization mode consumes a composed
+  document and optional skill packs from the local path in
+  `ORG_BASELINE_SOURCE`; the sync never fetches that repository. Source paths
+  must remain inside it and may not traverse symlinks. In organization mode,
+  `organization-overlay.md` is rejected because composition belongs in the
+  organization repository. `baseline.file` is the only sync target, a new ID
+  requires `ACCEPT_ID=<id>`, and copied skills still require an explicit
+  `plugin_surface.skills.include` entry before they ship.
 - **Own skills live in `org-skills/`, own MCP servers in the profile.** The
   `mcp:` block is the only path for MCP; the former `org-mcp.json` is no longer
   read. It was copied over the finished `.mcp.json` *after* packaging and
@@ -160,9 +169,9 @@ make release-check                    # release gate: check + quick-start pin + 
 make upstream-check                   # read-only drift check: has the build ref moved, is there a newer v* release
 make upstream-update                  # same check, then `make rebuild` only on commit drift (a newer release still needs the pin raised)
 make packaging-template-check         # read-only drift check for the pinned packaging-template commit
-make baseline-check                   # read-only drift check: does the configured baseline id match its published document
-make baseline-sync-check              # read-only: has the vendored baseline.file drifted from its source under the same id
-make baseline-sync                    # re-vendor baseline.file from that source (ACCEPT_ID=<id> to move to a new id)
+make baseline-check                   # alias for the configured source's complete read-only drift check
+make baseline-sync-check              # read-only: check configured baseline bytes, id, and optional org skills
+make baseline-sync                    # sync from AISCB or the local org repo (ACCEPT_ID=<id> for a new id)
 make check-updates                    # check appsec-advisor and baseline updates, including vendored-copy drift
 make package                          # fetch upstream + build the package + smoke-test it
 APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package # pin a specific release
@@ -184,16 +193,12 @@ release tag) to update deliberately. Use the exact commit reported by the check,
 not the moving branch name. A successful reinitialization persists that exact
 revision again.
 
-When the baseline is kept, the initializer pins the id the published baseline
-declares — read from the appsec-foundry baseline through
-`scripts/resolve-baseline-id.py` — instead of the id the template carries, and
-vendors the same document as `org-profile/baselines/secure-coding-baseline.md` with
-`baseline.file` pointing at it. Id and file move together because the packager
-rejects a profile where they disagree. It resolves before writing anything and
-stops with exit 2 when the document cannot be read, so no repository starts on a
-stale id; declining the baseline skips the lookup and keeps the template's
-vendored copy. `make baseline-check` compares the configured id against the
-published one afterwards.
+For AISCB mode, the initializer pins the ID the published baseline declares and
+vendors those same bytes. For organization mode, it validates the composed
+document and optional skills in the selected local repository before creating
+the target, writes that ID into the profile, removes the generic URL, and copies
+the reviewed inputs. Disabled mode leaves the profile baseline off. Reinit
+preserves the selected mode and local source paths.
 
 The baseline moves on two tracks, and mixing them up is the usual mistake.
 Edits under an unchanged id reach a developer with `install-baseline --refresh`,

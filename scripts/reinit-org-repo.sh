@@ -207,6 +207,25 @@ else:
         re.MULTILINE,
     )
     upstream_ref = match.group(1) if match else ""
+match = re.search(
+    r"^BASELINE_SOURCE_KIND\s*\?=\s*(aiscb|organization|disabled)\s*$",
+    makefile,
+    re.MULTILINE,
+)
+if match:
+    baseline_source_kind = match.group(1)
+else:
+    baseline_source_kind = "aiscb" if baseline_enabled else "disabled"
+
+def optional_make_value(name: str) -> str:
+    match = re.search(
+        rf"^{re.escape(name)}\s*\?=\s*([^\s#]+)?\s*$", makefile, re.MULTILINE
+    )
+    return (match.group(1) or "") if match else ""
+
+org_baseline_source = optional_make_value("ORG_BASELINE_SOURCE")
+org_baseline_doc = optional_make_value("ORG_BASELINE_DOC")
+org_baseline_skills_dir = optional_make_value("ORG_BASELINE_SKILLS_DIR")
 values = [
     organization.get("name", ""),
     organization.get("id", ""),
@@ -218,9 +237,21 @@ values = [
     "true" if banner_enabled and banner_packaged else "false",
     repository_url,
     upstream_ref,
+    baseline_source_kind,
+    org_baseline_source,
+    org_baseline_doc,
+    org_baseline_skills_dir,
 ]
 if any(not value for value in values[:5]) or not upstream_ref:
     print("ERROR: cannot recover organization name/id/owner, INTERNAL_NAME, PACKAGE_VERSION or APPSEC_ADVISOR_REF from this repository", file=sys.stderr)
+    raise SystemExit(2)
+if baseline_source_kind == "organization" and (
+    not org_baseline_source or not org_baseline_doc
+):
+    print(
+        "ERROR: organization baseline mode requires ORG_BASELINE_SOURCE and ORG_BASELINE_DOC",
+        file=sys.stderr,
+    )
     raise SystemExit(2)
 if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*", values[1]):
     print("ERROR: existing organization id is not safe for reinitialization", file=sys.stderr)
@@ -230,7 +261,7 @@ for value in values:
 PY
 )
 
-if [ "${#SETTINGS[@]}" -ne 10 ]; then
+if [ "${#SETTINGS[@]}" -ne 14 ]; then
   echo "ERROR: failed to read existing packaging settings" >&2
   exit 2
 fi
@@ -271,5 +302,9 @@ APPSEC_REINIT_BASELINE="${SETTINGS[6]}" \
 APPSEC_REINIT_STATUSLINE="${SETTINGS[7]}" \
 APPSEC_REINIT_REPOSITORY_URL="${SETTINGS[8]}" \
 APPSEC_REINIT_UPSTREAM_REF="${SETTINGS[9]}" \
+APPSEC_REINIT_BASELINE_KIND="${SETTINGS[10]}" \
+APPSEC_REINIT_ORG_BASELINE_SOURCE="${SETTINGS[11]}" \
+APPSEC_REINIT_ORG_BASELINE_DOC="${SETTINGS[12]}" \
+APPSEC_REINIT_ORG_BASELINE_SKILLS_DIR="${SETTINGS[13]}" \
 APPSEC_REINIT_BUILD="${REINIT_BUILD}" \
   "${TEMPLATE_SOURCE}/scripts/init-org-repo.sh"

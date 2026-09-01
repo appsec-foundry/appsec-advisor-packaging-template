@@ -102,6 +102,7 @@ check_template_layout() {
     scripts/select-latest-release.py \
     scripts/check-org-hook-collisions.py \
     scripts/resolve-package-policy.py \
+    scripts/sync-org-baseline.py \
     scripts/package-local.sh \
     scripts/release.sh \
     org-profile/org-profile.yaml \
@@ -247,6 +248,52 @@ resolve_published_baseline_id() {
     return 2
   fi
   printf '%s\n' "${resolved}"
+}
+
+valid_make_path() {
+  # These values are persisted as Make assignments and later passed as quoted
+  # shell arguments. Keep the accepted syntax deliberately small; local paths
+  # with spaces can be represented through a stable symlink with a safe name.
+  case "$1" in
+    ""|*[!A-Za-z0-9._/-]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+valid_relative_source_path() {
+  local value="$1"
+  if ! valid_make_path "${value}"; then return 1; fi
+  case "${value}" in
+    /*|.|..|./*|../*|*/./*|*/../*|*/.|*/..) return 1 ;;
+  esac
+  [ -n "${value}" ]
+}
+
+select_baseline_source() {
+  local configured reply
+  configured="${BASELINE_SOURCE_KIND:-}"
+  if [ -n "${configured}" ]; then
+    case "${configured}" in
+      aiscb|organization|disabled) printf '%s\n' "${configured}"; return 0 ;;
+      *)
+        echo "ERROR: BASELINE_SOURCE_KIND must be aiscb, organization, or disabled." >&2
+        return 2
+        ;;
+    esac
+  fi
+  while true; do
+    echo "Select the secure-coding baseline source:" >&2
+    echo "  1. Generic AI Secure Coding Baseline (default)" >&2
+    echo "  2. Composed organization baseline from a local repository" >&2
+    echo "  3. Disabled" >&2
+    read -r -p "Baseline source [1]: " reply || reply=""
+    case "${reply}" in
+      ""|1|y|Y|aiscb) printf '%s\n' aiscb; return 0 ;;
+      2|organization|org) printf '%s\n' organization; return 0 ;;
+      3|n|N|disabled|none) printf '%s\n' disabled; return 0 ;;
+      *) echo "  (enter 1 for AISCB, 2 for organization, or 3 to disable)" >&2 ;;
+    esac
+  done
 }
 
 select_upstream_ref() {
@@ -630,7 +677,37 @@ if [ -n "${APPSEC_REINIT_TARGET:-}" ]; then
   fi
   OWNER="$(printf '%s' "${APPSEC_REINIT_OWNER:?}" | normalize_utf8)"
   DEMO_CONTENT="${APPSEC_REINIT_DEMO:?}"
-  BASELINE_ENABLED="${APPSEC_REINIT_BASELINE:?}"
+  BASELINE_SOURCE_KIND="${APPSEC_REINIT_BASELINE_KIND:-}"
+  if [ -z "${BASELINE_SOURCE_KIND}" ]; then
+    if [ "${APPSEC_REINIT_BASELINE:?}" = true ]; then
+      BASELINE_SOURCE_KIND=aiscb
+    else
+      BASELINE_SOURCE_KIND=disabled
+    fi
+  fi
+  case "${BASELINE_SOURCE_KIND}" in
+    aiscb) BASELINE_ENABLED=true ;;
+    organization)
+      BASELINE_ENABLED=true
+      ORG_BASELINE_SOURCE="${APPSEC_REINIT_ORG_BASELINE_SOURCE:?}"
+      ORG_BASELINE_DOC="${APPSEC_REINIT_ORG_BASELINE_DOC:?}"
+      ORG_BASELINE_SKILLS_DIR="${APPSEC_REINIT_ORG_BASELINE_SKILLS_DIR:-}"
+      if ! valid_make_path "${ORG_BASELINE_SOURCE}" || \
+         ! valid_relative_source_path "${ORG_BASELINE_DOC}" || \
+         { [ -n "${ORG_BASELINE_SKILLS_DIR}" ] && ! valid_relative_source_path "${ORG_BASELINE_SKILLS_DIR}"; }; then
+        echo "ERROR: existing organization baseline paths are not safe Make/local paths" >&2
+        exit 2
+      fi
+      ;;
+    disabled) BASELINE_ENABLED=false ;;
+    *)
+      echo "ERROR: existing BASELINE_SOURCE_KIND must be aiscb, organization, or disabled" >&2
+      exit 2
+      ;;
+  esac
+  ORG_BASELINE_SOURCE="${ORG_BASELINE_SOURCE:-}"
+  ORG_BASELINE_DOC="${ORG_BASELINE_DOC:-}"
+  ORG_BASELINE_SKILLS_DIR="${ORG_BASELINE_SKILLS_DIR:-}"
   # Older reinit wrappers do not carry this setting; preserve the historical
   # default-on behavior for those repositories.
   STATUSLINE_ENABLED="${APPSEC_REINIT_STATUSLINE:-true}"
@@ -678,10 +755,38 @@ else
     *)     DEMO_CONTENT=false ;;
   esac
 
-  read -r -p "Include the AI Secure Coding Baseline? [Y/n] (change later in org-profile/org-profile.yaml): " _baseline_reply || _baseline_reply=""
-  case "${_baseline_reply}" in
-    [nN]*) BASELINE_ENABLED=false ;;
-    *)     BASELINE_ENABLED=true ;;
+  BASELINE_SOURCE_KIND="$(select_baseline_source)" || exit 2
+  ORG_BASELINE_SOURCE=""
+  ORG_BASELINE_DOC=""
+  ORG_BASELINE_SKILLS_DIR=""
+  case "${BASELINE_SOURCE_KIND}" in
+    aiscb) BASELINE_ENABLED=true ;;
+    organization)
+      BASELINE_ENABLED=true
+      while true; do
+        ORG_BASELINE_SOURCE="$(ask "Local organization baseline repository")"
+        if valid_make_path "${ORG_BASELINE_SOURCE}"; then break; fi
+        echo "  (use a local path containing only letters, digits, '.', '_', '-', and '/')" >&2
+      done
+      while true; do
+        ORG_BASELINE_DOC="$(ask "Composed baseline document inside that repository" "dist/secure-coding-baseline.md")"
+        if valid_relative_source_path "${ORG_BASELINE_DOC}"; then break; fi
+        echo "  (enter a relative path without '.' or '..' components)" >&2
+      done
+      while true; do
+        read -r -p "Skill-pack directory inside that repository (optional): " _skills_reply || _skills_reply=""
+        if [ -z "${_skills_reply}" ]; then
+          ORG_BASELINE_SKILLS_DIR=""
+          break
+        fi
+        if valid_relative_source_path "${_skills_reply}"; then
+          ORG_BASELINE_SKILLS_DIR="${_skills_reply}"
+          break
+        fi
+        echo "  (enter a relative path without '.' or '..' components, or leave empty)" >&2
+      done
+      ;;
+    disabled) BASELINE_ENABLED=false ;;
   esac
 
   read -r -p "Show plugin and security status when Claude Code starts? [Y/n] (change later in org-profile and package-policy): " _statusline_reply || _statusline_reply=""
@@ -775,10 +880,53 @@ fi
 # template happens to carry.
 RESOLVED_BASELINE_ID=""
 RESOLVED_BASELINE_DOCUMENT=""
-if [ "${BASELINE_ENABLED}" = true ]; then
+if [ "${BASELINE_SOURCE_KIND}" = aiscb ]; then
   RESOLVED_BASELINE_DOCUMENT="$(mktemp "${TMPDIR:-/tmp}/appsec-baseline.XXXXXX")"
   RESOLVED_BASELINE_ID="$(resolve_published_baseline_id "${RESOLVED_BASELINE_DOCUMENT}")" || exit 2
   echo "==> Published secure-coding baseline: ${RESOLVED_BASELINE_ID} (pinned and vendored)"
+elif [ "${BASELINE_SOURCE_KIND}" = organization ] && [ "${REINIT_MODE}" != true ]; then
+  ORG_BASELINE_SOURCE_ABS="$(PYTHONUTF8=1 python3 - "${ORG_BASELINE_SOURCE}" <<'PY'
+from pathlib import Path
+import sys
+
+print(Path(sys.argv[1]).absolute())
+PY
+)"
+  if [ -n "${ORG_BASELINE_SKILLS_DIR}" ]; then
+    RESOLVED_BASELINE_ID="$(python3 "${TEMPLATE_BASE}/scripts/sync-org-baseline.py" \
+      --checkout "${ORG_BASELINE_SOURCE_ABS}" --doc "${ORG_BASELINE_DOC}" \
+      --skills-dir "${ORG_BASELINE_SKILLS_DIR}" --print-id)" || {
+        echo "ERROR: could not validate the local organization baseline source." >&2
+        exit 2
+      }
+  else
+    RESOLVED_BASELINE_ID="$(python3 "${TEMPLATE_BASE}/scripts/sync-org-baseline.py" \
+      --checkout "${ORG_BASELINE_SOURCE_ABS}" --doc "${ORG_BASELINE_DOC}" --print-id)" || {
+        echo "ERROR: could not validate the local organization baseline source." >&2
+        exit 2
+      }
+  fi
+  ORG_BASELINE_SOURCE="$(PYTHONUTF8=1 python3 - "${ORG_BASELINE_SOURCE_ABS}" "${TARGET_DIR}" <<'PY'
+from pathlib import Path
+import os
+import sys
+
+source = Path(sys.argv[1]).resolve(strict=True)
+target = Path(sys.argv[2]).resolve(strict=False)
+if source == target or source in target.parents or target in source.parents:
+    print(
+        "ERROR: organization baseline source and target repository must be separate, non-overlapping trees",
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
+print(Path(os.path.relpath(source, target)).as_posix())
+PY
+)"
+  valid_make_path "${ORG_BASELINE_SOURCE}" || {
+    echo "ERROR: organization baseline path cannot be represented safely in the generated Makefile." >&2
+    exit 2
+  }
+  echo "==> Organization baseline: ${RESOLVED_BASELINE_ID} from ${ORG_BASELINE_SOURCE}"
 fi
 
 # ── Create repo ───────────────────────────────────────────────────────────────
@@ -949,7 +1097,8 @@ for helper in \
   rewrite-packaged-origins.py \
   rewrite-packaged-plugin-paths.py \
   release.sh \
-  reinit-org-repo.sh; do
+  reinit-org-repo.sh \
+  sync-org-baseline.py; do
   if [ -f "${TEMPLATE_BASE}/scripts/${helper}" ]; then
     helper_tmp="${TARGET_DIR}/scripts/.${helper}.new"
     cp "${TEMPLATE_BASE}/scripts/${helper}" "${helper_tmp}"
@@ -1034,6 +1183,10 @@ E_PLUGIN=$(sed_escape "${PLUGIN_NAME}")
 E_PACKAGE_VERSION=$(sed_escape "${PACKAGE_VERSION}")
 E_UPSTREAM_REF=$(sed_escape "${UPSTREAM_REF}")
 E_TEMPLATE_REF=$(sed_escape "${PERSISTED_TEMPLATE_REF}")
+E_BASELINE_SOURCE_KIND=$(sed_escape "${BASELINE_SOURCE_KIND}")
+E_ORG_BASELINE_SOURCE=$(sed_escape "${ORG_BASELINE_SOURCE}")
+E_ORG_BASELINE_DOC=$(sed_escape "${ORG_BASELINE_DOC}")
+E_ORG_BASELINE_SKILLS_DIR=$(sed_escape "${ORG_BASELINE_SKILLS_DIR}")
 INTERNAL_REPOSITORY_ASSIGNMENT="INTERNAL_REPOSITORY_URL ?="
 if [ -n "${INTERNAL_REPOSITORY_URL}" ]; then
   INTERNAL_REPOSITORY_ASSIGNMENT="${INTERNAL_REPOSITORY_ASSIGNMENT} ${INTERNAL_REPOSITORY_URL}"
@@ -1044,6 +1197,10 @@ sed \
   -e "s/^APPSEC_ADVISOR_REF := .*$/APPSEC_ADVISOR_REF := ${E_UPSTREAM_REF}/" \
   -e "s/^APPSEC_ADVISOR_TEMPLATE_REF ?= .*$/APPSEC_ADVISOR_TEMPLATE_REF ?= ${E_TEMPLATE_REF}/" \
   -e "s/^PACKAGE_VERSION ?= 0.1.0$/PACKAGE_VERSION ?= ${E_PACKAGE_VERSION}/" \
+  -e "s/^BASELINE_SOURCE_KIND ?= .*$/BASELINE_SOURCE_KIND ?= ${E_BASELINE_SOURCE_KIND}/" \
+  -e "s|^ORG_BASELINE_SOURCE ?=.*$|ORG_BASELINE_SOURCE ?= ${E_ORG_BASELINE_SOURCE}|" \
+  -e "s|^ORG_BASELINE_DOC ?=.*$|ORG_BASELINE_DOC ?= ${E_ORG_BASELINE_DOC}|" \
+  -e "s|^ORG_BASELINE_SKILLS_DIR ?=.*$|ORG_BASELINE_SKILLS_DIR ?= ${E_ORG_BASELINE_SKILLS_DIR}|" \
   -e "s|^INTERNAL_REPOSITORY_URL ?=$|${E_INTERNAL_REPOSITORY_ASSIGNMENT}|" \
   "${TEMPLATE_BASE}/Makefile" > "${TARGET_DIR}/Makefile"
 
@@ -1134,6 +1291,15 @@ if [ -n "${RESOLVED_BASELINE_ID}" ]; then
     "${PROFILE_CANDIDATE}" > "${PROFILE_EDITED}"
   mv "${PROFILE_EDITED}" "${PROFILE_CANDIDATE}"
 fi
+if [ "${BASELINE_SOURCE_KIND}" = organization ]; then
+  PROFILE_EDITED="${CANDIDATE_DIR}/org-profile-organization-baseline.yaml"
+  E_BASELINE_NAME_YAML=$(sed_escape "$(printf '%s' "${ORG_NAME} Secure Coding Baseline" | yaml_quote)")
+  sed \
+    -e '/^baseline:/,/^[^ ]/ s/^  name: .*$/  name: '"${E_BASELINE_NAME_YAML}"'/' \
+    -e '/^baseline:/,/^[^ ]/ { /^  url: /d; }' \
+    "${PROFILE_CANDIDATE}" > "${PROFILE_EDITED}"
+  mv "${PROFILE_EDITED}" "${PROFILE_CANDIDATE}"
+fi
 
 if [ "${STATUSLINE_ENABLED}" = false ]; then
   PROFILE_EDITED="${CANDIDATE_DIR}/org-profile-banner.yaml"
@@ -1145,6 +1311,19 @@ refresh_user_file \
   "${PROFILE_CANDIDATE}" \
   "${TARGET_DIR}/org-profile/org-profile.yaml" \
   "org-profile/org-profile.yaml"
+
+if [ "${BASELINE_SOURCE_KIND}" = organization ] && [ "${REINIT_MODE}" != true ]; then
+  if [ -n "${ORG_BASELINE_SKILLS_DIR}" ]; then
+    (cd "${TARGET_DIR}" && python3 scripts/sync-org-baseline.py \
+      --org-profile org-profile --org-skills org-skills \
+      --checkout "${ORG_BASELINE_SOURCE}" --doc "${ORG_BASELINE_DOC}" \
+      --skills-dir "${ORG_BASELINE_SKILLS_DIR}" --write)
+  else
+    (cd "${TARGET_DIR}" && python3 scripts/sync-org-baseline.py \
+      --org-profile org-profile --org-skills org-skills \
+      --checkout "${ORG_BASELINE_SOURCE}" --doc "${ORG_BASELINE_DOC}" --write)
+  fi
+fi
 
 # Validate both newly rendered profiles and existing profiles retained during
 # reinitialization before the upstream packager can produce a Python traceback.

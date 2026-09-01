@@ -11,6 +11,7 @@ VERSION="${VERSION:-}"
 ARCHIVE="${ARCHIVE:-0}"
 DESCRIPTION="${DESCRIPTION:-Internal packaged build of appsec-advisor with Acme Corp defaults.}"
 ORG_SKILLS_DIR="${ORG_SKILLS_DIR:-org-skills}"
+BASELINE_SOURCE_KIND="${BASELINE_SOURCE_KIND:-aiscb}"
 FETCHED=0
 TEMP_SOURCE=""
 TEMP_POLICY=""
@@ -86,6 +87,10 @@ compose_baseline_overlay() {
 
   if [ ! -f "${org_profile_dir}/baselines/organization-overlay.md" ]; then
     return 0
+  fi
+  if [ "${BASELINE_SOURCE_KIND}" = organization ]; then
+    echo "ERROR: organization baseline mode consumes an already composed document; remove org-profile/baselines/organization-overlay.md or compose it in the organization baseline repository" >&2
+    exit 2
   fi
 
   TEMP_ORG_PROFILE="$(mktemp -d "${TMPDIR:-/tmp}/appsec-advisor-org-profile.XXXXXX")"

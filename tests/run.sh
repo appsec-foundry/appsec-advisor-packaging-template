@@ -47,30 +47,38 @@ ORG_HOOK_COLLISION_TEST="$HERE/test_org_hook_collisions.py"
 RESOLVE_POLICY_TEST="$HERE/test_resolve_package_policy.py"
 QUICKSTART_PIN_TEST="$HERE/test_check_quickstart_pin.py"
 COMPOSE_BASELINE_TEST="$HERE/test_compose_baseline.py"
+SYNC_ORG_BASELINE_TEST="$HERE/test_sync_org_baseline.py"
 
 # -B: importing guard.py must not leave __pycache__ in org-profile/hooks/,
-# which the packager would copy and the smoke test rejects.
-/usr/bin/python3 -B "$GUARD_TEST"
-/usr/bin/python3 -B "$MARKETPLACE_TEST"
-/usr/bin/python3 -B "$PACKAGED_HELP_TEST"
-/usr/bin/python3 -B "$PACKAGED_README_TEST"
-/usr/bin/python3 -B "$SESSION_BANNER_PRUNE_TEST"
-/usr/bin/python3 -B "$ARCHIVE_TEST"
-/usr/bin/python3 -B "$BASELINE_UPSTREAM_TEST"
-/usr/bin/python3 -B "$BASELINE_RESOLVE_TEST"
-/usr/bin/python3 -B "$PACKAGE_VERSION_TEST"
-/usr/bin/python3 -B "$PACKAGED_ORIGINS_TEST"
-/usr/bin/python3 -B "$PACKAGED_PATHS_TEST"
-/usr/bin/python3 -B "$LATEST_RELEASE_TEST"
-/usr/bin/python3 -B "$ORG_HOOK_COLLISION_TEST"
-/usr/bin/python3 -B "$RESOLVE_POLICY_TEST"
-/usr/bin/python3 -B "$QUICKSTART_PIN_TEST"
-/usr/bin/python3 -B "$COMPOSE_BASELINE_TEST"
+# which the packager would copy and the smoke test rejects. Preserve every
+# unit-test result: this driver intentionally stays out of `set -e` because its
+# shell scenarios assert expected failures later on.
+UNIT_FAIL=0
+run_unit_test() {
+  /usr/bin/python3 -B "$1" || UNIT_FAIL=$((UNIT_FAIL + 1))
+}
+run_unit_test "$GUARD_TEST"
+run_unit_test "$MARKETPLACE_TEST"
+run_unit_test "$PACKAGED_HELP_TEST"
+run_unit_test "$PACKAGED_README_TEST"
+run_unit_test "$SESSION_BANNER_PRUNE_TEST"
+run_unit_test "$ARCHIVE_TEST"
+run_unit_test "$BASELINE_UPSTREAM_TEST"
+run_unit_test "$BASELINE_RESOLVE_TEST"
+run_unit_test "$PACKAGE_VERSION_TEST"
+run_unit_test "$PACKAGED_ORIGINS_TEST"
+run_unit_test "$PACKAGED_PATHS_TEST"
+run_unit_test "$LATEST_RELEASE_TEST"
+run_unit_test "$ORG_HOOK_COLLISION_TEST"
+run_unit_test "$RESOLVE_POLICY_TEST"
+run_unit_test "$QUICKSTART_PIN_TEST"
+run_unit_test "$COMPOSE_BASELINE_TEST"
+run_unit_test "$SYNC_ORG_BASELINE_TEST"
 
 COV="$(mktemp)"
 WORKROOT="$(mktemp -d)"
 PASS=0
-FAIL=0
+FAIL="$UNIT_FAIL"
 trap 'rm -rf "$WORKROOT" "$COV"' EXIT
 
 pass() { PASS=$((PASS + 1)); printf '  PASS  %s\n' "$1"; }
@@ -408,6 +416,17 @@ if [ "$rc" != 0 ] && [ "$(cat "$d/org-profile/baselines/secure-coding-baseline.m
   pass "package: overlay with its own baseline-id marker fails the build"
 else fail "package: overlay with its own baseline-id marker fails the build" "rc=$rc"; fi
 
+d="$(newdir)"
+mkfake "$d/src"
+write_baseline "$d"
+printf '%s\n' '## A second local overlay' >"$d/org-profile/baselines/organization-overlay.md"
+(cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" INTERNAL_NAME=acme-appsec \
+  BASELINE_SOURCE_KIND=organization timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 2 ]; then
+  pass "package: organization source rejects a second packaging-repo overlay"
+else fail "package: organization source rejects a second packaging-repo overlay" "rc=$rc"; fi
+
 # ── release.sh ───────────────────────────────────────────────────────────────
 echo "--- release.sh ---"
 RELEASE_BIN="$WORKROOT/release-bin"
@@ -692,6 +711,19 @@ if [ "$rc" = 2 ] && [ ! -e "$tgt" ] && \
   pass "init: unsafe upstream ref is rejected before Makefile rendering"
 else fail "init: unsafe upstream ref is rejected before Makefile rendering" "rc=$rc"; fi
 
+d="$(newdir)"
+tgt="$d/out"
+printf 'Test Org\n\n\n\n\n%s\nn\n' "$tgt" | \
+  (cd "$ROOT" && env BASELINE_SOURCE_KIND=invalid timeout 20 bash -x "$INIT") \
+  >/dev/null 2>"$d/invalid-baseline-kind.err"
+rc=$?
+cat "$d/invalid-baseline-kind.err" >>"$COV"
+if [ "$rc" = 2 ] && [ ! -e "$tgt" ] && \
+   grep -Fq 'BASELINE_SOURCE_KIND must be aiscb, organization, or disabled' \
+     "$d/invalid-baseline-kind.err"; then
+  pass "init: invalid baseline source mode fails before target creation"
+else fail "init: invalid baseline source mode fails before target creation" "rc=$rc"; fi
+
 # Template refs are rendered into Makefiles after resolution. Reject unsafe
 # values before fetching and refuse to claim that a dirty source has an exact,
 # reproducible commit pin.
@@ -840,6 +872,87 @@ if [ "$rc" = 0 ] && \
    [ -f "$tgt/org-profile/baselines/secure-coding-baseline.md" ]; then
   pass "init: a declined baseline is not resolved"
 else fail "init: a declined baseline is not resolved" "rc=$rc"; fi
+
+# Organization mode validates a composed local document before creating the
+# target, persists paths relative to the generated repository, copies optional
+# skills, removes the generic runtime URL, and leaves new skills excluded until
+# a maintainer makes the package-policy decision.
+d="$(newdir)"
+org_baseline_src="$d/org-baseline"
+mkdir -p "$org_baseline_src/dist/skills/acme-secure-review"
+printf '%s\n' '# Test organization baseline' '' 'baseline-id: test-sec-1.0.0' '' 'Rule.' \
+  >"$org_baseline_src/dist/secure-coding-baseline.md"
+printf '%s\n' '---' 'name: acme-secure-review' 'description: Test organization skill.' '---' \
+  >"$org_baseline_src/dist/skills/acme-secure-review/SKILL.md"
+tgt="$d/out"
+org_init_log="$d/org-init.log"
+printf 'Test Org\n\n\n\n\n%s\nn\n2\n%s\ndist/secure-coding-baseline.md\ndist/skills\n\n\nn\n' \
+  "$tgt" "$org_baseline_src" | \
+  (cd "$ROOT" && timeout 20 bash -x "$INIT") >"$org_init_log" 2>>"$COV"
+rc=$?
+org_check_rc=0
+(cd "$tgt" && make --no-print-directory baseline-sync-check) \
+  >>"$org_init_log" 2>&1 || org_check_rc=$?
+if [ "$rc" = 0 ] && [ "$org_check_rc" = 0 ] && \
+   grep -Fqx 'BASELINE_SOURCE_KIND ?= organization' "$tgt/Makefile" && \
+   grep -Fqx 'ORG_BASELINE_SOURCE ?= ../org-baseline' "$tgt/Makefile" && \
+   grep -Fqx 'ORG_BASELINE_DOC ?= dist/secure-coding-baseline.md' "$tgt/Makefile" && \
+   grep -Fqx 'ORG_BASELINE_SKILLS_DIR ?= dist/skills' "$tgt/Makefile" && \
+   grep -Fqx '  id: test-sec-1.0.0' "$tgt/org-profile/org-profile.yaml" && \
+   ! grep -A8 '^baseline:' "$tgt/org-profile/org-profile.yaml" | grep -Fq '  url:' && \
+   cmp -s "$org_baseline_src/dist/secure-coding-baseline.md" \
+     "$tgt/org-profile/baselines/secure-coding-baseline.md" && \
+   [ -f "$tgt/org-skills/acme-secure-review/SKILL.md" ] && \
+   grep -Fq '"acme-secure-review"' "$tgt/.org-baseline-sync-state.json" && \
+   ! grep -Fqx '      - acme-secure-review' "$tgt/org-profile/package-policy.yaml"; then
+  pass "init: local organization baseline and optional skills are initialized"
+else fail "init: local organization baseline and optional skills are initialized" "init_rc=$rc check_rc=$org_check_rc"; fi
+
+org_reinit_rc=0
+(cd "$tgt" && env APPSEC_ADVISOR_TEMPLATE_SOURCE="$ROOT" REINIT_BUILD=0 \
+  timeout 20 bash -x scripts/reinit-org-repo.sh) </dev/null \
+  >>"$org_init_log" 2>>"$COV" || org_reinit_rc=$?
+if [ "$org_reinit_rc" = 0 ] && \
+   grep -Fqx 'BASELINE_SOURCE_KIND ?= organization' "$tgt/Makefile" && \
+   grep -Fqx 'ORG_BASELINE_SOURCE ?= ../org-baseline' "$tgt/Makefile" && \
+   grep -Fqx 'ORG_BASELINE_DOC ?= dist/secure-coding-baseline.md' "$tgt/Makefile" && \
+   grep -Fqx 'ORG_BASELINE_SKILLS_DIR ?= dist/skills' "$tgt/Makefile"; then
+  pass "reinit: organization baseline source settings are preserved"
+else fail "reinit: organization baseline source settings are preserved" "rc=$org_reinit_rc"; fi
+
+# Invalid source-relative paths are retried, and a symlinked source repository
+# fails before the target directory is created.
+d="$(newdir)"
+real_org_source="$d/real-org-source"
+mkdir -p "$real_org_source/dist"
+printf '%s\n' 'baseline-id: test-sec-1.0.0' >"$real_org_source/dist/baseline.md"
+ln -s "$real_org_source" "$d/linked-org-source"
+tgt="$d/out"
+printf 'Test Org\n\n\n\n\n%s\nn\n2\n%s\n../escape.md\ndist/baseline.md\n\n' \
+  "$tgt" "$d/linked-org-source" | \
+  (cd "$ROOT" && timeout 20 bash -x "$INIT") >/dev/null 2>"$d/org-invalid.err"
+rc=$?
+cat "$d/org-invalid.err" >>"$COV"
+if [ "$rc" = 2 ] && [ ! -e "$tgt" ] && \
+   grep -Fq "enter a relative path without '.' or '..' components" "$d/org-invalid.err" && \
+   grep -Fq 'source not found or symlinked' "$d/org-invalid.err"; then
+  pass "init: unsafe organization baseline source fails before target creation"
+else fail "init: unsafe organization baseline source fails before target creation" "rc=$rc"; fi
+
+d="$(newdir)"
+org_source="$d/org-source"
+mkdir -p "$org_source/dist"
+printf '%s\n' 'baseline-id: test-sec-1.0.0' >"$org_source/dist/baseline.md"
+tgt="$d/out"
+printf 'Test Org\n\n\n\n\n%s\nn\n2\n%s\ndist/baseline.md\ndist/missing-skills\n' \
+  "$tgt" "$org_source" | \
+  (cd "$ROOT" && timeout 20 bash -x "$INIT") >/dev/null 2>"$d/org-skills-missing.err"
+rc=$?
+cat "$d/org-skills-missing.err" >>"$COV"
+if [ "$rc" = 2 ] && [ ! -e "$tgt" ] && \
+   grep -Fq 'skills directory not found' "$d/org-skills-missing.err"; then
+  pass "init: missing organization skills fail before target creation"
+else fail "init: missing organization skills fail before target creation" "rc=$rc"; fi
 
 # demo=yes; leading empty answer exercises the "(required)" retry on org-name.
 d="$(newdir)"
@@ -1415,7 +1528,7 @@ for f in scripts/fetch-upstream.sh scripts/upstream-check.sh scripts/packaging-t
          scripts/resolve-package-policy.py \
          scripts/archive-built-plugin.py scripts/finalize-package-version.py \
          scripts/rewrite-packaged-origins.py scripts/release.sh \
-         scripts/reinit-org-repo.sh \
+         scripts/reinit-org-repo.sh scripts/sync-org-baseline.py \
          org-profile/package-policy.yaml org-profile/org-profile.yaml \
          docs/MAINTAINER-RUNBOOK.md ci-requirements.lock Makefile; do
   [ -f "$self_contained_tgt/$f" ] || missing="$missing $f"

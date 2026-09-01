@@ -132,14 +132,15 @@ the ones that mention security. Developers install it with
 `/acme-appsec:install-baseline`, and the session status tells them whether it is
 loaded.
 
-The rules themselves travel inside the package, as a file under
-`org-profile/baselines/`. That copy is what gets installed whenever the
-published document cannot be reached or has moved on to a newer version, which
-is why it is committed here rather than fetched at build time.
+The initializer can vendor generic AISCB, consume an already composed
+organization baseline plus optional skills from a local repository, or disable
+baseline installation. In either enabled mode the reviewed rules travel inside
+the package under `org-profile/baselines/`.
 
-To ship your own rules, write them into that file and give it a derived id such
-as `aiscb-0.1.10+acme`. `org-profile/baselines/README.md` covers how, and what
-to watch out for.
+Generated repositories use `make baseline-sync-check` and
+`make baseline-sync` for the configured source. A new ID requires an explicit
+`ACCEPT_ID=<id>`. `org-profile/baselines/README.md` documents both source modes,
+local path constraints, overlays, and organization-skill allowlisting.
 
 ## Common commands
 
@@ -155,8 +156,9 @@ to watch out for.
 | `make upstream-check` | Check whether the selected upstream source moved |
 | `make upstream-update` | Rebuild, but only when the selected upstream ref moved to a new commit |
 | `make packaging-template-check` | Check whether the packaging template has moved |
-| `make baseline-check` | Compare the configured baseline with its published document |
-| `make baseline-sync` | Refresh the shipped baseline file from that same source |
+| `make baseline-check` | Check the complete configured baseline source for drift |
+| `make baseline-sync-check` | Read-only check of baseline bytes, ID, and optional organization skills |
+| `make baseline-sync` | Sync from AISCB or the configured local organization repository |
 | `make check-updates` | Check appsec-advisor and baseline updates |
 | `make reinit` | Reapply the pinned template while preserving organization settings |
 

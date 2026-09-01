@@ -106,46 +106,41 @@ the `session-banner` entry in `org-profile/package-policy.yaml`. To remove the
 status hook completely, disable the banner and remove the hook from the package
 surface, then rebuild.
 
-The secure-coding baseline is pinned independently from the plugin core. When
-this repository was scaffolded with the baseline included, the initializer read
-the id from the published baseline, wrote it into `baseline.id`, and vendored
-the document it read it from as
-`org-profile/baselines/secure-coding-baseline.md`, referenced by
-`baseline.file`.
+The initializer persists `BASELINE_SOURCE_KIND=aiscb`, `organization`, or
+`disabled`. Both enabled modes use the same maintenance commands:
 
-Both entries matter and move together. `url` is what an install fetches; `file`
-is the copy shipped inside the package, and it is what an install writes when
-the URL cannot be reached or has moved on to a newer id. Without `file` an
-install fails outright in both cases, in every package already distributed —
-`make validate` therefore rejects a `file` that is missing or declares a
-different id than `baseline.id`.
+```bash
+make baseline-sync-check
+make baseline-sync
+ACCEPT_ID=<new-id> make baseline-sync
+```
 
-Two checks cover the two ways this drifts. `make baseline-check` compares the
-pinned id against the published document. `make baseline-sync-check` compares
-the vendored copy with that same source, which is the case the id cannot show:
-text edited under an unchanged id leaves the id check green while the copy the
-package ships falls behind. Both run in `make check-updates` and on the CI
-schedule; the second is skipped with a note when the selected upstream ref does
-not carry `sync_baseline.py --profile`.
+AISCB mode vendors the generic published document. Organization mode consumes
+an already composed document from the local repository configured through
+`ORG_BASELINE_SOURCE` and `ORG_BASELINE_DOC`; an optional
+`ORG_BASELINE_SKILLS_DIR` supplies skill packs copied into `org-skills/`. The
+organization repository owns composition of generic AISCB and its central
+overlay. This packaging repository does not clone it and does not apply a
+second `organization-overlay.md` in organization mode.
 
-`make baseline-sync` re-vendors the file. On a new published id it stops and
-asks for `ACCEPT_ID=<id>`, which moves file and profile together. Review the
-diff, then raise `PACKAGE_VERSION` and rebuild. The diff is the point: it is the
-last place anyone reads the rules before they reach a developer machine.
+`baseline.file` is authoritative in both modes. A same-ID source edit updates
+that file. A new ID stops until `ACCEPT_ID` matches, then file and profile move
+together. Organization skills removed from the source are removed only when
+the sync state records them as managed; unrelated local skills remain. New
+skills are copied but do not ship until explicitly added to
+`plugin_surface.skills.include`.
 
-To ship an organization baseline instead, replace the file and set `baseline.id`
-to the id it declares. Keep the file name; the version belongs in the document's
-own id line. Point `url` at your own source, or leave it out to install only the
-reviewed copy.
+See `org-profile/baselines/README.md` for path constraints, CI checkout layout,
+and the managed-skill state file.
 
 ### What reaches a machine, and when
 
 Two different paths, depending on whether the id changed.
 
-Edits under an unchanged id reach developers as soon as they run
-`install-baseline --refresh`, straight from the configured source. No package
-release is involved. Use this for wording, examples and additions that do not
-change what the rules require.
+In AISCB mode, edits under an unchanged id can reach developers through an
+explicit `install-baseline --refresh` from the configured URL. Organization
+mode deliberately ships only the locally reviewed copy and normally requires a
+new package release even for same-ID edits.
 
 A new id needs a package release: bump `baseline.id`, write the document over
 the vendored copy, raise `PACKAGE_VERSION`, rebuild, distribute. The id is what
