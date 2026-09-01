@@ -8,9 +8,13 @@ The copy here is not a nice-to-have. It is what gets installed whenever the URL
 cannot be reached or has moved on to a newer version, and without it an install
 simply fails.
 
+The file name stays the same across versions. The version lives in the
+document's own `baseline-id:` line and in `baseline.id` in the profile, so an
+update shows up as a diff on one file instead of a delete and an add.
+
 | File | Id | Source | Pinned at |
 |---|---|---|---|
-| `aiscb-0.1.10.md` | `aiscb-0.1.10` | https://github.com/appsec-foundry/aiscb | tag `v0.1.10` |
+| `secure-coding-baseline.md` | `aiscb-0.1.10` | https://github.com/appsec-foundry/aiscb | tag `v0.1.10` |
 
 SHA-256: `1d01542b50d29e649c56ba6d9ea896aa7988b9eb6af1b08f633cfa9d2361e5b6`.
 Pinned to a tag rather than a branch, so there is something fixed to compare
@@ -40,9 +44,9 @@ upstream, `make baseline-sync` replaces your file with the original text.
 `make baseline-check` tells you when a newer version has been published.
 Updating is a review, not a download:
 
-1. put the new document in this folder, named after its id
-2. point `baseline.file` and `baseline.id` at it
-3. update the table above, delete the file it replaces
+1. write the new document over `secure-coding-baseline.md`
+2. set `baseline.id` in the profile to the version it declares
+3. update the table above
 4. run `make validate`, raise `PACKAGE_VERSION`, rebuild
 
 Read the diff in step 1. It is the last time anyone sees these rules before

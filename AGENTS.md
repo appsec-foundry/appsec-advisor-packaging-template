@@ -177,7 +177,7 @@ revision again.
 When the baseline is kept, the initializer pins the id the published baseline
 declares — read from the appsec-foundry baseline through
 `scripts/resolve-baseline-id.py` — instead of the id the template carries, and
-vendors the same document as `org-profile/baselines/<id>.md` with
+vendors the same document as `org-profile/baselines/secure-coding-baseline.md` with
 `baseline.file` pointing at it. Id and file move together because the packager
 rejects a profile where they disagree. It resolves before writing anything and
 stops with exit 2 when the document cannot be read, so no repository starts on a

@@ -758,9 +758,9 @@ printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\nn\n' "$tgt" | \
 rc=$?
 if [ "$rc" = 0 ] && \
    grep -Fqx '  id: aiscb-9.9.9' "$tgt/org-profile/org-profile.yaml" && \
-   grep -Fqx '  file: baselines/aiscb-9.9.9.md' "$tgt/org-profile/org-profile.yaml" && \
-   grep -Fq 'baseline-id: aiscb-9.9.9' "$tgt/org-profile/baselines/aiscb-9.9.9.md" && \
-   [ ! -e "$tgt/org-profile/baselines/aiscb-0.1.10.md" ] && \
+   grep -Fqx '  file: baselines/secure-coding-baseline.md' "$tgt/org-profile/org-profile.yaml" && \
+   grep -Fq 'baseline-id: aiscb-9.9.9' "$tgt/org-profile/baselines/secure-coding-baseline.md" && \
+   [ -f "$tgt/org-profile/baselines/secure-coding-baseline.md" ] && \
    grep -Fq '==> Published secure-coding baseline: aiscb-9.9.9 (pinned and vendored)' "$baseline_log"; then
   pass "init: baseline id is pinned from the published baseline"
 else fail "init: baseline id is pinned from the published baseline" "rc=$rc"; fi
@@ -786,7 +786,7 @@ rc=$?
 if [ "$rc" = 0 ] && \
    grep -Fqx '  enabled: false' "$tgt/org-profile/org-profile.yaml" && \
    grep -Fqx '  id: aiscb-0.1.10' "$tgt/org-profile/org-profile.yaml" && \
-   [ -f "$tgt/org-profile/baselines/aiscb-0.1.10.md" ]; then
+   [ -f "$tgt/org-profile/baselines/secure-coding-baseline.md" ]; then
   pass "init: a declined baseline is not resolved"
 else fail "init: a declined baseline is not resolved" "rc=$rc"; fi
 

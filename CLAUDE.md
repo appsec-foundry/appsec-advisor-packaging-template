@@ -167,7 +167,8 @@ baseline declares rather than the one in the template: it reads
 through `scripts/resolve-baseline-id.py` and writes it into the generated
 `org-profile.yaml`. The same call keeps the document
 (`--write-document`) and vendors it as
-`org-profile/baselines/<id>.md`, with `baseline.file` pointing at it: the
+`org-profile/baselines/secure-coding-baseline.md`, with `baseline.file`
+pointing at it: the
 packager compares the pinned id against that file, so writing one without the
 other scaffolds a repository whose first `make validate` fails. That happens
 before the target directory is touched, and an unreadable document ends the run

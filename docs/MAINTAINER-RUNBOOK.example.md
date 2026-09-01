@@ -109,7 +109,8 @@ surface, then rebuild.
 The secure-coding baseline is pinned independently from the plugin core. When
 this repository was scaffolded with the baseline included, the initializer read
 the id from the published baseline, wrote it into `baseline.id`, and vendored
-the document it read it from as `org-profile/baselines/<id>.md`, referenced by
+the document it read it from as
+`org-profile/baselines/secure-coding-baseline.md`, referenced by
 `baseline.file`.
 
 Both entries matter and move together. `url` is what an install fetches; `file`

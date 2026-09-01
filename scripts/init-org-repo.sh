@@ -998,8 +998,10 @@ if [ -f "${TEMPLATE_BASE}/org-profile/baselines/README.md" ]; then
 fi
 if [ -n "${RESOLVED_BASELINE_DOCUMENT}" ]; then
   # The published document rather than the template's copy: the id was read out
-  # of these exact bytes, and the profile pins both together.
-  BASELINE_FILE_NAME="${RESOLVED_BASELINE_ID}.md"
+  # of these exact bytes. The name stays fixed and the version lives in the
+  # document's own id line, so a later update is a diff on one file instead of a
+  # delete and an add.
+  BASELINE_FILE_NAME="secure-coding-baseline.md"
   refresh_user_file \
     "${RESOLVED_BASELINE_DOCUMENT}" \
     "${TARGET_DIR}/org-profile/baselines/${BASELINE_FILE_NAME}" \
@@ -1123,14 +1125,12 @@ if [ "${BASELINE_ENABLED}" = false ]; then
   mv "${PROFILE_EDITED}" "${PROFILE_CANDIDATE}"
 fi
 if [ -n "${RESOLVED_BASELINE_ID}" ]; then
-  # Id and vendored file move together. Rewriting one without the other leaves a
-  # profile the packager rejects, which is the whole reason the document is kept.
+  # Only the id moves. The file name is fixed, so what the template's profile
+  # already points at stays correct — and the packager compares the two, which
+  # is why the document above is written before this runs.
   PROFILE_EDITED="${CANDIDATE_DIR}/org-profile-baseline-id.yaml"
   E_BASELINE_ID="$(sed_escape "${RESOLVED_BASELINE_ID}")"
-  E_BASELINE_FILE="$(sed_escape "${BASELINE_FILE_NAME}")"
-  sed \
-    -e "/^baseline:/,/^[^ ]/ s/^  id: .*$/  id: ${E_BASELINE_ID}/" \
-    -e "/^baseline:/,/^[^ ]/ s|^  file: .*$|  file: baselines/${E_BASELINE_FILE}|" \
+  sed "/^baseline:/,/^[^ ]/ s/^  id: .*$/  id: ${E_BASELINE_ID}/" \
     "${PROFILE_CANDIDATE}" > "${PROFILE_EDITED}"
   mv "${PROFILE_EDITED}" "${PROFILE_CANDIDATE}"
 fi
