@@ -185,6 +185,16 @@ stale id; declining the baseline skips the lookup and keeps the template's
 vendored copy. `make baseline-check` compares the configured id against the
 published one afterwards.
 
+The baseline moves on two tracks, and mixing them up is the usual mistake.
+Edits under an unchanged id reach a developer with `install-baseline --refresh`,
+fetched from the configured source, without a package release. A new id needs
+one: the id is the contract the status line and `verify-baseline` compare
+against, so an install refuses a document declaring a different one and falls
+back to the vendored copy. The session-start hook compares locally and makes no
+network request, so it reports a machine that has not refreshed but never that
+the source published something newer — `make check-updates` on the CI schedule
+answers that.
+
 Reinitialization refreshes infrastructure directly. For each differing
 user-editable template file, it prompts to overwrite, keep, overwrite all
 remaining, or keep all remaining. The default is keep; overwritten files are

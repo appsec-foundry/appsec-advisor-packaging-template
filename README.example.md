@@ -120,6 +120,10 @@ they apply to every prompt rather than only to the ones about security. The
 rules ship inside the plugin, so this works offline as well. The status line at
 the start of a session says whether they are loaded.
 
+Run `/acme-appsec:install-baseline --refresh` to pick up a newer version of the
+rules. Nothing updates them on its own, and the status line tells you when the
+copy on your machine no longer matches what the plugin expects.
+
 The packaged README and `/acme-appsec:help` are generated from the actual
 package surface. They show the exact commands included by the Acme AppSec Team
 and mark commands that are currently disabled.

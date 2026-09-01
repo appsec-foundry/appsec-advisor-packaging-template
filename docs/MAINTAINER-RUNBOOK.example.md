@@ -134,8 +134,29 @@ diff, then raise `PACKAGE_VERSION` and rebuild. The diff is the point: it is the
 last place anyone reads the rules before they reach a developer machine.
 
 To ship an organization baseline instead, replace the file and set `baseline.id`
-to the id it declares. Any filename works — `baseline.file` selects it. Point
-`url` at your own source, or leave it out to install only the reviewed copy.
+to the id it declares. Keep the file name; the version belongs in the document's
+own id line. Point `url` at your own source, or leave it out to install only the
+reviewed copy.
+
+### What reaches a machine, and when
+
+Two different paths, depending on whether the id changed.
+
+Edits under an unchanged id reach developers as soon as they run
+`install-baseline --refresh`, straight from the configured source. No package
+release is involved. Use this for wording, examples and additions that do not
+change what the rules require.
+
+A new id needs a package release: bump `baseline.id`, write the document over
+the vendored copy, raise `PACKAGE_VERSION`, rebuild, distribute. The id is what
+the status line and `verify-baseline` compare against, so an install refuses a
+document declaring anything else and falls back to the copy in the package.
+
+Neither path updates a machine on its own. The session status compares what is
+loaded on the machine against what the package declares — a local comparison, no
+network — so it reports a developer who has not refreshed, but never that your
+source has published something newer. That is what `make check-updates` on the
+CI schedule is for.
 
 ### Customize hooks
 
