@@ -14,6 +14,8 @@ ORG_SKILLS_DIR="${ORG_SKILLS_DIR:-org-skills}"
 FETCHED=0
 TEMP_SOURCE=""
 TEMP_POLICY=""
+TEMP_ORG_PROFILE=""
+ORG_PROFILE_DIR="org-profile"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cleanup() {
@@ -22,6 +24,9 @@ cleanup() {
   fi
   if [ -n "${TEMP_POLICY}" ]; then
     rm -rf "${TEMP_POLICY}"
+  fi
+  if [ -n "${TEMP_ORG_PROFILE}" ]; then
+    rm -rf "${TEMP_ORG_PROFILE}"
   fi
 }
 trap cleanup EXIT
@@ -74,6 +79,21 @@ overlay_org_skills() {
   done < <(find "${org_skills_dir}" -mindepth 1 -maxdepth 1 -type d | sort)
 
   SOURCE="${TEMP_SOURCE}"
+}
+
+compose_baseline_overlay() {
+  local org_profile_dir="$1"
+
+  if [ ! -f "${org_profile_dir}/baselines/organization-overlay.md" ]; then
+    return 0
+  fi
+
+  TEMP_ORG_PROFILE="$(mktemp -d "${TMPDIR:-/tmp}/appsec-advisor-org-profile.XXXXXX")"
+  cp -a "${org_profile_dir}/." "${TEMP_ORG_PROFILE}/"
+  PYTHONDONTWRITEBYTECODE=1 python3 "${SCRIPT_DIR}/compose-baseline.py" \
+    --org-profile "${TEMP_ORG_PROFILE}"
+
+  ORG_PROFILE_DIR="${TEMP_ORG_PROFILE}"
 }
 
 validate_version() {
@@ -177,6 +197,12 @@ PYTHONDONTWRITEBYTECODE=1 python3 "${SCRIPT_DIR}/check-org-hook-collisions.py" \
 
 overlay_org_skills "${ORG_SKILLS_DIR}" "${SOURCE}"
 
+# An optional organization-overlay.md next to the vendored baseline extends it
+# with org-specific rules, kept out of `make baseline-sync`'s reach because it
+# is a separate file. Composing it here, into a throwaway copy of org-profile/,
+# means the tracked baseline file is never modified by a build.
+compose_baseline_overlay "${ORG_PROFILE_DIR}"
+
 # `optional_skills` in the package policy names skills that the selected ref may
 # not have yet — an upstream skill still on a branch would otherwise abort every
 # build from the pinned release. Resolve them against the ref actually being
@@ -204,7 +230,7 @@ fi
 
 python3 "${SOURCE}/scripts/package_internal_plugin.py" \
   --source "${SOURCE}" \
-  --org-profile org-profile \
+  --org-profile "${ORG_PROFILE_DIR}" \
   --name "${INTERNAL_NAME}" \
   --version "${CORE_VERSION}" \
   --description "${DESCRIPTION}" \

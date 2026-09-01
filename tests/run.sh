@@ -46,6 +46,7 @@ LATEST_RELEASE_TEST="$HERE/test_select_latest_release.py"
 ORG_HOOK_COLLISION_TEST="$HERE/test_org_hook_collisions.py"
 RESOLVE_POLICY_TEST="$HERE/test_resolve_package_policy.py"
 QUICKSTART_PIN_TEST="$HERE/test_check_quickstart_pin.py"
+COMPOSE_BASELINE_TEST="$HERE/test_compose_baseline.py"
 
 # -B: importing guard.py must not leave __pycache__ in org-profile/hooks/,
 # which the packager would copy and the smoke test rejects.
@@ -64,6 +65,7 @@ QUICKSTART_PIN_TEST="$HERE/test_check_quickstart_pin.py"
 /usr/bin/python3 -B "$ORG_HOOK_COLLISION_TEST"
 /usr/bin/python3 -B "$RESOLVE_POLICY_TEST"
 /usr/bin/python3 -B "$QUICKSTART_PIN_TEST"
+/usr/bin/python3 -B "$COMPOSE_BASELINE_TEST"
 
 COV="$(mktemp)"
 WORKROOT="$(mktemp -d)"
@@ -356,6 +358,55 @@ mkfake "$d/src"
   PYSTUB_UPSTREAM_HOOK_IDS=org-block-risky-bash INTERNAL_NAME=acme-appsec \
   timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
 assert_rc "package: org hook cannot reuse an upstream id" 2 "$?"
+
+# An organization-overlay.md next to the vendored baseline is composed into the
+# shipped file on a throwaway copy — the tracked base file must stay untouched.
+write_baseline() { # write_baseline <dir>
+  mkdir -p "$1/org-profile/baselines"
+  printf '%s\n' '# Secure Coding Baseline' '' 'baseline-id: aiscb-0.1.10' '' \
+    'RULE-1: do the thing.' >"$1/org-profile/baselines/secure-coding-baseline.md"
+}
+
+d="$(newdir)"
+mkfake "$d/src"
+write_baseline "$d"
+printf '%s\n' '## Organization rules' '' 'ORG-1: also do this.' \
+  >"$d/org-profile/baselines/organization-overlay.md"
+base_before="$(cat "$d/org-profile/baselines/secure-coding-baseline.md")"
+(cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" INTERNAL_NAME=acme-appsec \
+  timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
+rc=$?
+composed="$d/build/acme-appsec/org-profile/baselines/secure-coding-baseline.md"
+if [ "$rc" = 0 ] && [ "$(cat "$d/org-profile/baselines/secure-coding-baseline.md")" = "$base_before" ] && \
+   grep -Fq 'RULE-1: do the thing.' "$composed" && \
+   grep -Fq 'ORG-1: also do this.' "$composed" && \
+   [ "$(grep -c '^baseline-id:' "$composed")" = 1 ]; then
+  pass "package: baseline overlay is composed without touching the tracked file"
+else fail "package: baseline overlay is composed without touching the tracked file" "rc=$rc"; fi
+
+d="$(newdir)"
+mkfake "$d/src"
+write_baseline "$d"
+base_before="$(cat "$d/org-profile/baselines/secure-coding-baseline.md")"
+(cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" INTERNAL_NAME=acme-appsec \
+  timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && [ "$(cat "$d/org-profile/baselines/secure-coding-baseline.md")" = "$base_before" ]; then
+  pass "package: no overlay file is a clean no-op"
+else fail "package: no overlay file is a clean no-op" "rc=$rc"; fi
+
+d="$(newdir)"
+mkfake "$d/src"
+write_baseline "$d"
+printf '%s\n' 'baseline-id: acme-0.1' '' 'ORG-1: also do this.' \
+  >"$d/org-profile/baselines/organization-overlay.md"
+base_before="$(cat "$d/org-profile/baselines/secure-coding-baseline.md")"
+(cd "$d" && env APPSEC_ADVISOR_SOURCE="$d/src" INTERNAL_NAME=acme-appsec \
+  timeout 15 bash -x "$PKG") >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" != 0 ] && [ "$(cat "$d/org-profile/baselines/secure-coding-baseline.md")" = "$base_before" ]; then
+  pass "package: overlay with its own baseline-id marker fails the build"
+else fail "package: overlay with its own baseline-id marker fails the build" "rc=$rc"; fi
 
 # ── release.sh ───────────────────────────────────────────────────────────────
 echo "--- release.sh ---"

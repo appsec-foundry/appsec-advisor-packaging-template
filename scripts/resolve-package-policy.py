@@ -115,33 +115,33 @@ def resolve(policy: dict[str, Any], available: set[str]) -> tuple[dict[str, Any]
     resolved = copy.deepcopy(policy)
     optional = _optional_names(resolved)
     resolved.pop("optional_skills", None)
-    if not optional:
-        return resolved, [], []
 
-    surface = resolved.get("plugin_surface")
-    if not isinstance(surface, dict):
-        raise PolicyResolutionError("package policy optional_skills requires a plugin_surface mapping/object")
-    skills = surface.get("skills")
-    if not isinstance(skills, dict) or not isinstance(skills.get("include"), list):
-        raise PolicyResolutionError(
-            "package policy optional_skills requires plugin_surface.skills.include; "
-            "an exclude list already ships every skill the selected ref has"
-        )
-
-    include = skills["include"]
     kept: list[str] = []
     dropped: list[str] = []
-    for name in optional:
-        if name in include:
+    if optional:
+        surface = resolved.get("plugin_surface")
+        if not isinstance(surface, dict):
+            raise PolicyResolutionError("package policy optional_skills requires a plugin_surface mapping/object")
+        skills = surface.get("skills")
+        if not isinstance(skills, dict) or not isinstance(skills.get("include"), list):
             raise PolicyResolutionError(
-                f"skill '{name}' is listed both in plugin_surface.skills.include and in "
-                "optional_skills; keep it in one of them"
+                "package policy optional_skills requires plugin_surface.skills.include; "
+                "an exclude list already ships every skill the selected ref has"
             )
-        if name in available:
-            include.append(name)
-            kept.append(name)
-        else:
-            dropped.append(name)
+
+        include = skills["include"]
+        for name in optional:
+            if name in include:
+                raise PolicyResolutionError(
+                    f"skill '{name}' is listed both in plugin_surface.skills.include and in "
+                    "optional_skills; keep it in one of them"
+                )
+            if name in available:
+                include.append(name)
+                kept.append(name)
+            else:
+                dropped.append(name)
+
     return resolved, kept, dropped
 
 

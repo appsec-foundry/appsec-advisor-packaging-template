@@ -20,6 +20,7 @@ branch or a pull request.
 | `org-profile/context/organization.md` | Short organization context for the analysis (max. 50 KB) |
 | `org-profile/actors/*.yaml` | Your own enterprise actors for threat modeling |
 | `org-profile/baselines/*.md` | Secure-coding baseline text shipped in the package, selected by `baseline.file` |
+| `org-profile/baselines/organization-overlay.md` | Optional org rules appended to the baseline at build time, on a copy — never touched by `make baseline-sync` |
 | `org-profile/hooks/*.py` | Scripts for the hooks declared in the profile's `hooks:` block, referenced via `${CLAUDE_PLUGIN_ROOT}/org-profile/hooks/...` |
 | `org-profile/package-policy.yaml` | Allow-list: which skills, hooks (including org hook ids), and MCP servers go into the internal package |
 | `org-skills/<skill-id>/SKILL.md` | Your own skills, packaged alongside the upstream ones |
@@ -108,6 +109,15 @@ to your own skills — the threat-model pipeline does not query it.
 - Your own skills must not overwrite an upstream skill name.
   `scripts/package-local.sh` aborts when `org-skills/<name>` already exists under
   `upstream/appsec-advisor/skills/<name>`.
+- **The baseline overlay is composed on a copy, never on the tracked file.**
+  If `org-profile/baselines/organization-overlay.md` exists,
+  `scripts/package-local.sh` copies `org-profile/` to a temporary directory
+  and runs `scripts/compose-baseline.py` there before handing it to the
+  packager; `org-profile/baselines/secure-coding-baseline.md` is never
+  written to, so a later `make baseline-sync` cannot lose org rules that were
+  never stored in that file. The overlay must not add its own
+  `baseline-id:` line — a composed document with anything other than exactly
+  one is rejected.
 - **Own skills live in `org-skills/`, own MCP servers in the profile.** The
   `mcp:` block is the only path for MCP; the former `org-mcp.json` is no longer
   read. It was copied over the finished `.mcp.json` *after* packaging and
