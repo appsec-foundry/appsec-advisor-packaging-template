@@ -100,7 +100,7 @@ def _marker(document: bytes, origin: str) -> str:
         text = document.decode("utf-8")
     except UnicodeDecodeError as error:
         raise BaselineCheckError(f"baseline document is not UTF-8: {origin}") from error
-    markers = sorted(set(MARKER_PATTERN.findall(text)))
+    markers = MARKER_PATTERN.findall(text)
     if len(markers) != 1:
         detail = "none" if not markers else ", ".join(markers)
         raise BaselineCheckError(

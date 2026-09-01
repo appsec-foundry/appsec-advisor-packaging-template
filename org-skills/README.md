@@ -22,8 +22,9 @@ During `make package`, these skills are copied into a temporary upstream source
 tree before the upstream packager runs. The upstream checkout under `upstream/`
 is not modified.
 
-When `BASELINE_SOURCE_KIND=organization`, `make baseline-sync` may also manage
-skills copied from `ORG_BASELINE_SKILLS_DIR`. Managed names are recorded in the
-repository-root `.org-baseline-sync-state.json`, so later source removals do not
-delete unrelated manual skills. A synced skill still needs an explicit
-`plugin_surface.skills.include` entry before it ships.
+When `BASELINE_SOURCE_KIND=organization-git`, `make baseline-sync` may also
+manage skills materialized from `ORG_BASELINE_SKILLS_DIR` at the configured Git
+URL/ref. Managed names are recorded in the repository-root
+`.org-baseline-sync-state.json`, so later source removals do not delete unrelated
+manual skills. HTTPS mode accepts no skills. A synced skill still needs an
+explicit `plugin_surface.skills.include` entry before it ships.

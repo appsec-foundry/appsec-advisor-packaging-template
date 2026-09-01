@@ -30,13 +30,16 @@ APPSEC_ADVISOR_TEMPLATE_SOURCE ?=
 REINIT_BUILD ?= 1
 export APPSEC_ADVISOR_TEMPLATE_URL APPSEC_ADVISOR_TEMPLATE_REF APPSEC_ADVISOR_TEMPLATE_SOURCE REINIT_BUILD
 
-# Baseline source selected by the initializer: aiscb, organization, or disabled.
-# The organization mode consumes an already checked-out local repository. That
-# repository owns composition of the generic baseline and its org overlay.
+# Baseline source selected by the initializer: generic AISCB, a temporary Git
+# fetch, one HTTPS document, or disabled. Organization sources own composition
+# of the generic baseline and their overlay; packaging consumes reviewed copies.
 BASELINE_SOURCE_KIND ?= aiscb
+# Git and HTTPS organization modes persist a remote URL. Git also uses a ref
+# and paths inside that ref. ORG_BASELINE_SOURCE is an optional existing local
+# checkout override and remains the compatibility path for older scaffolds.
+ORG_BASELINE_URL ?=
+ORG_BASELINE_REF ?= main
 ORG_BASELINE_SOURCE ?=
-# Paths inside the local organization repository: its composed baseline and an
-# optional directory whose child directories are copied to org-skills/.
 ORG_BASELINE_DOC ?=
 ORG_BASELINE_SKILLS_DIR ?=
 
@@ -62,6 +65,12 @@ BASELINE_SYNC_CHECK_TARGET := baseline-sync-check-aiscb
 else ifeq ($(BASELINE_SOURCE_KIND),organization)
 BASELINE_SYNC_TARGET := baseline-sync-organization
 BASELINE_SYNC_CHECK_TARGET := baseline-sync-check-organization
+else ifeq ($(BASELINE_SOURCE_KIND),organization-git)
+BASELINE_SYNC_TARGET := baseline-sync-organization-git
+BASELINE_SYNC_CHECK_TARGET := baseline-sync-check-organization-git
+else ifeq ($(BASELINE_SOURCE_KIND),organization-https)
+BASELINE_SYNC_TARGET := baseline-sync-organization-https
+BASELINE_SYNC_CHECK_TARGET := baseline-sync-check-organization-https
 else ifeq ($(BASELINE_SOURCE_KIND),disabled)
 BASELINE_SYNC_TARGET := baseline-sync-disabled
 BASELINE_SYNC_CHECK_TARGET := baseline-sync-check-disabled
@@ -72,7 +81,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint check release release-check fetch-upstream upstream-check packaging-template-check baseline-check baseline-sync baseline-sync-check baseline-sync-aiscb baseline-sync-check-aiscb baseline-sync-organization baseline-sync-check-organization baseline-sync-disabled baseline-sync-check-disabled baseline-sync-invalid check-updates drift-check upstream-update org-baseline-sync org-baseline-sync-check validate package release-package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean rebuild reinit test
+.PHONY: help lint check release release-check fetch-upstream upstream-check packaging-template-check baseline-check baseline-sync baseline-sync-check baseline-sync-aiscb baseline-sync-check-aiscb baseline-sync-organization baseline-sync-check-organization baseline-sync-organization-git baseline-sync-check-organization-git baseline-sync-organization-https baseline-sync-check-organization-https baseline-sync-disabled baseline-sync-check-disabled baseline-sync-invalid check-updates drift-check upstream-update org-baseline-sync org-baseline-sync-check validate package release-package package-archive local-marketplace install-local smoke ci-github ci-gitlab clean rebuild reinit test
 
 help: ## Show this help
 	@if [ -t 1 ] && [ -z "$${NO_COLOR:-}" ]; then \
@@ -84,9 +93,9 @@ help: ## Show this help
 	@printf '\nCurrent settings (override on the command line or via env):\n'
 	@printf '  INTERNAL_NAME=%s\n  PACKAGE_VERSION=%s\n  APPSEC_ADVISOR_REF=%s\n  APPSEC_ADVISOR_TEMPLATE_REF=%s\n  BASELINE_SOURCE_KIND=%s\n' \
 		'$(INTERNAL_NAME)' '$(PACKAGE_VERSION)' '$(APPSEC_ADVISOR_REF)' '$(APPSEC_ADVISOR_TEMPLATE_REF)' '$(BASELINE_SOURCE_KIND)'
-	@if [ '$(BASELINE_SOURCE_KIND)' = organization ]; then \
-		printf '  ORG_BASELINE_SOURCE=%s\n  ORG_BASELINE_DOC=%s\n  ORG_BASELINE_SKILLS_DIR=%s\n' \
-			'$(ORG_BASELINE_SOURCE)' '$(ORG_BASELINE_DOC)' '$(ORG_BASELINE_SKILLS_DIR)'; \
+	@if printf '%s' '$(BASELINE_SOURCE_KIND)' | grep -q '^organization'; then \
+		printf '  ORG_BASELINE_URL=%s\n  ORG_BASELINE_REF=%s\n  ORG_BASELINE_SOURCE=%s\n  ORG_BASELINE_DOC=%s\n  ORG_BASELINE_SKILLS_DIR=%s\n' \
+			'$(ORG_BASELINE_URL)' '$(ORG_BASELINE_REF)' '$(ORG_BASELINE_SOURCE)' '$(ORG_BASELINE_DOC)' '$(ORG_BASELINE_SKILLS_DIR)'; \
 	fi
 
 ##@ Build
@@ -173,8 +182,12 @@ check-updates: $(FETCH_TARGET) ## Check appsec-advisor and secure-coding baselin
 	@status=0; \
 	$(UPSTREAM_ENV) scripts/upstream-check.sh || status=$$?; \
 	echo; \
-	baseline_status=0; \
-	$(MAKE) --no-print-directory baseline-sync-check || baseline_status=$$?; \
+	baseline_status=0; baseline_make_status=0; \
+	baseline_out="$$( $(MAKE) --no-print-directory baseline-sync-check 2>&1 )" || baseline_make_status=$$?; \
+	printf '%s\n' "$$baseline_out"; \
+	if [ "$$baseline_make_status" -ne 0 ]; then \
+		if printf '%s\n' "$$baseline_out" | grep -q '^ERROR:'; then baseline_status=2; else baseline_status=1; fi; \
+	fi; \
 	if [ "$$status" -eq 2 ] || [ "$$baseline_status" -eq 2 ]; then \
 		echo "ERROR: at least one upstream check could not complete" >&2; exit 2; \
 	fi; \
@@ -185,7 +198,7 @@ check-updates: $(FETCH_TARGET) ## Check appsec-advisor and secure-coding baselin
 	echo "OK: appsec-advisor and baseline are current"
 
 # Public baseline targets dispatch to the source kind persisted by the
-# initializer. Both source kinds have the same exit contract and ACCEPT_ID
+# initializer. All source kinds have the same exit contract and ACCEPT_ID
 # acknowledgement; callers and CI do not need source-specific commands.
 BASELINE_SYNC := "$(APPSEC_ADVISOR_SOURCE)/scripts/sync_baseline.py"
 BASELINE_SYNC_MISSING := \
@@ -231,6 +244,14 @@ ORG_BASELINE_CONFIG_MISSING := \
 	echo "ERROR: organization baseline mode requires ORG_BASELINE_SOURCE and ORG_BASELINE_DOC." >&2; \
 	exit 2
 
+ORG_BASELINE_GIT_CONFIG_MISSING := \
+	echo "ERROR: organization-git mode requires ORG_BASELINE_URL, ORG_BASELINE_REF, and ORG_BASELINE_DOC (or ORG_BASELINE_SOURCE as a local checkout override)." >&2; \
+	exit 2
+
+ORG_BASELINE_HTTPS_CONFIG_MISSING := \
+	echo "ERROR: organization-https mode requires ORG_BASELINE_URL and permits no skills directory." >&2; \
+	exit 2
+
 baseline-sync-check-organization:
 	@if [ -z "$(ORG_BASELINE_SOURCE)" ] || [ -z "$(ORG_BASELINE_DOC)" ]; then $(ORG_BASELINE_CONFIG_MISSING); fi; \
 	skills_dir="$(ORG_BASELINE_SKILLS_DIR)"; status=0; \
@@ -252,6 +273,42 @@ baseline-sync-organization:
 	fi; \
 	exit $$status
 
+baseline-sync-check-organization-git:
+	@if { [ -z "$(ORG_BASELINE_SOURCE)" ] && [ -z "$(ORG_BASELINE_URL)" ]; } || [ -z "$(ORG_BASELINE_REF)" ] || [ -z "$(ORG_BASELINE_DOC)" ]; then $(ORG_BASELINE_GIT_CONFIG_MISSING); fi; \
+	set -- --org-profile org-profile --org-skills org-skills --manage-skills; \
+	if [ -n "$(ORG_BASELINE_SOURCE)" ]; then set -- "$$@" --checkout "$(ORG_BASELINE_SOURCE)"; else set -- "$$@" --git-url "$(ORG_BASELINE_URL)" --git-ref "$(ORG_BASELINE_REF)"; fi; \
+	set -- "$$@" --doc "$(ORG_BASELINE_DOC)"; \
+	if [ -n "$(ORG_BASELINE_SKILLS_DIR)" ]; then set -- "$$@" --skills-dir "$(ORG_BASELINE_SKILLS_DIR)"; fi; \
+	status=0; python3 scripts/sync-org-baseline.py "$$@" || status=$$?; \
+	if [ "$$status" -eq 1 ]; then echo "$(DRIFT_NOTE)"; fi; \
+	exit $$status
+
+baseline-sync-organization-git:
+	@if { [ -z "$(ORG_BASELINE_SOURCE)" ] && [ -z "$(ORG_BASELINE_URL)" ]; } || [ -z "$(ORG_BASELINE_REF)" ] || [ -z "$(ORG_BASELINE_DOC)" ]; then $(ORG_BASELINE_GIT_CONFIG_MISSING); fi; \
+	set -- --org-profile org-profile --org-skills org-skills --manage-skills; \
+	if [ -n "$(ORG_BASELINE_SOURCE)" ]; then set -- "$$@" --checkout "$(ORG_BASELINE_SOURCE)"; else set -- "$$@" --git-url "$(ORG_BASELINE_URL)" --git-ref "$(ORG_BASELINE_REF)"; fi; \
+	set -- "$$@" --doc "$(ORG_BASELINE_DOC)"; \
+	if [ -n "$(ORG_BASELINE_SKILLS_DIR)" ]; then set -- "$$@" --skills-dir "$(ORG_BASELINE_SKILLS_DIR)"; fi; \
+	if [ -n "$${ACCEPT_ID:-}" ]; then set -- "$$@" --accept-id "$$ACCEPT_ID"; fi; \
+	status=0; python3 scripts/sync-org-baseline.py "$$@" --write || status=$$?; \
+	if [ "$$status" -eq 3 ]; then echo "NOTE: a new baseline id is a decision — re-run with ACCEPT_ID=<id> to move file and profile together."; fi; \
+	exit $$status
+
+baseline-sync-check-organization-https:
+	@if [ -z "$(ORG_BASELINE_URL)" ] || [ -n "$(ORG_BASELINE_SKILLS_DIR)" ]; then $(ORG_BASELINE_HTTPS_CONFIG_MISSING); fi; \
+	status=0; python3 scripts/sync-org-baseline.py --org-profile org-profile --org-skills org-skills \
+		--https-url "$(ORG_BASELINE_URL)" || status=$$?; \
+	if [ "$$status" -eq 1 ]; then echo "$(DRIFT_NOTE)"; fi; \
+	exit $$status
+
+baseline-sync-organization-https:
+	@if [ -z "$(ORG_BASELINE_URL)" ] || [ -n "$(ORG_BASELINE_SKILLS_DIR)" ]; then $(ORG_BASELINE_HTTPS_CONFIG_MISSING); fi; \
+	set -- --org-profile org-profile --org-skills org-skills --https-url "$(ORG_BASELINE_URL)"; \
+	if [ -n "$${ACCEPT_ID:-}" ]; then set -- "$$@" --accept-id "$$ACCEPT_ID"; fi; \
+	status=0; python3 scripts/sync-org-baseline.py "$$@" --write || status=$$?; \
+	if [ "$$status" -eq 3 ]; then echo "NOTE: a new baseline id is a decision — re-run with ACCEPT_ID=<id> to move file and profile together."; fi; \
+	exit $$status
+
 baseline-sync-disabled:
 	@echo "SKIP: secure-coding baseline is disabled"
 
@@ -259,13 +316,13 @@ baseline-sync-check-disabled:
 	@echo "SKIP: secure-coding baseline is disabled"
 
 baseline-sync-invalid:
-	@echo "ERROR: BASELINE_SOURCE_KIND must be aiscb, organization, or disabled; got '$(BASELINE_SOURCE_KIND)'" >&2
+	@echo "ERROR: BASELINE_SOURCE_KIND must be aiscb, organization-git, organization-https, or disabled; got '$(BASELINE_SOURCE_KIND)'" >&2
 	@exit 2
 
 # Compatibility aliases for repositories that adopted the earlier WIP names.
-org-baseline-sync-check: baseline-sync-check-organization
+org-baseline-sync-check: baseline-sync-check
 
-org-baseline-sync: baseline-sync-organization
+org-baseline-sync: baseline-sync
 
 packaging-template-check: ## Read-only check for a newer packaging-template revision
 	@status=0; \

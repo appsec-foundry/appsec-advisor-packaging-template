@@ -106,8 +106,9 @@ the `session-banner` entry in `org-profile/package-policy.yaml`. To remove the
 status hook completely, disable the banner and remove the hook from the package
 surface, then rebuild.
 
-The initializer persists `BASELINE_SOURCE_KIND=aiscb`, `organization`, or
-`disabled`. Both enabled modes use the same maintenance commands:
+The initializer persists `BASELINE_SOURCE_KIND=aiscb`, `organization-git`,
+`organization-https`, or `disabled`. All enabled modes use the same maintenance
+commands:
 
 ```bash
 make baseline-sync-check
@@ -115,13 +116,15 @@ make baseline-sync
 ACCEPT_ID=<new-id> make baseline-sync
 ```
 
-AISCB mode vendors the generic published document. Organization mode consumes
-an already composed document from the local repository configured through
-`ORG_BASELINE_SOURCE` and `ORG_BASELINE_DOC`; an optional
-`ORG_BASELINE_SKILLS_DIR` supplies skill packs copied into `org-skills/`. The
-organization repository owns composition of generic AISCB and its central
-overlay. This packaging repository does not clone it and does not apply a
-second `organization-overlay.md` in organization mode.
+AISCB mode vendors the generic published document. Organization Git mode
+temporarily fetches `ORG_BASELINE_URL` at `ORG_BASELINE_REF`, materializes only
+`ORG_BASELINE_DOC` and optional skill blobs under `ORG_BASELINE_SKILLS_DIR`,
+then removes the temporary repository. Organization HTTPS mode downloads
+exactly `ORG_BASELINE_URL` and permits no skills or archive. An optional
+`ORG_BASELINE_SOURCE` override lets Git mode consume an existing local checkout.
+The organization source owns composition of generic AISCB and its central
+overlay; this packaging repository never applies a second
+`organization-overlay.md` in an organization mode.
 
 `baseline.file` is authoritative in both modes. A same-ID source edit updates
 that file. A new ID stops until `ACCEPT_ID` matches, then file and profile move
@@ -130,8 +133,9 @@ the sync state records them as managed; unrelated local skills remain. New
 skills are copied but do not ship until explicitly added to
 `plugin_surface.skills.include`.
 
-See `org-profile/baselines/README.md` for path constraints, CI checkout layout,
-and the managed-skill state file.
+The sync state records the fetched Git commit or HTTPS digest as provenance.
+See `org-profile/baselines/README.md` for URL/ref validation, path constraints,
+temporary-fetch behavior, and the managed-skill state file.
 
 ### What reaches a machine, and when
 
@@ -139,8 +143,8 @@ Two different paths, depending on whether the id changed.
 
 In AISCB mode, edits under an unchanged id can reach developers through an
 explicit `install-baseline --refresh` from the configured URL. Organization
-mode deliberately ships only the locally reviewed copy and normally requires a
-new package release even for same-ID edits.
+modes deliberately remove that runtime URL and ship only the reviewed copy, so
+they normally require a new package release even for same-ID edits.
 
 A new id needs a package release: bump `baseline.id`, write the document over
 the vendored copy, raise `PACKAGE_VERSION`, rebuild, distribute. The id is what

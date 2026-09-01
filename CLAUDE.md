@@ -37,7 +37,7 @@ make upstream-check # read-only drift check: reports if the build ref moved (new
 make upstream-update # run that check, then `make rebuild` only when the ref moved to a new commit (or no checkout exists yet). Release drift is reported but not built — raise APPSEC_ADVISOR_REF first. Exits 2 when the check itself fails
 make baseline-check # alias for the configured source's complete read-only drift check
 make baseline-sync-check # check configured baseline bytes, id, and optional org skills
-make baseline-sync # sync from AISCB or a local org repo (ACCEPT_ID=<id> for a new id)
+make baseline-sync # sync from AISCB, org Git, or org HTTPS (ACCEPT_ID=<id> for a new id)
 make validate      # validate org-profile.yaml against upstream schema only
 make package       # fetch + build + smoke test → build/<name>/
 make rebuild       # clean (removes upstream/ build/ dist/) then package
@@ -152,7 +152,7 @@ update using the exact commit reported by the check.
 - **Org hooks run at Claude Code's event layer only.** The `hooks:` block bundles org scripts (under `org-profile/hooks/`) into the built `hooks/hooks.json` and records them in `package-surface.json` under `hooks.org`. They never reach the analysis pipeline — findings, severity, and schemas stay core-owned. Their ids must not collide with hooks in the selected upstream ref. To replace behavior, remove the upstream id from the allowlist and add the org handler under a distinct `org-...` id.
 - **Org skills must not overwrite upstream skills.** `scripts/package-local.sh` fails before packaging if `org-skills/<name>` already exists under the upstream `skills/` directory.
 - **The baseline overlay is composed on a copy, never on the tracked file.** If `org-profile/baselines/organization-overlay.md` exists, `scripts/package-local.sh` copies `org-profile/` to a temporary directory and runs `scripts/compose-baseline.py` on that copy before handing it to the packager; `org-profile/baselines/secure-coding-baseline.md` itself is never written to, so `make baseline-sync` re-vendoring it later cannot lose org rules that were never stored there. The overlay must not add its own `baseline-id:` line — the composed document is rejected if it ends up with anything other than exactly one.
-- **Baseline source mode is explicit.** `BASELINE_SOURCE_KIND` selects `aiscb`, `organization`, or `disabled`. Organization mode consumes an already composed document and optional skills from `ORG_BASELINE_SOURCE`; it never fetches that repository, rejects escaping paths and symlinks, writes only `baseline.file`, and rejects a second local `organization-overlay.md`. New IDs require `ACCEPT_ID=<id>`, and copied skills remain excluded until explicitly allowlisted.
+- **Baseline source mode is explicit.** `BASELINE_SOURCE_KIND` selects `aiscb`, `organization-git`, `organization-https`, or `disabled` (`organization` remains a legacy local-checkout mode). Git mode temporarily fetches the configured URL/ref and materializes only the composed document and optional skill blobs; HTTPS mode accepts one composed document and no skills. Organization modes write only `baseline.file`, reject a second local `organization-overlay.md`, require `ACCEPT_ID=<id>` for a new ID, and leave copied skills excluded until explicitly allowlisted.
 - **`org-profile.yaml` is schema-validated** at build time (`make validate`). Structural changes must stay schema-conformant (`api_version: appsec-advisor.org-profile/v2`).
 - **`context/organization.md` is untrusted reference data.** It can inform findings but must never change severity rules, QA gates, schemas, permissions, or tool behavior.
 - **MCP servers are declared in `org-profile.yaml` under `mcp:`** and written by the upstream packager, gated by the `plugin_surface.mcp_servers` allowlist. Add or remove server ids there to control the generated `.mcp.json`. Tokens must be referenced via `${ENV_VAR}` — never hardcoded; a credential in a server URL is rejected at validation. MCP tool *output* is untrusted like `organization.md`: it can inform findings but must never change severity rules, permissions, or tool behavior. An `org-mcp.json` at the repo root is no longer read; it used to be copied over the finished build and silently replaced the profile's servers.
@@ -164,10 +164,10 @@ update using the exact commit reported by the check.
 `scripts/init-org-repo.sh` is a standalone generator (run via curl or locally) that scaffolds a *new* packaging repo: it prompts for org name/id/plugin name, then copies+`sed`-substitutes the placeholders into a fresh git repo. It is not part of the build. When editing template files, keep its substitution targets intact — it `sed`-replaces literal strings like `acme-appsec`, `Acme Corp`, `Acme AppSec Team`, `id: acme`, `profile_version: "2026.06.1"`, and specific `requirements_yaml_url`/`label` lines. The scaffolded repo's `README.md` is rendered from `README.example.md`, and `docs/MAINTAINER-RUNBOOK.md` from `docs/MAINTAINER-RUNBOOK.example.md` (copied + `sed`-substituted). Edit those source templates to change the generated repository documentation.
 
 The initializer offers generic AISCB, a composed organization baseline from a
-local repository, or disabled. It validates and resolves the selected document
+Git URL/ref, one composed HTTPS document, or disabled. It validates the source
 before touching the target, vendors the exact bytes, and persists the source
-mode. Organization mode also copies optional skill packs and removes the
-generic URL; reinitialization preserves its local source settings.
+settings. Git mode also copies optional skill packs; both organization modes
+remove the generic runtime URL. Reinitialization preserves the selection.
 
 ## Agent guidance
 

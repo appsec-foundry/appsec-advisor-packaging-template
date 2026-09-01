@@ -8,14 +8,18 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
 ROOT = Path(__file__).parents[1]
 SCRIPT = ROOT / "scripts" / "sync-org-baseline.py"
+REAL_GIT = Path("/usr/bin/git")
 SPEC = importlib.util.spec_from_file_location("sync_org_baseline", SCRIPT)
 assert SPEC and SPEC.loader
 syncer = importlib.util.module_from_spec(SPEC)
@@ -74,6 +78,40 @@ class SyncOrgBaselineTests(unittest.TestCase):
         skill.mkdir(parents=True)
         (skill / "SKILL.md").write_text(body, encoding="utf-8")
         return skill
+
+    def git_remote(self) -> tuple[Path, dict[str, str]]:
+        source = self.work / "git-source"
+        source.mkdir()
+        subprocess.run([REAL_GIT, "init", "-q", "-b", "main"], cwd=source, check=True)
+        subprocess.run([REAL_GIT, "config", "user.name", "Test"], cwd=source, check=True)
+        subprocess.run(
+            [REAL_GIT, "config", "user.email", "test@example.test"], cwd=source, check=True
+        )
+        (source / "dist" / "skills" / "review").mkdir(parents=True)
+        (source / "dist" / "baseline.md").write_bytes(self.doc_bytes)
+        (source / "dist" / "skills" / "review" / "SKILL.md").write_text(
+            "skill-v1", encoding="utf-8"
+        )
+        subprocess.run([REAL_GIT, "add", "."], cwd=source, check=True)
+        subprocess.run([REAL_GIT, "commit", "-q", "-m", "initial"], cwd=source, check=True)
+        remote = self.work / "remote.git"
+        subprocess.run([REAL_GIT, "clone", "-q", "--bare", str(source), str(remote)], check=True)
+        ssh = self.work / "fake-ssh"
+        ssh.write_text(
+            "#!/usr/bin/env bash\nexec /usr/bin/git-upload-pack \"$ORG_BASELINE_TEST_REMOTE\"\n",
+            encoding="utf-8",
+        )
+        ssh.chmod(0o755)
+        real_bin = self.work / "real-git-bin"
+        real_bin.mkdir()
+        (real_bin / "git").symlink_to(REAL_GIT)
+        environment = {
+            "GIT_SSH_COMMAND": str(ssh),
+            "GIT_SSH_VARIANT": "ssh",
+            "ORG_BASELINE_TEST_REMOTE": str(remote),
+            "PATH": f"{real_bin}:{os.environ['PATH']}",
+        }
+        return source, environment
 
     def run_main(self, *extra_args: str) -> tuple[int, str, str]:
         previous = sys.argv
@@ -304,6 +342,170 @@ class SyncOrgBaselineTests(unittest.TestCase):
             sys.argv = previous
         self.assertEqual(rc, 0)
         self.assertEqual(stdout.getvalue().strip(), "acme-sec-1.0.0")
+
+    def test_remote_url_validation_rejects_credentials_queries_and_file_urls(self) -> None:
+        for value in (
+            "https://user:secret@example.test/baseline.md",
+            "https://example.test/baseline.md?token=secret",
+            "file:///tmp/baseline.md",
+        ):
+            with self.subTest(value=value), self.assertRaises(syncer.SyncError):
+                syncer._validate_https_url(value)
+        for value in (
+            "https://user:secret@example.test/repo.git",
+            "https://example.test/repo.git?token=secret",
+            "file:///tmp/repo.git",
+        ):
+            with self.subTest(value=value), self.assertRaises(syncer.SyncError):
+                syncer._validate_git_url(value)
+
+    def test_https_source_materializes_exactly_one_document_and_no_skills(self) -> None:
+        args = argparse.Namespace(
+            checkout=None,
+            git_url=None,
+            git_ref="main",
+            https_url="https://security.example.test/baseline.md",
+            doc=None,
+            skills_dir=None,
+        )
+        with mock.patch.object(syncer, "_fetch_https_document", return_value=self.doc_bytes):
+            with syncer._resolved_source(args) as resolved:
+                self.assertEqual((resolved.checkout / resolved.doc).read_bytes(), self.doc_bytes)
+                self.assertIsNone(resolved.skills_dir)
+                self.assertTrue(resolved.manage_skills)
+                self.assertEqual(resolved.metadata["kind"], "https")
+
+        args.skills_dir = "skills"
+        with self.assertRaisesRegex(syncer.SyncError, "exactly one document"):
+            with syncer._resolved_source(args):
+                pass
+
+    def test_git_source_materializes_only_configured_regular_blobs(self) -> None:
+        commit = "a" * 40
+        baseline_blob = "b" * 40
+        skill_blob = "c" * 40
+
+        def git_output(_git_dir, arguments, **_kwargs):
+            if arguments[0] == "fetch":
+                return b""
+            if arguments[0] == "rev-parse":
+                return (commit + "\n").encode("ascii")
+            if arguments[0] == "ls-tree" and arguments[-1] == "dist/baseline.md":
+                return f"100644 blob {baseline_blob}\tdist/baseline.md\0".encode()
+            if arguments[0] == "ls-tree" and arguments[-1] == "dist/skills":
+                return f"100644 blob {skill_blob}\tdist/skills/review/SKILL.md\0".encode()
+            if arguments[:2] == ["cat-file", "-s"]:
+                data = self.doc_bytes if arguments[2] == baseline_blob else b"skill"
+                return f"{len(data)}\n".encode()
+            if arguments[:2] == ["cat-file", "blob"]:
+                return self.doc_bytes if arguments[2] == baseline_blob else b"skill"
+            raise AssertionError(arguments)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            with mock.patch.object(syncer, "_git_command", side_effect=git_output):
+                resolved = syncer._materialize_git_source(
+                    Path(temporary),
+                    "https://git.example.test/security/baseline.git",
+                    "main",
+                    "dist/baseline.md",
+                    "dist/skills",
+                )
+            self.assertEqual((resolved.checkout / resolved.doc).read_bytes(), self.doc_bytes)
+            self.assertEqual(
+                (resolved.checkout / "dist/skills/review/SKILL.md").read_bytes(), b"skill"
+            )
+            self.assertEqual(resolved.metadata["commit"], commit)
+            self.assertTrue(resolved.manage_skills)
+
+    def test_real_git_remote_fetch_copies_and_updates_baseline_and_skills(self) -> None:
+        source, environment = self.git_remote()
+
+        def run_git_sync(*extra: str) -> int:
+            previous = sys.argv
+            sys.argv = [
+                "sync-org-baseline.py",
+                "--org-profile",
+                str(self.org_profile),
+                "--org-skills",
+                str(self.org_skills),
+                "--git-url",
+                "git@example.test:baseline.git",
+                "--git-ref",
+                "main",
+                "--doc",
+                "dist/baseline.md",
+                "--skills-dir",
+                "dist/skills",
+                *extra,
+            ]
+            try:
+                with mock.patch.dict(os.environ, environment):
+                    return syncer.main()
+            finally:
+                sys.argv = previous
+
+        self.assertEqual(run_git_sync("--accept-id", "acme-sec-1.0.0", "--write"), 0)
+        target = self.org_profile / "baselines" / "secure-coding-baseline.md"
+        skill = self.org_skills / "review" / "SKILL.md"
+        self.assertEqual(target.read_bytes(), self.doc_bytes)
+        self.assertEqual(skill.read_text(encoding="utf-8"), "skill-v1")
+
+        (source / "dist" / "baseline.md").write_bytes(
+            self.doc_bytes.replace(b"Rule.", b"Updated rule.")
+        )
+        (source / "dist" / "skills" / "review" / "SKILL.md").write_text(
+            "skill-v2", encoding="utf-8"
+        )
+        subprocess.run([REAL_GIT, "add", "."], cwd=source, check=True)
+        subprocess.run([REAL_GIT, "commit", "-q", "-m", "update"], cwd=source, check=True)
+        subprocess.run(
+            [REAL_GIT, "push", "-q", str(self.work / "remote.git"), "main"],
+            cwd=source,
+            check=True,
+        )
+
+        self.assertEqual(run_git_sync(), 1)
+        self.assertEqual(run_git_sync("--write"), 0)
+        self.assertIn(b"Updated rule.", target.read_bytes())
+        self.assertEqual(skill.read_text(encoding="utf-8"), "skill-v2")
+        state = json.loads(
+            (self.packaging / syncer.DEFAULT_STATE_FILE).read_text(encoding="utf-8")
+        )
+        self.assertEqual(state["source"]["kind"], "git")
+        self.assertEqual(state["source"]["ref"], "main")
+
+    def test_https_write_records_source_and_removes_previously_managed_skills(self) -> None:
+        managed = self.org_skills / "old-managed"
+        managed.mkdir(parents=True)
+        (managed / "SKILL.md").write_text("old", encoding="utf-8")
+        (self.packaging / syncer.DEFAULT_STATE_FILE).write_text(
+            json.dumps({"version": 1, "managed_skills": ["old-managed"]}),
+            encoding="utf-8",
+        )
+        previous = sys.argv
+        sys.argv = [
+            "sync-org-baseline.py",
+            "--org-profile",
+            str(self.org_profile),
+            "--org-skills",
+            str(self.org_skills),
+            "--https-url",
+            "https://security.example.test/baseline.md",
+            "--accept-id",
+            "acme-sec-1.0.0",
+            "--write",
+        ]
+        try:
+            with mock.patch.object(syncer, "_fetch_https_document", return_value=self.doc_bytes):
+                self.assertEqual(syncer.main(), 0)
+        finally:
+            sys.argv = previous
+        self.assertFalse(managed.exists())
+        state = json.loads(
+            (self.packaging / syncer.DEFAULT_STATE_FILE).read_text(encoding="utf-8")
+        )
+        self.assertEqual(state["managed_skills"], [])
+        self.assertEqual(state["source"]["kind"], "https")
 
 
 if __name__ == "__main__":

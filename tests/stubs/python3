@@ -44,6 +44,36 @@ if script.endswith("resolve-baseline-id.py"):
     print(baseline_id)
     sys.exit(0)
 
+if script.endswith("sync-org-baseline.py") and os.environ.get("PYSTUB_ORG_BASELINE_ID"):
+    baseline_id = os.environ["PYSTUB_ORG_BASELINE_ID"]
+    if "--print-id" in args:
+        print(baseline_id)
+        sys.exit(0)
+    if "--write" in args:
+        profile_dir = "org-profile"
+        for i, argument in enumerate(args):
+            if argument == "--org-profile" and i + 1 < len(args):
+                profile_dir = args[i + 1]
+        baseline_dir = os.path.join(profile_dir, "baselines")
+        os.makedirs(baseline_dir, exist_ok=True)
+        with open(
+            os.path.join(baseline_dir, "secure-coding-baseline.md"),
+            "w",
+            encoding="utf-8",
+        ) as handle:
+            handle.write(f"baseline-id: {baseline_id}\n")
+        with open(".org-baseline-sync-state.json", "w", encoding="utf-8") as handle:
+            json.dump(
+                {
+                    "version": 1,
+                    "managed_skills": [],
+                    "source": {"kind": "https"},
+                },
+                handle,
+            )
+        sys.exit(0)
+    sys.exit(0)
+
 if script.endswith("package_internal_plugin.py"):
     # Create the expected build output dir so a following smoke step has a target.
     name = None

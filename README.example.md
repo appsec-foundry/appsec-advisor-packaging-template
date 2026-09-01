@@ -24,8 +24,8 @@ organization-specific content before rollout:
   context.
 - Configure requirements, presets, policy, banner, baseline, and guardrails in
   `org-profile/org-profile.yaml` as needed.
-- Run `make baseline-sync-check` to verify the configured generic AISCB source
-  or local organization repository. Use `make baseline-sync` after reviewing
+- Run `make baseline-sync-check` to verify the configured AISCB, organization
+  Git, or organization HTTPS source. Use `make baseline-sync` after reviewing
   source changes; a new ID requires `ACCEPT_ID=<id>`.
 - Add organization skills under `org-skills/`, and include or remove skills,
   hooks, and MCP servers through `org-profile/package-policy.yaml`.

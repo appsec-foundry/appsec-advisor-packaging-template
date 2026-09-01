@@ -88,10 +88,12 @@ compose_baseline_overlay() {
   if [ ! -f "${org_profile_dir}/baselines/organization-overlay.md" ]; then
     return 0
   fi
-  if [ "${BASELINE_SOURCE_KIND}" = organization ]; then
-    echo "ERROR: organization baseline mode consumes an already composed document; remove org-profile/baselines/organization-overlay.md or compose it in the organization baseline repository" >&2
-    exit 2
-  fi
+  case "${BASELINE_SOURCE_KIND}" in
+    organization|organization-git|organization-https)
+      echo "ERROR: organization baseline mode consumes an already composed document; remove org-profile/baselines/organization-overlay.md or compose it at the organization source" >&2
+      exit 2
+      ;;
+  esac
 
   TEMP_ORG_PROFILE="$(mktemp -d "${TMPDIR:-/tmp}/appsec-advisor-org-profile.XXXXXX")"
   cp -a "${org_profile_dir}/." "${TEMP_ORG_PROFILE}/"

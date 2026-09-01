@@ -119,14 +119,15 @@ to your own skills — the threat-model pipeline does not query it.
   `baseline-id:` line — a composed document with anything other than exactly
   one is rejected.
 - **Baseline source mode is explicit.** `BASELINE_SOURCE_KIND` is `aiscb`,
-  `organization`, or `disabled`. Organization mode consumes a composed
-  document and optional skill packs from the local path in
-  `ORG_BASELINE_SOURCE`; the sync never fetches that repository. Source paths
-  must remain inside it and may not traverse symlinks. In organization mode,
-  `organization-overlay.md` is rejected because composition belongs in the
-  organization repository. `baseline.file` is the only sync target, a new ID
-  requires `ACCEPT_ID=<id>`, and copied skills still require an explicit
-  `plugin_surface.skills.include` entry before they ship.
+  `organization-git`, `organization-https`, or `disabled`; `organization`
+  remains a legacy local-checkout mode. Git mode temporarily fetches
+  `ORG_BASELINE_URL` at `ORG_BASELINE_REF`, materializes only
+  `ORG_BASELINE_DOC` and optional `ORG_BASELINE_SKILLS_DIR`, and executes no
+  repository content. HTTPS mode accepts exactly one composed document and no
+  skills. Organization sources never become runtime URLs, reject a second
+  `organization-overlay.md`, and write only the reviewed `baseline.file` copy.
+  A new ID requires `ACCEPT_ID=<id>`, and copied skills still require an
+  explicit `plugin_surface.skills.include` entry before they ship.
 - **Own skills live in `org-skills/`, own MCP servers in the profile.** The
   `mcp:` block is the only path for MCP; the former `org-mcp.json` is no longer
   read. It was copied over the finished `.mcp.json` *after* packaging and
@@ -171,7 +172,7 @@ make upstream-update                  # same check, then `make rebuild` only on 
 make packaging-template-check         # read-only drift check for the pinned packaging-template commit
 make baseline-check                   # alias for the configured source's complete read-only drift check
 make baseline-sync-check              # read-only: check configured baseline bytes, id, and optional org skills
-make baseline-sync                    # sync from AISCB or the local org repo (ACCEPT_ID=<id> for a new id)
+make baseline-sync                    # sync from AISCB, org Git, or org HTTPS (ACCEPT_ID=<id> for a new id)
 make check-updates                    # check appsec-advisor and baseline updates, including vendored-copy drift
 make package                          # fetch upstream + build the package + smoke-test it
 APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package # pin a specific release
@@ -194,11 +195,12 @@ not the moving branch name. A successful reinitialization persists that exact
 revision again.
 
 For AISCB mode, the initializer pins the ID the published baseline declares and
-vendors those same bytes. For organization mode, it validates the composed
-document and optional skills in the selected local repository before creating
-the target, writes that ID into the profile, removes the generic URL, and copies
-the reviewed inputs. Disabled mode leaves the profile baseline off. Reinit
-preserves the selected mode and local source paths.
+vendors those same bytes. Organization Git mode temporarily fetches the chosen
+URL/ref and copies the composed document plus optional skills. Organization
+HTTPS mode downloads and validates exactly one document. Both remove the
+generic runtime URL, record source provenance in the sync state, and leave only
+reviewed copies in the packaging repository. Disabled mode leaves the profile
+baseline off. Reinit preserves the selected mode and source settings.
 
 The baseline moves on two tracks, and mixing them up is the usual mistake.
 Edits under an unchanged id reach a developer with `install-baseline --refresh`,

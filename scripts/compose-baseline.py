@@ -76,7 +76,7 @@ def compose(org_profile_dir: Path) -> bool:
         raise ComposeError(f"cannot read baseline overlay {overlay_path}: {error}") from error
 
     composed = base_text.rstrip("\n") + "\n\n" + overlay_text.strip("\n") + "\n"
-    ids = sorted(set(MARKER_PATTERN.findall(composed)))
+    ids = MARKER_PATTERN.findall(composed)
     if len(ids) != 1:
         detail = "none" if not ids else ", ".join(ids)
         raise ComposeError(

@@ -274,9 +274,9 @@ select_baseline_source() {
   configured="${BASELINE_SOURCE_KIND:-}"
   if [ -n "${configured}" ]; then
     case "${configured}" in
-      aiscb|organization|disabled) printf '%s\n' "${configured}"; return 0 ;;
+      aiscb|organization-git|organization-https|disabled) printf '%s\n' "${configured}"; return 0 ;;
       *)
-        echo "ERROR: BASELINE_SOURCE_KIND must be aiscb, organization, or disabled." >&2
+        echo "ERROR: BASELINE_SOURCE_KIND must be aiscb, organization-git, organization-https, or disabled." >&2
         return 2
         ;;
     esac
@@ -284,15 +284,80 @@ select_baseline_source() {
   while true; do
     echo "Select the secure-coding baseline source:" >&2
     echo "  1. Generic AI Secure Coding Baseline (default)" >&2
-    echo "  2. Composed organization baseline from a local repository" >&2
-    echo "  3. Disabled" >&2
+    echo "  2. Composed organization baseline from a Git repository" >&2
+    echo "  3. One composed organization baseline HTTPS document" >&2
+    echo "  4. Disabled" >&2
     read -r -p "Baseline source [1]: " reply || reply=""
     case "${reply}" in
       ""|1|y|Y|aiscb) printf '%s\n' aiscb; return 0 ;;
-      2|organization|org) printf '%s\n' organization; return 0 ;;
-      3|n|N|disabled|none) printf '%s\n' disabled; return 0 ;;
-      *) echo "  (enter 1 for AISCB, 2 for organization, or 3 to disable)" >&2 ;;
+      2|organization-git|git|organization|org) printf '%s\n' organization-git; return 0 ;;
+      3|organization-https|https) printf '%s\n' organization-https; return 0 ;;
+      4|n|N|disabled|none) printf '%s\n' disabled; return 0 ;;
+      *) echo "  (enter 1 for AISCB, 2 for organization Git, 3 for HTTPS, or 4 to disable)" >&2 ;;
     esac
+  done
+}
+
+valid_git_ref() {
+  case "$1" in
+    ""|[!A-Za-z0-9]*|*[!A-Za-z0-9._/-]*|*..*|*//*|*/|*.|*.lock|*/.*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+normalize_git_url() {
+  PYTHONUTF8=1 python3 - "$1" <<'PY'
+import re
+import sys
+from urllib.parse import urlsplit
+
+value = sys.argv[1].strip()
+if len(value) > 2048 or any(
+    character.isspace() or not character.isprintable() or character in "#$'\"`<>\\|"
+    for character in value
+):
+    raise SystemExit(2)
+if value.startswith("https://"):
+    parsed = urlsplit(value)
+    valid = (
+        bool(parsed.hostname)
+        and parsed.username is None
+        and parsed.password is None
+        and not parsed.query
+        and not parsed.fragment
+    )
+elif value.startswith("ssh://"):
+    parsed = urlsplit(value)
+    valid = bool(parsed.hostname) and parsed.password is None and not parsed.query and not parsed.fragment
+else:
+    valid = bool(re.fullmatch(r"[A-Za-z0-9._-]+@[A-Za-z0-9._-]+:[A-Za-z0-9._~/-]+", value))
+if not valid:
+    raise SystemExit(2)
+print(value)
+PY
+}
+
+ask_git_url() {
+  local reply normalized
+  while true; do
+    reply="$(ask "Organization baseline Git URL")"
+    if normalized=$(normalize_git_url "${reply}"); then
+      printf '%s\n' "${normalized}"
+      return 0
+    fi
+    echo "  (enter an HTTPS Git URL without credentials, or an SSH Git URL)" >&2
+  done
+}
+
+ask_required_https_url() {
+  local reply normalized
+  while true; do
+    reply="$(ask "Organization baseline HTTPS document URL")"
+    if normalized=$(normalize_baseline_https_url "${reply}"); then
+      printf '%s\n' "${normalized}"
+      return 0
+    fi
+    echo "  (enter one HTTPS document URL without credentials, query, fragment, whitespace, or shell metacharacters)" >&2
   done
 }
 
@@ -354,6 +419,34 @@ if (
     or not parsed.hostname
     or parsed.username is not None
     or parsed.password is not None
+):
+    raise SystemExit(2)
+print(value)
+PY
+}
+
+normalize_baseline_https_url() {
+  PYTHONUTF8=1 python3 - "$1" <<'PY'
+import sys
+from urllib.parse import urlsplit
+
+value = sys.argv[1].strip()
+if not value or len(value) > 2048 or any(
+    character.isspace() or not character.isprintable() or character in "#$'\"`<>\\|"
+    for character in value
+):
+    raise SystemExit(2)
+try:
+    parsed = urlsplit(value)
+except ValueError:
+    raise SystemExit(2)
+if (
+    parsed.scheme != "https"
+    or not parsed.hostname
+    or parsed.username is not None
+    or parsed.password is not None
+    or parsed.query
+    or parsed.fragment
 ):
     raise SystemExit(2)
 print(value)
@@ -699,12 +792,45 @@ if [ -n "${APPSEC_REINIT_TARGET:-}" ]; then
         exit 2
       fi
       ;;
+    organization-git)
+      BASELINE_ENABLED=true
+      ORG_BASELINE_URL="${APPSEC_REINIT_ORG_BASELINE_URL:?}"
+      ORG_BASELINE_REF="${APPSEC_REINIT_ORG_BASELINE_REF:?}"
+      ORG_BASELINE_SOURCE="${APPSEC_REINIT_ORG_BASELINE_SOURCE:-}"
+      ORG_BASELINE_DOC="${APPSEC_REINIT_ORG_BASELINE_DOC:?}"
+      ORG_BASELINE_SKILLS_DIR="${APPSEC_REINIT_ORG_BASELINE_SKILLS_DIR:-}"
+      ORG_BASELINE_URL="$(normalize_git_url "${ORG_BASELINE_URL}")" || {
+        echo "ERROR: existing organization baseline Git URL is unsafe" >&2
+        exit 2
+      }
+      if ! valid_git_ref "${ORG_BASELINE_REF}" || \
+         ! valid_relative_source_path "${ORG_BASELINE_DOC}" || \
+         { [ -n "${ORG_BASELINE_SOURCE}" ] && ! valid_make_path "${ORG_BASELINE_SOURCE}"; } || \
+         { [ -n "${ORG_BASELINE_SKILLS_DIR}" ] && ! valid_relative_source_path "${ORG_BASELINE_SKILLS_DIR}"; }; then
+        echo "ERROR: existing organization Git baseline settings are unsafe" >&2
+        exit 2
+      fi
+      ;;
+    organization-https)
+      BASELINE_ENABLED=true
+      ORG_BASELINE_URL="${APPSEC_REINIT_ORG_BASELINE_URL:?}"
+      ORG_BASELINE_URL="$(normalize_baseline_https_url "${ORG_BASELINE_URL}")" || {
+        echo "ERROR: existing organization baseline HTTPS URL is unsafe" >&2
+        exit 2
+      }
+      ORG_BASELINE_REF=""
+      ORG_BASELINE_SOURCE=""
+      ORG_BASELINE_DOC=""
+      ORG_BASELINE_SKILLS_DIR=""
+      ;;
     disabled) BASELINE_ENABLED=false ;;
     *)
-      echo "ERROR: existing BASELINE_SOURCE_KIND must be aiscb, organization, or disabled" >&2
+      echo "ERROR: existing BASELINE_SOURCE_KIND must be aiscb, organization-git, organization-https, or disabled" >&2
       exit 2
       ;;
   esac
+  ORG_BASELINE_URL="${ORG_BASELINE_URL:-}"
+  ORG_BASELINE_REF="${ORG_BASELINE_REF:-}"
   ORG_BASELINE_SOURCE="${ORG_BASELINE_SOURCE:-}"
   ORG_BASELINE_DOC="${ORG_BASELINE_DOC:-}"
   ORG_BASELINE_SKILLS_DIR="${ORG_BASELINE_SKILLS_DIR:-}"
@@ -756,17 +882,20 @@ else
   esac
 
   BASELINE_SOURCE_KIND="$(select_baseline_source)" || exit 2
+  ORG_BASELINE_URL=""
+  ORG_BASELINE_REF=""
   ORG_BASELINE_SOURCE=""
   ORG_BASELINE_DOC=""
   ORG_BASELINE_SKILLS_DIR=""
   case "${BASELINE_SOURCE_KIND}" in
     aiscb) BASELINE_ENABLED=true ;;
-    organization)
+    organization-git)
       BASELINE_ENABLED=true
+      ORG_BASELINE_URL="$(ask_git_url)"
       while true; do
-        ORG_BASELINE_SOURCE="$(ask "Local organization baseline repository")"
-        if valid_make_path "${ORG_BASELINE_SOURCE}"; then break; fi
-        echo "  (use a local path containing only letters, digits, '.', '_', '-', and '/')" >&2
+        ORG_BASELINE_REF="$(ask "Git ref to follow" "main")"
+        if valid_git_ref "${ORG_BASELINE_REF}"; then break; fi
+        echo "  (enter a safe branch, tag, or commit, for example main or v1.2.0)" >&2
       done
       while true; do
         ORG_BASELINE_DOC="$(ask "Composed baseline document inside that repository" "dist/secure-coding-baseline.md")"
@@ -785,6 +914,10 @@ else
         fi
         echo "  (enter a relative path without '.' or '..' components, or leave empty)" >&2
       done
+      ;;
+    organization-https)
+      BASELINE_ENABLED=true
+      ORG_BASELINE_URL="$(ask_required_https_url)"
       ;;
     disabled) BASELINE_ENABLED=false ;;
   esac
@@ -927,6 +1060,31 @@ PY
     exit 2
   }
   echo "==> Organization baseline: ${RESOLVED_BASELINE_ID} from ${ORG_BASELINE_SOURCE}"
+elif [ "${BASELINE_SOURCE_KIND}" = organization-git ] && [ "${REINIT_MODE}" != true ]; then
+  if [ -n "${ORG_BASELINE_SKILLS_DIR}" ]; then
+    RESOLVED_BASELINE_ID="$(python3 "${TEMPLATE_BASE}/scripts/sync-org-baseline.py" \
+      --git-url "${ORG_BASELINE_URL}" --git-ref "${ORG_BASELINE_REF}" \
+      --doc "${ORG_BASELINE_DOC}" --skills-dir "${ORG_BASELINE_SKILLS_DIR}" \
+      --print-id)" || {
+        echo "ERROR: could not fetch and validate the organization baseline Git source." >&2
+        exit 2
+      }
+  else
+    RESOLVED_BASELINE_ID="$(python3 "${TEMPLATE_BASE}/scripts/sync-org-baseline.py" \
+      --git-url "${ORG_BASELINE_URL}" --git-ref "${ORG_BASELINE_REF}" \
+      --doc "${ORG_BASELINE_DOC}" --print-id)" || {
+        echo "ERROR: could not fetch and validate the organization baseline Git source." >&2
+        exit 2
+      }
+  fi
+  echo "==> Organization baseline: ${RESOLVED_BASELINE_ID} from ${ORG_BASELINE_URL} (${ORG_BASELINE_REF})"
+elif [ "${BASELINE_SOURCE_KIND}" = organization-https ] && [ "${REINIT_MODE}" != true ]; then
+  RESOLVED_BASELINE_ID="$(python3 "${TEMPLATE_BASE}/scripts/sync-org-baseline.py" \
+    --https-url "${ORG_BASELINE_URL}" --print-id)" || {
+      echo "ERROR: could not fetch and validate the organization baseline HTTPS document." >&2
+      exit 2
+    }
+  echo "==> Organization baseline: ${RESOLVED_BASELINE_ID} from ${ORG_BASELINE_URL}"
 fi
 
 # ── Create repo ───────────────────────────────────────────────────────────────
@@ -1184,9 +1342,21 @@ E_PACKAGE_VERSION=$(sed_escape "${PACKAGE_VERSION}")
 E_UPSTREAM_REF=$(sed_escape "${UPSTREAM_REF}")
 E_TEMPLATE_REF=$(sed_escape "${PERSISTED_TEMPLATE_REF}")
 E_BASELINE_SOURCE_KIND=$(sed_escape "${BASELINE_SOURCE_KIND}")
-E_ORG_BASELINE_SOURCE=$(sed_escape "${ORG_BASELINE_SOURCE}")
-E_ORG_BASELINE_DOC=$(sed_escape "${ORG_BASELINE_DOC}")
-E_ORG_BASELINE_SKILLS_DIR=$(sed_escape "${ORG_BASELINE_SKILLS_DIR}")
+ORG_BASELINE_URL_ASSIGNMENT="ORG_BASELINE_URL ?="
+ORG_BASELINE_REF_ASSIGNMENT="ORG_BASELINE_REF ?="
+ORG_BASELINE_SOURCE_ASSIGNMENT="ORG_BASELINE_SOURCE ?="
+ORG_BASELINE_DOC_ASSIGNMENT="ORG_BASELINE_DOC ?="
+ORG_BASELINE_SKILLS_ASSIGNMENT="ORG_BASELINE_SKILLS_DIR ?="
+[ -z "${ORG_BASELINE_URL}" ] || ORG_BASELINE_URL_ASSIGNMENT="${ORG_BASELINE_URL_ASSIGNMENT} ${ORG_BASELINE_URL}"
+[ -z "${ORG_BASELINE_REF}" ] || ORG_BASELINE_REF_ASSIGNMENT="${ORG_BASELINE_REF_ASSIGNMENT} ${ORG_BASELINE_REF}"
+[ -z "${ORG_BASELINE_SOURCE}" ] || ORG_BASELINE_SOURCE_ASSIGNMENT="${ORG_BASELINE_SOURCE_ASSIGNMENT} ${ORG_BASELINE_SOURCE}"
+[ -z "${ORG_BASELINE_DOC}" ] || ORG_BASELINE_DOC_ASSIGNMENT="${ORG_BASELINE_DOC_ASSIGNMENT} ${ORG_BASELINE_DOC}"
+[ -z "${ORG_BASELINE_SKILLS_DIR}" ] || ORG_BASELINE_SKILLS_ASSIGNMENT="${ORG_BASELINE_SKILLS_ASSIGNMENT} ${ORG_BASELINE_SKILLS_DIR}"
+E_ORG_BASELINE_URL_ASSIGNMENT=$(sed_escape "${ORG_BASELINE_URL_ASSIGNMENT}")
+E_ORG_BASELINE_REF_ASSIGNMENT=$(sed_escape "${ORG_BASELINE_REF_ASSIGNMENT}")
+E_ORG_BASELINE_SOURCE_ASSIGNMENT=$(sed_escape "${ORG_BASELINE_SOURCE_ASSIGNMENT}")
+E_ORG_BASELINE_DOC_ASSIGNMENT=$(sed_escape "${ORG_BASELINE_DOC_ASSIGNMENT}")
+E_ORG_BASELINE_SKILLS_ASSIGNMENT=$(sed_escape "${ORG_BASELINE_SKILLS_ASSIGNMENT}")
 INTERNAL_REPOSITORY_ASSIGNMENT="INTERNAL_REPOSITORY_URL ?="
 if [ -n "${INTERNAL_REPOSITORY_URL}" ]; then
   INTERNAL_REPOSITORY_ASSIGNMENT="${INTERNAL_REPOSITORY_ASSIGNMENT} ${INTERNAL_REPOSITORY_URL}"
@@ -1198,9 +1368,11 @@ sed \
   -e "s/^APPSEC_ADVISOR_TEMPLATE_REF ?= .*$/APPSEC_ADVISOR_TEMPLATE_REF ?= ${E_TEMPLATE_REF}/" \
   -e "s/^PACKAGE_VERSION ?= 0.1.0$/PACKAGE_VERSION ?= ${E_PACKAGE_VERSION}/" \
   -e "s/^BASELINE_SOURCE_KIND ?= .*$/BASELINE_SOURCE_KIND ?= ${E_BASELINE_SOURCE_KIND}/" \
-  -e "s|^ORG_BASELINE_SOURCE ?=.*$|ORG_BASELINE_SOURCE ?= ${E_ORG_BASELINE_SOURCE}|" \
-  -e "s|^ORG_BASELINE_DOC ?=.*$|ORG_BASELINE_DOC ?= ${E_ORG_BASELINE_DOC}|" \
-  -e "s|^ORG_BASELINE_SKILLS_DIR ?=.*$|ORG_BASELINE_SKILLS_DIR ?= ${E_ORG_BASELINE_SKILLS_DIR}|" \
+  -e "s|^ORG_BASELINE_URL ?=.*$|${E_ORG_BASELINE_URL_ASSIGNMENT}|" \
+  -e "s|^ORG_BASELINE_REF ?=.*$|${E_ORG_BASELINE_REF_ASSIGNMENT}|" \
+  -e "s|^ORG_BASELINE_SOURCE ?=.*$|${E_ORG_BASELINE_SOURCE_ASSIGNMENT}|" \
+  -e "s|^ORG_BASELINE_DOC ?=.*$|${E_ORG_BASELINE_DOC_ASSIGNMENT}|" \
+  -e "s|^ORG_BASELINE_SKILLS_DIR ?=.*$|${E_ORG_BASELINE_SKILLS_ASSIGNMENT}|" \
   -e "s|^INTERNAL_REPOSITORY_URL ?=$|${E_INTERNAL_REPOSITORY_ASSIGNMENT}|" \
   "${TEMPLATE_BASE}/Makefile" > "${TARGET_DIR}/Makefile"
 
@@ -1291,7 +1463,9 @@ if [ -n "${RESOLVED_BASELINE_ID}" ]; then
     "${PROFILE_CANDIDATE}" > "${PROFILE_EDITED}"
   mv "${PROFILE_EDITED}" "${PROFILE_CANDIDATE}"
 fi
-if [ "${BASELINE_SOURCE_KIND}" = organization ]; then
+if [ "${BASELINE_SOURCE_KIND}" = organization ] || \
+   [ "${BASELINE_SOURCE_KIND}" = organization-git ] || \
+   [ "${BASELINE_SOURCE_KIND}" = organization-https ]; then
   PROFILE_EDITED="${CANDIDATE_DIR}/org-profile-organization-baseline.yaml"
   E_BASELINE_NAME_YAML=$(sed_escape "$(printf '%s' "${ORG_NAME} Secure Coding Baseline" | yaml_quote)")
   sed \
@@ -1323,6 +1497,22 @@ if [ "${BASELINE_SOURCE_KIND}" = organization ] && [ "${REINIT_MODE}" != true ];
       --org-profile org-profile --org-skills org-skills \
       --checkout "${ORG_BASELINE_SOURCE}" --doc "${ORG_BASELINE_DOC}" --write)
   fi
+elif [ "${BASELINE_SOURCE_KIND}" = organization-git ] && [ "${REINIT_MODE}" != true ]; then
+  if [ -n "${ORG_BASELINE_SKILLS_DIR}" ]; then
+    (cd "${TARGET_DIR}" && python3 scripts/sync-org-baseline.py \
+      --org-profile org-profile --org-skills org-skills \
+      --git-url "${ORG_BASELINE_URL}" --git-ref "${ORG_BASELINE_REF}" \
+      --doc "${ORG_BASELINE_DOC}" --skills-dir "${ORG_BASELINE_SKILLS_DIR}" --write)
+  else
+    (cd "${TARGET_DIR}" && python3 scripts/sync-org-baseline.py \
+      --org-profile org-profile --org-skills org-skills \
+      --git-url "${ORG_BASELINE_URL}" --git-ref "${ORG_BASELINE_REF}" \
+      --doc "${ORG_BASELINE_DOC}" --write)
+  fi
+elif [ "${BASELINE_SOURCE_KIND}" = organization-https ] && [ "${REINIT_MODE}" != true ]; then
+  (cd "${TARGET_DIR}" && python3 scripts/sync-org-baseline.py \
+    --org-profile org-profile --org-skills org-skills \
+    --https-url "${ORG_BASELINE_URL}" --write)
 fi
 
 # Validate both newly rendered profiles and existing profiles retained during

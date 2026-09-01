@@ -132,15 +132,17 @@ the ones that mention security. Developers install it with
 `/acme-appsec:install-baseline`, and the session status tells them whether it is
 loaded.
 
-The initializer can vendor generic AISCB, consume an already composed
-organization baseline plus optional skills from a local repository, or disable
-baseline installation. In either enabled mode the reviewed rules travel inside
-the package under `org-profile/baselines/`.
+The initializer can vendor generic AISCB, temporarily fetch an already composed
+organization baseline plus optional skills from Git, download one composed
+organization HTTPS document, or disable baseline installation. In every
+enabled mode the reviewed rules travel inside the package under
+`org-profile/baselines/`; packaging itself remains offline from the baseline
+source.
 
 Generated repositories use `make baseline-sync-check` and
 `make baseline-sync` for the configured source. A new ID requires an explicit
-`ACCEPT_ID=<id>`. `org-profile/baselines/README.md` documents both source modes,
-local path constraints, overlays, and organization-skill allowlisting.
+`ACCEPT_ID=<id>`. `org-profile/baselines/README.md` documents all source modes,
+temporary fetches, overlays, and organization-skill allowlisting.
 
 ## Common commands
 
@@ -158,7 +160,7 @@ local path constraints, overlays, and organization-skill allowlisting.
 | `make packaging-template-check` | Check whether the packaging template has moved |
 | `make baseline-check` | Check the complete configured baseline source for drift |
 | `make baseline-sync-check` | Read-only check of baseline bytes, ID, and optional organization skills |
-| `make baseline-sync` | Sync from AISCB or the configured local organization repository |
+| `make baseline-sync` | Sync from AISCB, organization Git, or one organization HTTPS document |
 | `make check-updates` | Check appsec-advisor and baseline updates |
 | `make reinit` | Reapply the pinned template while preserving organization settings |
 

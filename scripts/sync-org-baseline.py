@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Synchronize a composed baseline and optional skills from a local org repo.
+"""Synchronize a composed organization baseline and optional skills.
 
 The organization repository owns composition of the generic baseline and its
-organization overlay. This consumer copies the resulting document to the file
-selected by ``baseline.file`` and copies each skill pack below ``--skills-dir``
-to ``org-skills/``. It never fetches a remote repository.
+organization overlay. Sources may be an existing local checkout, a temporary
+fetch from a Git URL/ref, or one HTTPS document. Git mode materializes only the
+configured document and skill blobs; it never checks out or executes repository
+content. HTTPS mode accepts one document and no skills.
 
 The default is a read-only drift check (0 current, 1 drift, 2 error). ``--write``
 applies same-id changes. A new baseline id requires
@@ -15,16 +16,21 @@ without that acknowledgement the write exits 3.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
 import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
+import urllib.error
+import urllib.request
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -33,7 +39,11 @@ DEFAULT_STATE_FILE = ".org-baseline-sync-state.json"
 MAX_BASELINE_BYTES = 1_048_576
 MAX_SKILL_FILE_BYTES = 10 * 1_048_576
 MAX_SKILL_FILES = 2_000
+MAX_SKILL_TOTAL_BYTES = 100 * 1_048_576
+MAX_GIT_LIST_BYTES = 2 * 1_048_576
+FETCH_TIMEOUT_SECONDS = 60
 SKILL_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
+GIT_REF_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$")
 MARKER_PATTERN = re.compile(
     r"(?m)^\s*`?baseline-id:\s*`?"
     r"([A-Za-z0-9](?:[A-Za-z0-9._+-]{0,78}[A-Za-z0-9])?)`?"
@@ -58,6 +68,16 @@ class SyncPlan:
     state_path: Path
     write_state: bool
     unallowlisted_skills: tuple[str, ...]
+    source_metadata: dict[str, str]
+
+
+@dataclass(frozen=True)
+class ResolvedSource:
+    checkout: Path
+    doc: str
+    skills_dir: str | None
+    metadata: dict[str, str]
+    manage_skills: bool
 
 
 def _marker(document: bytes, origin: str) -> str:
@@ -76,6 +96,311 @@ def _marker(document: bytes, origin: str) -> str:
             f"document must contain exactly one baseline-id marker; found {detail}: {origin}"
         )
     return ids[0]
+
+
+def _valid_git_ref(value: str) -> bool:
+    return bool(
+        GIT_REF_PATTERN.fullmatch(value)
+        and ".." not in value
+        and "//" not in value
+        and "/." not in value
+        and not value.endswith(("/", ".", ".lock"))
+    )
+
+
+def _validate_git_url(value: str) -> str:
+    if len(value) > 2048 or any(
+        character.isspace() or not character.isprintable()
+        for character in value
+    ):
+        raise SyncError("Git URL contains whitespace, control characters, or is too long")
+    if value.startswith("https://"):
+        parsed = urlsplit(value)
+        if (
+            not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise SyncError(
+                "Git HTTPS URL must have a host and no credentials, query, or fragment"
+            )
+        return value
+    if value.startswith("ssh://"):
+        parsed = urlsplit(value)
+        if not parsed.hostname or parsed.password is not None or parsed.query or parsed.fragment:
+            raise SyncError(
+                "Git SSH URL must have a host and no password, query, or fragment"
+            )
+        return value
+    if re.fullmatch(
+        r"[A-Za-z0-9._-]+@[A-Za-z0-9._-]+:[A-Za-z0-9._~/-]+", value
+    ):
+        return value
+    raise SyncError(
+        "Git URL must use HTTPS without credentials or an SSH Git URL"
+    )
+
+
+def _validate_https_url(value: str) -> str:
+    if len(value) > 2048 or any(
+        character.isspace() or not character.isprintable()
+        for character in value
+    ):
+        raise SyncError("HTTPS baseline URL contains whitespace, control characters, or is too long")
+    try:
+        parsed = urlsplit(value)
+    except ValueError as error:
+        raise SyncError(f"invalid HTTPS baseline URL: {error}") from error
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise SyncError(
+            "baseline URL must use HTTPS and contain no credentials, query, or fragment"
+        )
+    return value
+
+
+class _HTTPSOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, msg, headers, newurl):  # noqa: N802
+        try:
+            _validate_https_url(newurl)
+        except SyncError as error:
+            raise urllib.error.HTTPError(
+                newurl, code, f"redirect rejected: {error}", headers, fp
+            ) from error
+        return super().redirect_request(request, fp, code, msg, headers, newurl)
+
+
+def _fetch_https_document(url: str) -> bytes:
+    url = _validate_https_url(url)
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "text/markdown, text/plain",
+            "User-Agent": "appsec-advisor-org-baseline-sync/1",
+        },
+    )
+    opener = urllib.request.build_opener(_HTTPSOnlyRedirectHandler())
+    try:
+        with opener.open(request, timeout=FETCH_TIMEOUT_SECONDS) as response:  # noqa: S310
+            length = response.headers.get("Content-Length")
+            if length and int(length) > MAX_BASELINE_BYTES:
+                raise SyncError(
+                    f"baseline document exceeds {MAX_BASELINE_BYTES} bytes: {url}"
+                )
+            document = response.read(MAX_BASELINE_BYTES + 1)
+    except SyncError:
+        raise
+    except (urllib.error.URLError, OSError, ValueError) as error:
+        raise SyncError(f"cannot fetch HTTPS baseline {url}: {error}") from error
+    _marker(document, url)
+    return document
+
+
+def _git_command(git_dir: Path, arguments: list[str], *, limit: int = 64 * 1024) -> bytes:
+    command = [
+        "git",
+        "-c",
+        "core.hooksPath=/dev/null",
+        "-c",
+        "protocol.file.allow=never",
+        "--git-dir",
+        str(git_dir),
+        *arguments,
+    ]
+    try:
+        result = subprocess.run(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            timeout=FETCH_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise SyncError(f"Git command could not complete: {error}") from error
+    if len(result.stdout) > limit:
+        raise SyncError(f"Git command output exceeds {limit} bytes")
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", errors="replace").strip()[-500:]
+        raise SyncError(f"Git command failed: {detail or 'no diagnostic'}")
+    return result.stdout
+
+
+def _init_bare_repository(git_dir: Path) -> None:
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-c",
+                "init.templateDir=",
+                "-c",
+                "core.hooksPath=/dev/null",
+                "init",
+                "--bare",
+                "--quiet",
+                str(git_dir),
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            timeout=FETCH_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise SyncError(f"could not initialize temporary Git repository: {error}") from error
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", errors="replace").strip()[-500:]
+        raise SyncError(f"could not initialize temporary Git repository: {detail}")
+
+
+def _git_tree_entries(git_dir: Path, commit: str, path: str) -> list[tuple[str, str, str, str]]:
+    output = _git_command(
+        git_dir,
+        ["ls-tree", "-rz", "-r", "--full-tree", commit, "--", path],
+        limit=MAX_GIT_LIST_BYTES,
+    )
+    entries: list[tuple[str, str, str, str]] = []
+    for raw_entry in output.rstrip(b"\0").split(b"\0") if output else []:
+        try:
+            metadata, raw_path = raw_entry.split(b"\t", 1)
+            mode, object_type, object_id = metadata.decode("ascii").split(" ", 2)
+            entry_path = raw_path.decode("utf-8")
+        except (UnicodeDecodeError, ValueError) as error:
+            raise SyncError("Git source contains an invalid tree entry") from error
+        entries.append((mode, object_type, object_id, entry_path))
+    return entries
+
+
+def _git_blob(git_dir: Path, object_id: str, maximum: int) -> bytes:
+    raw_size = _git_command(git_dir, ["cat-file", "-s", object_id], limit=64)
+    try:
+        size = int(raw_size.strip())
+    except ValueError as error:
+        raise SyncError("Git returned an invalid blob size") from error
+    if size > maximum:
+        raise SyncError(f"Git source file exceeds {maximum} bytes")
+    return _git_command(git_dir, ["cat-file", "blob", object_id], limit=maximum)
+
+
+def _materialize_git_source(
+    root: Path, url: str, ref: str, doc: str, skills_dir: str | None
+) -> ResolvedSource:
+    url = _validate_git_url(url)
+    if not _valid_git_ref(ref):
+        raise SyncError(f"Git ref is not a safe branch, tag, or commit: {ref!r}")
+    doc_relative = _relative_path(doc, "baseline document")
+    if any(character not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-/" for character in doc):
+        raise SyncError("Git baseline document path contains unsupported characters")
+    skills_relative = None
+    if skills_dir:
+        skills_relative = _relative_path(skills_dir, "skills directory")
+        if any(character not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-/" for character in skills_dir):
+            raise SyncError("Git skills path contains unsupported characters")
+
+    git_dir = root / "source.git"
+    source_root = root / "materialized"
+    source_root.mkdir()
+    _init_bare_repository(git_dir)
+    _git_command(
+        git_dir,
+        ["fetch", "--quiet", "--depth", "1", "--no-tags", "--", url, ref],
+    )
+    commit = _git_command(
+        git_dir, ["rev-parse", "--verify", "FETCH_HEAD^{commit}"], limit=128
+    ).decode("ascii").strip()
+
+    doc_entries = _git_tree_entries(git_dir, commit, doc_relative.as_posix())
+    if len(doc_entries) != 1 or doc_entries[0][3] != doc_relative.as_posix():
+        raise SyncError(f"baseline document not found as one Git blob: {doc}")
+    mode, object_type, object_id, _ = doc_entries[0]
+    if object_type != "blob" or mode not in ("100644", "100755"):
+        raise SyncError(f"baseline document must be a regular Git file: {doc}")
+    document = _git_blob(git_dir, object_id, MAX_BASELINE_BYTES)
+    _marker(document, f"{url}@{commit}:{doc}")
+    _atomic_write(source_root / doc_relative, document)
+
+    if skills_relative is not None:
+        entries = _git_tree_entries(git_dir, commit, skills_relative.as_posix())
+        if len(entries) > MAX_SKILL_FILES:
+            raise SyncError(f"org skill tree exceeds {MAX_SKILL_FILES} files")
+        prefix = skills_relative.as_posix() + "/"
+        if not entries:
+            raise SyncError(f"skills directory not found in Git source: {skills_dir}")
+        total_size = 0
+        for mode, object_type, object_id, entry_path in entries:
+            if not entry_path.startswith(prefix):
+                raise SyncError("Git skills path escaped its configured directory")
+            relative = _relative_path(entry_path, "Git skill file")
+            if object_type != "blob" or mode not in ("100644", "100755"):
+                raise SyncError(f"Git skills may contain only regular files: {entry_path}")
+            data = _git_blob(git_dir, object_id, MAX_SKILL_FILE_BYTES)
+            total_size += len(data)
+            if total_size > MAX_SKILL_TOTAL_BYTES:
+                raise SyncError(
+                    f"org skill tree exceeds {MAX_SKILL_TOTAL_BYTES} total bytes"
+                )
+            _atomic_write(
+                source_root / relative, data, 0o755 if mode == "100755" else 0o644
+            )
+
+    return ResolvedSource(
+        checkout=source_root,
+        doc=doc_relative.as_posix(),
+        skills_dir=skills_relative.as_posix() if skills_relative else None,
+        metadata={"kind": "git", "url": url, "ref": ref, "commit": commit},
+        manage_skills=True,
+    )
+
+
+@contextmanager
+def _resolved_source(args: argparse.Namespace) -> Iterator[ResolvedSource]:
+    if args.checkout is not None:
+        if not args.doc:
+            raise SyncError("--doc is required with --checkout")
+        yield ResolvedSource(
+            checkout=Path(args.checkout),
+            doc=args.doc,
+            skills_dir=args.skills_dir,
+            metadata={"kind": "local"},
+            manage_skills=bool(args.manage_skills or args.skills_dir),
+        )
+        return
+    with tempfile.TemporaryDirectory(prefix="appsec-org-baseline-") as temporary:
+        root = Path(temporary)
+        if args.git_url is not None:
+            if not args.doc:
+                raise SyncError("--doc is required with --git-url")
+            yield _materialize_git_source(
+                root, args.git_url, args.git_ref, args.doc, args.skills_dir
+            )
+            return
+        if args.https_url is not None:
+            if args.doc or args.skills_dir:
+                raise SyncError("HTTPS mode accepts exactly one document and no --doc or --skills-dir")
+            document = _fetch_https_document(args.https_url)
+            source_root = root / "materialized"
+            _atomic_write(source_root / "baseline.md", document)
+            yield ResolvedSource(
+                checkout=source_root,
+                doc="baseline.md",
+                skills_dir=None,
+                metadata={
+                    "kind": "https",
+                    "url": _validate_https_url(args.https_url),
+                    "sha256": hashlib.sha256(document).hexdigest(),
+                },
+                manage_skills=True,
+            )
+            return
+    raise SyncError("one baseline source is required")
 
 
 def _read_yaml_mapping(path: Path, description: str) -> dict[str, Any]:
@@ -163,6 +488,7 @@ def _validate_skill_dir(skill_dir: Path) -> None:
 def _tree_digest(root: Path) -> tuple[tuple[str, str], ...]:
     entries: list[tuple[str, str]] = []
     file_count = 0
+    total_size = 0
     for path in sorted(root.rglob("*")):
         relative = path.relative_to(root).as_posix()
         if path.is_symlink():
@@ -179,6 +505,11 @@ def _tree_digest(root: Path) -> tuple[tuple[str, str], ...]:
         if size > MAX_SKILL_FILE_BYTES:
             raise SyncError(
                 f"org skill file exceeds {MAX_SKILL_FILE_BYTES} bytes: {path}"
+            )
+        total_size += size
+        if total_size > MAX_SKILL_TOTAL_BYTES:
+            raise SyncError(
+                f"org skill tree exceeds {MAX_SKILL_TOTAL_BYTES} total bytes: {root}"
             )
         entries.append((f"f:{relative}", hashlib.sha256(path.read_bytes()).hexdigest()))
     return tuple(entries)
@@ -268,31 +599,33 @@ def plan(args: argparse.Namespace) -> SyncPlan:
     state_path = org_profile_dir.parent / DEFAULT_STATE_FILE
     skill_sources: list[Path] = []
     removed_skills: tuple[str, ...] = ()
-    write_state = bool(args.skills_dir)
+    manage_skills = bool(getattr(args, "manage_skills", False) or args.skills_dir)
+    source_metadata = dict(getattr(args, "source_metadata", {}))
+    write_state = manage_skills or bool(source_metadata)
     current_names: set[str] = set()
-    if args.skills_dir:
-        skills_src = _source_path(
-            source_root, args.skills_dir, "skills directory", directory=True
-        )
-        for item in sorted(skills_src.iterdir()):
-            if item.is_symlink():
-                raise SyncError(f"org skill directory must not be a symlink: {item}")
-            if not item.is_dir():
-                raise SyncError(
-                    f"skills directory may contain only skill directories: {item}"
-                )
-            _validate_skill_dir(item)
-            source_digest = _tree_digest(item)
-            skill_sources.append(item)
-            current_names.add(item.name)
-            destination = org_skills_dir / item.name
-            if destination.is_symlink():
-                raise SyncError(f"refusing to replace symlinked org skill: {destination}")
-            if not destination.is_dir():
-                changes.append(f"new skill: {item.name}")
-            elif _tree_digest(destination) != source_digest:
-                changes.append(f"changed skill: {item.name}")
-
+    if manage_skills:
+        if args.skills_dir:
+            skills_src = _source_path(
+                source_root, args.skills_dir, "skills directory", directory=True
+            )
+            for item in sorted(skills_src.iterdir()):
+                if item.is_symlink():
+                    raise SyncError(f"org skill directory must not be a symlink: {item}")
+                if not item.is_dir():
+                    raise SyncError(
+                        f"skills directory may contain only skill directories: {item}"
+                    )
+                _validate_skill_dir(item)
+                source_digest = _tree_digest(item)
+                skill_sources.append(item)
+                current_names.add(item.name)
+                destination = org_skills_dir / item.name
+                if destination.is_symlink():
+                    raise SyncError(f"refusing to replace symlinked org skill: {destination}")
+                if not destination.is_dir():
+                    changes.append(f"new skill: {item.name}")
+                elif _tree_digest(destination) != source_digest:
+                    changes.append(f"changed skill: {item.name}")
         previous_names = _read_state(state_path)
         removed_skills = tuple(sorted(previous_names - current_names))
         for name in removed_skills:
@@ -317,6 +650,7 @@ def plan(args: argparse.Namespace) -> SyncPlan:
         state_path=state_path,
         write_state=write_state,
         unallowlisted_skills=_unallowlisted(org_profile_dir, current_names),
+        source_metadata=source_metadata,
     )
 
 
@@ -415,6 +749,8 @@ def apply(plan_: SyncPlan, org_skills_dir: Path, *, update_id: bool) -> None:
             "version": 1,
             "managed_skills": sorted(path.name for path in plan_.skill_sources),
         }
+        if plan_.source_metadata:
+            state["source"] = plan_.source_metadata
         _atomic_write(
             plan_.state_path,
             (json.dumps(state, indent=2, sort_keys=True) + "\n").encode("utf-8"),
@@ -431,14 +767,29 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--org-skills", type=Path, default=Path("org-skills"), help="org-skills directory"
     )
-    parser.add_argument(
-        "--checkout", type=Path, required=True, help="local organization-baseline repository"
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument(
+        "--checkout", type=Path, help="existing local organization-baseline checkout"
+    )
+    source.add_argument(
+        "--git-url", help="organization-baseline repository HTTPS or SSH Git URL"
+    )
+    source.add_argument(
+        "--https-url", help="one composed organization-baseline HTTPS document"
     )
     parser.add_argument(
-        "--doc", required=True, help="composed baseline document relative to --checkout"
+        "--git-ref", default="main", help="branch, tag, or commit fetched with --git-url"
+    )
+    parser.add_argument(
+        "--doc", help="composed baseline document relative to a checkout or Git source"
     )
     parser.add_argument(
         "--skills-dir", help="optional skill-pack directory relative to --checkout"
+    )
+    parser.add_argument(
+        "--manage-skills",
+        action="store_true",
+        help="treat an omitted skills directory as an empty managed skill set",
     )
     parser.add_argument(
         "--accept-id", help="accept and persist this new baseline id during --write"
@@ -455,76 +806,85 @@ def _parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = _parser().parse_args()
     try:
-        if args.print_id:
-            source_root = Path(args.checkout)
+        with _resolved_source(args) as resolved:
+            source_root = Path(resolved.checkout)
             if source_root.is_symlink() or not source_root.is_dir():
                 raise SyncError(f"organization baseline source not found or symlinked: {source_root}")
             source_root = source_root.resolve(strict=True)
             doc_source = _source_path(
-                source_root, args.doc, "baseline document", directory=False
+                source_root, resolved.doc, "baseline document", directory=False
             )
             published_id = _marker(doc_source.read_bytes(), str(doc_source))
-            if args.skills_dir:
+            if resolved.skills_dir:
                 skills_root = _source_path(
-                    source_root, args.skills_dir, "skills directory", directory=True
+                    source_root, resolved.skills_dir, "skills directory", directory=True
                 )
                 for item in sorted(skills_root.iterdir()):
                     if item.is_symlink() or not item.is_dir():
                         raise SyncError(f"skills directory contains an invalid entry: {item}")
                     _validate_skill_dir(item)
                     _tree_digest(item)
-            print(published_id)
-            return 0
+            if args.print_id:
+                print(published_id)
+                return 0
 
-        plan_ = plan(args)
+            resolved_args = argparse.Namespace(**vars(args))
+            resolved_args.checkout = source_root
+            resolved_args.doc = resolved.doc
+            resolved_args.skills_dir = resolved.skills_dir
+            resolved_args.manage_skills = resolved.manage_skills
+            resolved_args.source_metadata = resolved.metadata
+            plan_ = plan(resolved_args)
+
+            for change in plan_.changes:
+                print(change)
+            for name in plan_.unallowlisted_skills:
+                print(
+                    f"NOTE: org skill '{name}' is synced but not allowlisted in "
+                    "org-profile/package-policy.yaml; it will not ship until explicitly included."
+                )
+
+            if not plan_.changes:
+                print("OK: organization baseline and skills are current")
+                return 0
+            if not args.write:
+                print("NOTE: re-run with --write to apply the pending changes.")
+                return 1
+
+            update_id = plan_.configured_id != plan_.published_id
+            if update_id and not args.accept_id:
+                print(
+                    "NOTE: a new baseline id is a decision; re-run with "
+                    f"--accept-id {plan_.published_id} to update document and profile together."
+                )
+                return 3
+            if args.accept_id and args.accept_id != plan_.published_id:
+                print(
+                    f"ERROR: --accept-id is '{args.accept_id}', but the source publishes "
+                    f"'{plan_.published_id}'",
+                    file=sys.stderr,
+                )
+                return 2
+
+            try:
+                apply(
+                    plan_, Path(args.org_skills).resolve(strict=False), update_id=update_id
+                )
+            except (OSError, SyncError) as error:
+                print(f"ERROR: cannot apply organization baseline sync: {error}", file=sys.stderr)
+                return 2
+
+            print(f"==> Wrote {plan_.doc_target}")
+            if update_id:
+                print(f"==> Updated baseline.id to {plan_.published_id}")
+            for skill_source in plan_.skill_sources:
+                print(f"==> Wrote {Path(args.org_skills) / skill_source.name}")
+            for name in plan_.removed_skills:
+                print(f"==> Removed {Path(args.org_skills) / name}")
+            return 0
     except (OSError, SyncError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
-
-    for change in plan_.changes:
-        print(change)
-    for name in plan_.unallowlisted_skills:
-        print(
-            f"NOTE: org skill '{name}' is synced but not allowlisted in "
-            "org-profile/package-policy.yaml; it will not ship until explicitly included."
-        )
-
-    if not plan_.changes:
-        print("OK: organization baseline and skills are current")
-        return 0
-    if not args.write:
-        print("NOTE: re-run with --write to apply the pending changes.")
-        return 1
-
-    update_id = plan_.configured_id != plan_.published_id
-    if update_id and not args.accept_id:
-        print(
-            "NOTE: a new baseline id is a decision; re-run with "
-            f"--accept-id {plan_.published_id} to update document and profile together."
-        )
-        return 3
-    if args.accept_id and args.accept_id != plan_.published_id:
-        print(
-            f"ERROR: --accept-id is '{args.accept_id}', but the source publishes "
-            f"'{plan_.published_id}'",
-            file=sys.stderr,
-        )
-        return 2
-
-    try:
-        apply(plan_, Path(args.org_skills).resolve(strict=False), update_id=update_id)
-    except (OSError, SyncError) as error:
-        print(f"ERROR: cannot apply organization baseline sync: {error}", file=sys.stderr)
-        return 2
-
-    print(f"==> Wrote {plan_.doc_target}")
-    if update_id:
-        print(f"==> Updated baseline.id to {plan_.published_id}")
-    for skill_source in plan_.skill_sources:
-        print(f"==> Wrote {Path(args.org_skills) / skill_source.name}")
-    for name in plan_.removed_skills:
-        print(f"==> Removed {Path(args.org_skills) / name}")
-    return 0
 
 
 if __name__ == "__main__":

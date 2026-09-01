@@ -7,9 +7,10 @@ Status: implemented in the packaging template.
 Generated packaging repositories select one secure-coding baseline source:
 
 1. `aiscb`: the generic baseline published by `appsec-foundry/aiscb`.
-2. `organization`: a composed organization baseline from a separately checked
-   out local repository, with optional organization skill packs.
-3. `disabled`: no baseline installation.
+2. `organization-git`: a composed organization baseline from a temporarily
+   fetched Git URL/ref, with optional organization skill packs.
+3. `organization-https`: exactly one composed organization baseline document.
+4. `disabled`: no baseline installation.
 
 The initializer writes the selected mode and its source settings into the
 generated Makefile. Reinitialization preserves them. Maintainers use the same
@@ -33,9 +34,11 @@ The packaging repository owns:
 - copied organization skills and the explicit package allowlist;
 - drift checks, review, package versioning, and release.
 
-The organization source is local by design. CI checks it out independently and
-provides the configured path. The sync command does not clone, pull, or execute
-content from a moving remote ref.
+Git sources are fetched into temporary bare repositories. Only configured
+regular blobs are materialized, so hooks, worktree filters, submodules, and
+repository scripts are not executed. HTTPS sources provide one bounded
+document and no skills. Packaging and release consume only reviewed tracked
+copies and do not contact either organization source.
 
 ## Sync behavior
 
@@ -45,10 +48,11 @@ new ID exits 3 until the maintainer supplies the exact published ID through
 `ACCEPT_ID=<id>`; the accepted change updates document and profile together.
 
 Organization document and skill paths must remain inside the selected source.
-Symlinked source content and symlinked destinations are rejected. Skill trees
-are compared by content rather than timestamps. A tracked sync-state file names
-only skills managed by the organization source, allowing removed managed skills
-to be deleted without touching manually maintained `org-skills/` entries.
+Git symlinks and symlinked destinations are rejected. Skill trees are compared
+by content rather than timestamps. A tracked sync-state file names only skills
+managed by the organization source, allowing removed managed skills to be
+deleted without touching manually maintained `org-skills/` entries. It also
+records the source commit or HTTPS digest as provenance, not as an update lock.
 
 Copying a skill does not authorize it for packaging. New skill IDs remain out
 of the built plugin until a maintainer explicitly adds them to
@@ -60,6 +64,6 @@ In generic AISCB mode, a packaging repository may keep a local
 `org-profile/baselines/organization-overlay.md`; packaging composes it on a
 temporary copy.
 
-In organization mode, the selected source document is already composed. A
+In either organization mode, the selected source document is already composed. A
 second packaging-repository overlay is rejected so central rules cannot be
 duplicated or diverge from the organization artifact.

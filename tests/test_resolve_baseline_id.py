@@ -44,6 +44,12 @@ class ResolveBaselineIdTests(unittest.TestCase):
         with self.assertRaisesRegex(resolver.ResolveError, "not UTF-8"):
             resolver.marker(b"baseline-id: \xff\xfe\n", "test")
 
+    def test_duplicate_identical_markers_are_rejected(self) -> None:
+        with self.assertRaisesRegex(resolver.ResolveError, "exactly one"):
+            resolver.marker(
+                b"baseline-id: aiscb-1.0.0\nbaseline-id: aiscb-1.0.0\n", "test"
+            )
+
     def test_unsafe_source_is_rejected_before_fetching(self) -> None:
         with self.assertRaisesRegex(resolver.ResolveError, "HTTPS"):
             resolver.fetch("http://security.example.test/baseline.md")

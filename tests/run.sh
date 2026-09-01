@@ -77,6 +77,8 @@ run_unit_test "$SYNC_ORG_BASELINE_TEST"
 
 COV="$(mktemp)"
 WORKROOT="$(mktemp -d)"
+TRACE_CHILD="$WORKROOT/trace-child.sh"
+printf '%s\n' 'set -x' >"$TRACE_CHILD"
 PASS=0
 FAIL="$UNIT_FAIL"
 trap 'rm -rf "$WORKROOT" "$COV"' EXIT
@@ -646,6 +648,37 @@ if [ "$rc" = 2 ] && grep -Fq 'existing organization id must start' "$reinit_log"
   pass "init: invalid recovered organization id has a clear error"
 else fail "init: invalid recovered organization id has a clear error" "rc=$rc"; fi
 
+# Reinitialization treats persisted source settings as untrusted input too. Each
+# organization source mode must fail before touching the existing repository
+# when its URL, ref/path tuple, or mode is unsafe.
+reinit_source_validation() {
+  local kind="$1" url="$2" ref="$3" doc="$4" expected="$5" log="$6"
+  (cd "$ROOT" && env \
+    APPSEC_REINIT_TARGET="$d/reinit" APPSEC_REINIT_ORG_NAME='Test Org' \
+    APPSEC_REINIT_ORG_ID=test APPSEC_REINIT_PLUGIN_NAME=test-appsec \
+    APPSEC_REINIT_PACKAGE_VERSION='1.0.0' APPSEC_REINIT_OWNER='Test Team' \
+    APPSEC_REINIT_DEMO=false APPSEC_REINIT_BASELINE=true \
+    APPSEC_REINIT_BASELINE_KIND="$kind" APPSEC_REINIT_ORG_BASELINE_URL="$url" \
+    APPSEC_REINIT_ORG_BASELINE_REF="$ref" APPSEC_REINIT_ORG_BASELINE_DOC="$doc" \
+    timeout 20 bash -x "$INIT") >"$log" 2>&1
+  rc=$?
+  cat "$log" >>"$COV"
+  [ "$rc" = 2 ] && grep -Fq "$expected" "$log"
+}
+
+source_validation_ok=true
+reinit_source_validation organization-git 'file:///unsafe' main dist/baseline.md \
+  'existing organization baseline Git URL is unsafe' "$d/reinit-git-url.log" || source_validation_ok=false
+reinit_source_validation organization-git 'https://example.test/baseline.git' 'bad..ref' dist/baseline.md \
+  'existing organization Git baseline settings are unsafe' "$d/reinit-git-settings.log" || source_validation_ok=false
+reinit_source_validation organization-https 'http://example.test/baseline.md' main dist/baseline.md \
+  'existing organization baseline HTTPS URL is unsafe' "$d/reinit-https-url.log" || source_validation_ok=false
+reinit_source_validation unexpected 'https://example.test/baseline.git' main dist/baseline.md \
+  'existing BASELINE_SOURCE_KIND must be' "$d/reinit-kind.log" || source_validation_ok=false
+if [ "$source_validation_ok" = true ]; then
+  pass "init: unsafe recovered baseline source settings fail closed"
+else fail "init: unsafe recovered baseline source settings fail closed"; fi
+
 # Stable is the default channel. Resolve it once and persist the concrete tag so
 # a generated repository remains reproducible even after newer tags appear.
 d="$(newdir)"
@@ -719,7 +752,7 @@ printf 'Test Org\n\n\n\n\n%s\nn\n' "$tgt" | \
 rc=$?
 cat "$d/invalid-baseline-kind.err" >>"$COV"
 if [ "$rc" = 2 ] && [ ! -e "$tgt" ] && \
-   grep -Fq 'BASELINE_SOURCE_KIND must be aiscb, organization, or disabled' \
+   grep -Fq 'BASELINE_SOURCE_KIND must be aiscb, organization-git, organization-https, or disabled' \
      "$d/invalid-baseline-kind.err"; then
   pass "init: invalid baseline source mode fails before target creation"
 else fail "init: invalid baseline source mode fails before target creation" "rc=$rc"; fi
@@ -873,29 +906,50 @@ if [ "$rc" = 0 ] && \
   pass "init: a declined baseline is not resolved"
 else fail "init: a declined baseline is not resolved" "rc=$rc"; fi
 
-# Organization mode validates a composed local document before creating the
-# target, persists paths relative to the generated repository, copies optional
-# skills, removes the generic runtime URL, and leaves new skills excluded until
-# a maintainer makes the package-policy decision.
+# Organization Git mode fetches a configured ref into temporary storage,
+# validates it before target creation, copies baseline and skills, removes the
+# generic runtime URL, and leaves skills excluded until explicitly allowlisted.
 d="$(newdir)"
 org_baseline_src="$d/org-baseline"
 mkdir -p "$org_baseline_src/dist/skills/acme-secure-review"
+"$REAL_GIT" -C "$org_baseline_src" init -q -b main
+"$REAL_GIT" -C "$org_baseline_src" config user.name Test
+"$REAL_GIT" -C "$org_baseline_src" config user.email test@example.test
 printf '%s\n' '# Test organization baseline' '' 'baseline-id: test-sec-1.0.0' '' 'Rule.' \
   >"$org_baseline_src/dist/secure-coding-baseline.md"
 printf '%s\n' '---' 'name: acme-secure-review' 'description: Test organization skill.' '---' \
   >"$org_baseline_src/dist/skills/acme-secure-review/SKILL.md"
+"$REAL_GIT" -C "$org_baseline_src" add .
+"$REAL_GIT" -C "$org_baseline_src" commit -q -m initial
+org_baseline_remote="$d/org-baseline.git"
+"$REAL_GIT" clone -q --bare "$org_baseline_src" "$org_baseline_remote"
+org_fake_ssh="$d/fake-ssh"
+printf '%s\n' '#!/usr/bin/env bash' 'exec /usr/bin/git-upload-pack "$ORG_BASELINE_TEST_REMOTE"' \
+  >"$org_fake_ssh"
+chmod +x "$org_fake_ssh"
+org_git_bin="$d/git-bin"
+mkdir "$org_git_bin"
+printf '%s\n' '#!/usr/bin/env bash' \
+  'case " $* " in *" --git-dir "*|*" init --bare "*) exec /usr/bin/git "$@" ;; esac' \
+  'exec '"$STUBS"'/git "$@"' >"$org_git_bin/git"
+chmod +x "$org_git_bin/git"
 tgt="$d/out"
 org_init_log="$d/org-init.log"
-printf 'Test Org\n\n\n\n\n%s\nn\n2\n%s\ndist/secure-coding-baseline.md\ndist/skills\n\n\nn\n' \
-  "$tgt" "$org_baseline_src" | \
-  (cd "$ROOT" && timeout 20 bash -x "$INIT") >"$org_init_log" 2>>"$COV"
+printf 'Test Org\n\n\n\n\n%s\nn\n2\ngit@example.test:baseline.git\n\ndist/secure-coding-baseline.md\ndist/skills\n\n\nn\n' \
+  "$tgt" | \
+  (cd "$ROOT" && env PATH="$org_git_bin:$PATH" GIT_SSH_COMMAND="$org_fake_ssh" GIT_SSH_VARIANT=ssh \
+    ORG_BASELINE_TEST_REMOTE="$org_baseline_remote" timeout 20 bash -x "$INIT") \
+  >"$org_init_log" 2>>"$COV"
 rc=$?
 org_check_rc=0
-(cd "$tgt" && make --no-print-directory baseline-sync-check) \
+(cd "$tgt" && env PATH="$org_git_bin:$PATH" GIT_SSH_COMMAND="$org_fake_ssh" GIT_SSH_VARIANT=ssh \
+  ORG_BASELINE_TEST_REMOTE="$org_baseline_remote" make --no-print-directory baseline-sync-check) \
   >>"$org_init_log" 2>&1 || org_check_rc=$?
 if [ "$rc" = 0 ] && [ "$org_check_rc" = 0 ] && \
-   grep -Fqx 'BASELINE_SOURCE_KIND ?= organization' "$tgt/Makefile" && \
-   grep -Fqx 'ORG_BASELINE_SOURCE ?= ../org-baseline' "$tgt/Makefile" && \
+   grep -Fqx 'BASELINE_SOURCE_KIND ?= organization-git' "$tgt/Makefile" && \
+   grep -Fqx 'ORG_BASELINE_URL ?= git@example.test:baseline.git' "$tgt/Makefile" && \
+   grep -Fqx 'ORG_BASELINE_REF ?= main' "$tgt/Makefile" && \
+   grep -Fqx 'ORG_BASELINE_SOURCE ?=' "$tgt/Makefile" && \
    grep -Fqx 'ORG_BASELINE_DOC ?= dist/secure-coding-baseline.md' "$tgt/Makefile" && \
    grep -Fqx 'ORG_BASELINE_SKILLS_DIR ?= dist/skills' "$tgt/Makefile" && \
    grep -Fqx '  id: test-sec-1.0.0' "$tgt/org-profile/org-profile.yaml" && \
@@ -904,55 +958,128 @@ if [ "$rc" = 0 ] && [ "$org_check_rc" = 0 ] && \
      "$tgt/org-profile/baselines/secure-coding-baseline.md" && \
    [ -f "$tgt/org-skills/acme-secure-review/SKILL.md" ] && \
    grep -Fq '"acme-secure-review"' "$tgt/.org-baseline-sync-state.json" && \
-   ! grep -Fqx '      - acme-secure-review' "$tgt/org-profile/package-policy.yaml"; then
-  pass "init: local organization baseline and optional skills are initialized"
-else fail "init: local organization baseline and optional skills are initialized" "init_rc=$rc check_rc=$org_check_rc"; fi
+   ! grep -Fqx '      - acme-secure-review' "$tgt/org-profile/package-policy.yaml" && \
+   grep -Fq '"kind": "git"' "$tgt/.org-baseline-sync-state.json"; then
+  pass "init: organization Git baseline and optional skills are fetched and initialized"
+else fail "init: organization Git baseline and optional skills are fetched and initialized" "init_rc=$rc check_rc=$org_check_rc"; fi
+
+git_no_skills_tgt="$d/git-no-skills-out"
+printf 'Test Org\n\n\n\n\n%s\nn\n2\ngit@example.test:baseline.git\n\ndist/secure-coding-baseline.md\n\n\n\nn\n' \
+  "$git_no_skills_tgt" | \
+  (cd "$ROOT" && env PATH="$org_git_bin:$PATH" GIT_SSH_COMMAND="$org_fake_ssh" \
+    GIT_SSH_VARIANT=ssh ORG_BASELINE_TEST_REMOTE="$org_baseline_remote" \
+    timeout 20 bash -x "$INIT") >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && \
+   grep -Fqx 'BASELINE_SOURCE_KIND ?= organization-git' "$git_no_skills_tgt/Makefile" && \
+   grep -Fqx 'ORG_BASELINE_SKILLS_DIR ?=' "$git_no_skills_tgt/Makefile" && \
+   [ ! -e "$git_no_skills_tgt/org-skills/acme-secure-review" ]; then
+  pass "init: organization Git baseline can omit skills"
+else fail "init: organization Git baseline can omit skills" "rc=$rc"; fi
+
+printf '%s\n' '# Test organization baseline' '' 'baseline-id: test-sec-1.0.0' '' 'Updated rule.' \
+  >"$org_baseline_src/dist/secure-coding-baseline.md"
+printf '%s\n' '---' 'name: acme-secure-review' 'description: Updated organization skill.' '---' \
+  >"$org_baseline_src/dist/skills/acme-secure-review/SKILL.md"
+"$REAL_GIT" -C "$org_baseline_src" add .
+"$REAL_GIT" -C "$org_baseline_src" commit -q -m update
+"$REAL_GIT" -C "$org_baseline_src" push -q "$org_baseline_remote" main
+org_drift_rc=0
+(cd "$tgt" && env PATH="$org_git_bin:$PATH" GIT_SSH_COMMAND="$org_fake_ssh" \
+  GIT_SSH_VARIANT=ssh ORG_BASELINE_TEST_REMOTE="$org_baseline_remote" \
+  make --no-print-directory baseline-sync-check) >>"$org_init_log" 2>&1 || org_drift_rc=$?
+org_sync_rc=0
+(cd "$tgt" && env PATH="$org_git_bin:$PATH" GIT_SSH_COMMAND="$org_fake_ssh" \
+  GIT_SSH_VARIANT=ssh ORG_BASELINE_TEST_REMOTE="$org_baseline_remote" \
+  make --no-print-directory baseline-sync) >>"$org_init_log" 2>&1 || org_sync_rc=$?
+if [ "$org_drift_rc" = 2 ] && [ "$org_sync_rc" = 0 ] && \
+   grep -Fq 'Updated rule.' "$tgt/org-profile/baselines/secure-coding-baseline.md" && \
+   grep -Fq 'Updated organization skill.' \
+     "$tgt/org-skills/acme-secure-review/SKILL.md"; then
+  pass "make: organization Git ref update copies baseline and skills"
+else fail "make: organization Git ref update copies baseline and skills" \
+  "check_rc=$org_drift_rc sync_rc=$org_sync_rc"; fi
 
 org_reinit_rc=0
-(cd "$tgt" && env APPSEC_ADVISOR_TEMPLATE_SOURCE="$ROOT" REINIT_BUILD=0 \
+(cd "$tgt" && env BASH_ENV="$TRACE_CHILD" APPSEC_ADVISOR_TEMPLATE_SOURCE="$ROOT" REINIT_BUILD=0 \
   timeout 20 bash -x scripts/reinit-org-repo.sh) </dev/null \
   >>"$org_init_log" 2>>"$COV" || org_reinit_rc=$?
 if [ "$org_reinit_rc" = 0 ] && \
-   grep -Fqx 'BASELINE_SOURCE_KIND ?= organization' "$tgt/Makefile" && \
-   grep -Fqx 'ORG_BASELINE_SOURCE ?= ../org-baseline' "$tgt/Makefile" && \
+   grep -Fqx 'BASELINE_SOURCE_KIND ?= organization-git' "$tgt/Makefile" && \
+   grep -Fqx 'ORG_BASELINE_URL ?= git@example.test:baseline.git' "$tgt/Makefile" && \
+   grep -Fqx 'ORG_BASELINE_REF ?= main' "$tgt/Makefile" && \
    grep -Fqx 'ORG_BASELINE_DOC ?= dist/secure-coding-baseline.md' "$tgt/Makefile" && \
    grep -Fqx 'ORG_BASELINE_SKILLS_DIR ?= dist/skills' "$tgt/Makefile"; then
   pass "reinit: organization baseline source settings are preserved"
 else fail "reinit: organization baseline source settings are preserved" "rc=$org_reinit_rc"; fi
 
-# Invalid source-relative paths are retried, and a symlinked source repository
-# fails before the target directory is created.
-d="$(newdir)"
-real_org_source="$d/real-org-source"
-mkdir -p "$real_org_source/dist"
-printf '%s\n' 'baseline-id: test-sec-1.0.0' >"$real_org_source/dist/baseline.md"
-ln -s "$real_org_source" "$d/linked-org-source"
-tgt="$d/out"
-printf 'Test Org\n\n\n\n\n%s\nn\n2\n%s\n../escape.md\ndist/baseline.md\n\n' \
-  "$tgt" "$d/linked-org-source" | \
-  (cd "$ROOT" && timeout 20 bash -x "$INIT") >/dev/null 2>"$d/org-invalid.err"
+# Invalid URLs, refs, and source-relative paths are retried; a missing selected
+# skill tree then fails before the target directory is created.
+bad_tgt="$d/bad-out"
+printf 'Test Org\n\n\n\n\n%s\nn\n2\nfile:///unsafe\ngit@example.test:baseline.git\nbad..ref\nmain\n../escape.md\ndist/secure-coding-baseline.md\ndist/missing-skills\n' \
+  "$bad_tgt" | \
+  (cd "$ROOT" && env PATH="$org_git_bin:$PATH" GIT_SSH_COMMAND="$org_fake_ssh" GIT_SSH_VARIANT=ssh \
+    ORG_BASELINE_TEST_REMOTE="$org_baseline_remote" timeout 20 bash -x "$INIT") \
+  >/dev/null 2>"$d/org-invalid.err"
 rc=$?
 cat "$d/org-invalid.err" >>"$COV"
-if [ "$rc" = 2 ] && [ ! -e "$tgt" ] && \
+if [ "$rc" = 2 ] && [ ! -e "$bad_tgt" ] && \
+   grep -Fq 'enter an HTTPS Git URL without credentials, or an SSH Git URL' "$d/org-invalid.err" && \
+   grep -Fq 'enter a safe branch, tag, or commit' "$d/org-invalid.err" && \
    grep -Fq "enter a relative path without '.' or '..' components" "$d/org-invalid.err" && \
-   grep -Fq 'source not found or symlinked' "$d/org-invalid.err"; then
+   grep -Fq 'skills directory not found in Git source' "$d/org-invalid.err"; then
   pass "init: unsafe organization baseline source fails before target creation"
 else fail "init: unsafe organization baseline source fails before target creation" "rc=$rc"; fi
 
-d="$(newdir)"
-org_source="$d/org-source"
-mkdir -p "$org_source/dist"
-printf '%s\n' 'baseline-id: test-sec-1.0.0' >"$org_source/dist/baseline.md"
-tgt="$d/out"
-printf 'Test Org\n\n\n\n\n%s\nn\n2\n%s\ndist/baseline.md\ndist/missing-skills\n' \
-  "$tgt" "$org_source" | \
-  (cd "$ROOT" && timeout 20 bash -x "$INIT") >/dev/null 2>"$d/org-skills-missing.err"
+d_https="$(newdir)"
+https_tgt="$d_https/out"
+printf 'Test Org\n\n\n\n\n%s\nn\n3\nhttp://unsafe.example.test/baseline.md\nhttps://security.example.test/baseline.md\n\n\nn\n' \
+  "$https_tgt" | \
+  (cd "$ROOT" && env PYSTUB_ORG_BASELINE_ID=test-https-1.0.0 \
+    timeout 20 bash -x "$INIT") >/dev/null 2>"$d_https/https-init.err"
 rc=$?
-cat "$d/org-skills-missing.err" >>"$COV"
-if [ "$rc" = 2 ] && [ ! -e "$tgt" ] && \
-   grep -Fq 'skills directory not found' "$d/org-skills-missing.err"; then
-  pass "init: missing organization skills fail before target creation"
-else fail "init: missing organization skills fail before target creation" "rc=$rc"; fi
+cat "$d_https/https-init.err" >>"$COV"
+https_check_rc=0
+(cd "$https_tgt" && env PYSTUB_ORG_BASELINE_ID=test-https-1.0.0 \
+  make --no-print-directory baseline-sync-check) >/dev/null 2>>"$COV" || https_check_rc=$?
+if [ "$rc" = 0 ] && [ "$https_check_rc" = 0 ] && \
+   grep -Fq 'enter one HTTPS document URL without credentials' "$d_https/https-init.err" && \
+   grep -Fqx 'BASELINE_SOURCE_KIND ?= organization-https' "$https_tgt/Makefile" && \
+   grep -Fqx 'ORG_BASELINE_URL ?= https://security.example.test/baseline.md' "$https_tgt/Makefile" && \
+   grep -Fqx 'ORG_BASELINE_SKILLS_DIR ?=' "$https_tgt/Makefile" && \
+   grep -Fqx '  id: test-https-1.0.0' "$https_tgt/org-profile/org-profile.yaml" && \
+   ! grep -A8 '^baseline:' "$https_tgt/org-profile/org-profile.yaml" | grep -Fq '  url:' && \
+   grep -Fq 'baseline-id: test-https-1.0.0' \
+     "$https_tgt/org-profile/baselines/secure-coding-baseline.md"; then
+  pass "init: one organization HTTPS document is initialized without skills"
+else fail "init: one organization HTTPS document is initialized without skills" "rc=$rc"; fi
+
+https_reinit_rc=0
+(cd "$https_tgt" && env BASH_ENV="$TRACE_CHILD" APPSEC_ADVISOR_TEMPLATE_SOURCE="$ROOT" REINIT_BUILD=0 \
+  timeout 20 bash -x scripts/reinit-org-repo.sh) </dev/null \
+  >/dev/null 2>>"$COV" || https_reinit_rc=$?
+if [ "$https_reinit_rc" = 0 ] && \
+   grep -Fqx 'BASELINE_SOURCE_KIND ?= organization-https' "$https_tgt/Makefile" && \
+   grep -Fqx 'ORG_BASELINE_URL ?= https://security.example.test/baseline.md' \
+     "$https_tgt/Makefile"; then
+  pass "reinit: organization HTTPS source settings are preserved"
+else fail "reinit: organization HTTPS source settings are preserved" "rc=$https_reinit_rc"; fi
+
+legacy_tgt="$d/legacy-out"
+cp -a "$tgt" "$legacy_tgt"
+sed -e 's/^BASELINE_SOURCE_KIND ?=.*/BASELINE_SOURCE_KIND ?= organization/' \
+    -e 's|^ORG_BASELINE_SOURCE ?=.*|ORG_BASELINE_SOURCE ?= ../org-baseline|' \
+    "$legacy_tgt/Makefile" >"$legacy_tgt/Makefile.new"
+mv "$legacy_tgt/Makefile.new" "$legacy_tgt/Makefile"
+legacy_reinit_rc=0
+(cd "$legacy_tgt" && env BASH_ENV="$TRACE_CHILD" APPSEC_ADVISOR_TEMPLATE_SOURCE="$ROOT" REINIT_BUILD=0 \
+  timeout 20 bash -x scripts/reinit-org-repo.sh) </dev/null \
+  >/dev/null 2>>"$COV" || legacy_reinit_rc=$?
+if [ "$legacy_reinit_rc" = 0 ] && \
+   grep -Fqx 'BASELINE_SOURCE_KIND ?= organization' "$legacy_tgt/Makefile" && \
+   grep -Fqx 'ORG_BASELINE_SOURCE ?= ../org-baseline' "$legacy_tgt/Makefile"; then
+  pass "reinit: legacy local organization source remains supported"
+else fail "reinit: legacy local organization source remains supported" "rc=$legacy_reinit_rc"; fi
 
 # demo=yes; leading empty answer exercises the "(required)" retry on org-name.
 d="$(newdir)"
