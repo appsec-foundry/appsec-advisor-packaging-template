@@ -1868,6 +1868,111 @@ printf 'Test Org\n\n\n\n\n%s\nn\n\n' "$tgt" | \
   >/dev/null 2>>"$COV"
 assert_rc "init: newer script tolerates older template snapshot" 0 "$?"
 
+# A generated repository must ship every template script its own build chain
+# calls. The copy list in the initializer is hand-maintained, so a helper that
+# lands in the template without being added there only fails much later, inside
+# somebody else's repository (that is how compose-baseline.py went missing).
+d="$(newdir)"
+tgt="$d/out"
+printf 'Test Org\n\n\n\n\n%s\nn\nn\n' "$tgt" | \
+  (cd "$ROOT" && timeout 20 bash -x "$INIT") >/dev/null 2>>"$COV"
+rc=$?
+scaffold_missing=""
+for name in $(grep -ohE '[A-Za-z0-9_.-]+\.(py|sh)' \
+    "$tgt/Makefile" "$tgt"/scripts/*.sh 2>/dev/null | sort -u); do
+  case "$name" in
+    # Guarded in the Makefile: a scaffold carries no quick-start pin to check.
+    check-quickstart-pin.py) continue ;;
+    # The initializer is fetched, never shipped inside a generated repository.
+    init-org-repo.sh) continue ;;
+  esac
+  # Everything else must come from the template, not from the fetched upstream.
+  [ -f "$ROOT/scripts/$name" ] || continue
+  [ -f "$tgt/scripts/$name" ] || scaffold_missing="$scaffold_missing $name"
+done
+if [ "$rc" = 0 ] && [ -z "$scaffold_missing" ]; then
+  pass "init: scaffold ships every template script its build chain calls"
+else
+  fail "init: scaffold ships every template script its build chain calls" \
+    "rc=$rc missing:$scaffold_missing"
+fi
+
+# Reinitialization does not refetch an organization baseline. It must therefore
+# leave both the vendored document and the id the profile pins alone, instead of
+# offering the generic baseline this template vendors as a template update.
+d="$(newdir)"
+tgt="$d/out"
+mkdir -p "$tgt/org-profile/baselines"
+sed 's/^  id: aiscb-.*$/  id: testorg-scb-1.4.0/' \
+  "$ROOT/org-profile/org-profile.yaml" >"$tgt/org-profile/org-profile.yaml"
+printf 'baseline-id: testorg-scb-1.4.0\n\nOrganization rules.\n' \
+  >"$tgt/org-profile/baselines/secure-coding-baseline.md"
+org_baseline_reinit_log="$d/org-baseline-reinit.log"
+yes a | (cd "$ROOT" && env \
+  APPSEC_REINIT_TARGET="$tgt" APPSEC_REINIT_ORG_NAME='Test Org' \
+  APPSEC_REINIT_ORG_ID=test APPSEC_REINIT_PLUGIN_NAME=test-appsec \
+  APPSEC_REINIT_PACKAGE_VERSION=1.0.0 APPSEC_REINIT_OWNER='Test Team' \
+  APPSEC_REINIT_DEMO=false APPSEC_REINIT_BUILD=0 \
+  APPSEC_REINIT_BASELINE_KIND=organization-git \
+  APPSEC_REINIT_ORG_BASELINE_URL='https://git.example.test/baseline.git' \
+  APPSEC_REINIT_ORG_BASELINE_REF=main \
+  APPSEC_REINIT_ORG_BASELINE_DOC=dist/secure-coding-baseline.md \
+  timeout 20 bash -x "$INIT") >"$org_baseline_reinit_log" 2>>"$COV"
+rc=$?
+cat "$org_baseline_reinit_log" >>"$COV"
+if [ "$rc" = 0 ] && \
+   grep -Fqx '  id: testorg-scb-1.4.0' "$tgt/org-profile/org-profile.yaml" && \
+   grep -Fqx 'baseline-id: testorg-scb-1.4.0' \
+     "$tgt/org-profile/baselines/secure-coding-baseline.md"; then
+  pass "reinit: an organization baseline keeps its document and id"
+else fail "reinit: an organization baseline keeps its document and id" "rc=$rc"; fi
+
+# An organization baseline whose id cannot be read is a repository the
+# initializer cannot reinitialize correctly. Say so instead of silently pinning
+# the template's own id.
+d="$(newdir)"
+tgt="$d/out"
+mkdir -p "$tgt/org-profile"
+printf 'organization:\n  id: test\n' >"$tgt/org-profile/org-profile.yaml"
+missing_id_log="$d/missing-baseline-id.log"
+(cd "$ROOT" && env \
+  APPSEC_REINIT_TARGET="$tgt" APPSEC_REINIT_ORG_NAME='Test Org' \
+  APPSEC_REINIT_ORG_ID=test APPSEC_REINIT_PLUGIN_NAME=test-appsec \
+  APPSEC_REINIT_PACKAGE_VERSION=1.0.0 APPSEC_REINIT_OWNER='Test Team' \
+  APPSEC_REINIT_DEMO=false APPSEC_REINIT_BUILD=0 \
+  APPSEC_REINIT_BASELINE_KIND=organization-https \
+  APPSEC_REINIT_ORG_BASELINE_URL='https://security.example.test/baseline.md' \
+  timeout 20 bash -x "$INIT") >"$missing_id_log" 2>&1
+rc=$?
+cat "$missing_id_log" >>"$COV"
+if [ "$rc" = 2 ] && grep -Fq 'could not read baseline.id' "$missing_id_log"; then
+  pass "reinit: an unreadable organization baseline id fails closed"
+else fail "reinit: an unreadable organization baseline id fails closed" "rc=$rc"; fi
+
+# Input can run out mid-run (a pipe, a CI job, a closed terminal). Name the
+# question that went unanswered rather than ending on a bare `set -e` status.
+d="$(newdir)"
+eof_log="$d/no-more-input.log"
+printf 'Test Org\n' | (cd "$ROOT" && timeout 20 bash -x "$INIT") >"$eof_log" 2>&1
+rc=$?
+cat "$eof_log" >>"$COV"
+if [ "$rc" = 2 ] && grep -Fq 'no more input for a required answer' "$eof_log"; then
+  pass "init: exhausted input names the unanswered question"
+else fail "init: exhausted input names the unanswered question" "rc=$rc"; fi
+
+# Rendering the template over its own checkout would rewrite the files being
+# read. Reject it with an actionable message before anything is created.
+d="$(newdir)"
+self_target_log="$d/self-target.log"
+printf 'Test Org\n\n\n\n\n%s\nn\nn\n\n\n' "$ROOT/." | \
+  (cd "$ROOT" && timeout 20 bash -x "$INIT") >"$self_target_log" 2>&1
+rc=$?
+cat "$self_target_log" >>"$COV"
+if [ "$rc" = 2 ] && \
+   grep -Fq 'target directory is the packaging template itself' "$self_target_log"; then
+  pass "init: the template checkout is refused as a target"
+else fail "init: the template checkout is refused as a target" "rc=$rc"; fi
+
 # ── upstream-check.sh ────────────────────────────────────────────────────────
 echo "--- upstream-check.sh ---"
 # check_run <name> <expect-rc> <predest 0|1> [VAR=val ...]

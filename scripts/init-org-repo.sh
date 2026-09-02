@@ -41,6 +41,7 @@ INIT_CONFIG_TEMP=""
 ORG_BASELINE_ASKPASS_DIR=""
 ORG_BASELINE_ASKPASS=""
 ORG_BASELINE_TOKEN=""
+RESOLVED_BASELINE_DOCUMENT=""
 
 cleanup() {
   if [ -n "${TMPDIR_CLONE}" ]; then
@@ -51,6 +52,9 @@ cleanup() {
   fi
   if [ -n "${INIT_CONFIG_TEMP}" ]; then
     rm -f -- "${INIT_CONFIG_TEMP}"
+  fi
+  if [ -n "${RESOLVED_BASELINE_DOCUMENT}" ]; then
+    rm -f -- "${RESOLVED_BASELINE_DOCUMENT}"
   fi
   if [ -n "${ORG_BASELINE_ASKPASS}" ]; then
     rm -f -- "${ORG_BASELINE_ASKPASS}"
@@ -169,15 +173,24 @@ sys.stdout.write(unicodedata.normalize("NFC", value))
 '
 }
 
+# A required answer cannot be defaulted. Say which question ran out of input
+# instead of letting `set -e` end the run on the failed `read` without a word.
+no_more_input() {
+  echo "" >&2
+  echo "ERROR: no more input for a required answer: $1" >&2
+  echo "Run this setup interactively, or feed every answer on standard input." >&2
+  exit 2
+}
+
 ask() {
   local prompt="$1" default="${2:-}"
   local reply value normalized
   while true; do
     if [ -n "${default}" ]; then
-      read -r -p "${prompt} [${default}]: " reply
+      read -r -p "${prompt} [${default}]: " reply || no_more_input "${prompt}"
       value="${reply:-${default}}"
     else
-      read -r -p "${prompt}: " reply
+      read -r -p "${prompt}: " reply || no_more_input "${prompt}"
       if [ -z "${reply}" ]; then
         echo "  (required)" >&2
         continue
@@ -378,6 +391,24 @@ resolve_published_baseline_id() {
     return 2
   fi
   printf '%s\n' "${resolved}"
+}
+
+# Reads baseline.id out of an existing organization profile. Reinitialization
+# does not refetch an organization baseline, so the id it already pins is the
+# only correct one for the rendered candidate.
+existing_baseline_id() {
+  local profile="$1" found
+  if [ ! -f "${profile}" ]; then
+    return 1
+  fi
+  # The same shape sync-org-baseline.py writes and matches: one unquoted id in
+  # the baseline block, optionally followed by a comment.
+  found="$(sed -n '/^baseline:/,/^[^ ]/ s/^  id:[[:space:]]*//p' "${profile}")"
+  found="${found%%$'\n'*}"
+  found="${found%%#*}"
+  found="${found%"${found##*[![:space:]]}"}"
+  valid_baseline_id "${found}" || return 1
+  printf '%s\n' "${found}"
 }
 
 valid_make_path() {
@@ -1106,7 +1137,7 @@ else
 
   UPSTREAM_REF="$(select_upstream_ref)" || exit 2
 
-  read -r -p "Include demo content (example requirements + filled org profile)? [y/N]: " _demo_reply
+  read -r -p "Include demo content (example requirements + filled org profile)? [y/N]: " _demo_reply || _demo_reply=""
   case "${_demo_reply}" in
     [yY]*) DEMO_CONTENT=true ;;
     *)     DEMO_CONTENT=false ;;
@@ -1137,7 +1168,7 @@ else
       ORG_BASELINE_SKILLS_DIR=".claude/skills"
       case "${ORG_BASELINE_URL}" in
         https://*)
-          read -r -s -p "Personal access token for this Git host (leave empty to use existing Git credentials): " ORG_BASELINE_TOKEN
+          read -r -s -p "Personal access token for this Git host (leave empty to use existing Git credentials): " ORG_BASELINE_TOKEN || ORG_BASELINE_TOKEN=""
           echo "" >&2
           prepare_org_baseline_askpass
           ;;
@@ -1222,6 +1253,15 @@ if [ ! -f "${TEMPLATE_BASE}/Makefile" ]; then
   TEMPLATE_BASE="${TMPDIR_CLONE}"
 fi
 check_template_layout
+
+# Rendering the template over its own checkout would rewrite the very files
+# being read. `cp` happens to refuse identical paths, but only after the
+# directories were created and with an error nobody can act on.
+if [ "$(cd "${TARGET_DIR}" 2>/dev/null && pwd -P)" = "$(cd "${TEMPLATE_BASE}" && pwd -P)" ]; then
+  echo "ERROR: the target directory is the packaging template itself: ${TARGET_DIR}" >&2
+  echo "Choose a target outside the template checkout." >&2
+  exit 2
+fi
 
 if ! RESOLVED_TEMPLATE_REF="$(git -C "${TEMPLATE_BASE}" rev-parse --verify 'HEAD^{commit}')" ||
    ! is_commit_ref "${RESOLVED_TEMPLATE_REF}"; then
@@ -1324,6 +1364,19 @@ elif [ "${BASELINE_SOURCE_KIND}" = organization-https ] && [ "${REINIT_MODE}" !=
       exit 2
     }
   echo "==> Organization baseline: ${RESOLVED_BASELINE_ID} from ${ORG_BASELINE_URL}"
+elif [ "${REINIT_MODE}" = true ] && [ "${BASELINE_ENABLED}" = true ]; then
+  # An organization baseline is not refetched during reinitialization: it stays
+  # as `make baseline-sync` last wrote it. Carry that repository's own id into
+  # the rendered candidate, or an accepted profile update would replace it with
+  # the id this template happens to carry — leaving the profile pinning one
+  # baseline while the package ships another.
+  if ! RESOLVED_BASELINE_ID="$(existing_baseline_id "${TARGET_DIR}/org-profile/org-profile.yaml")"; then
+    echo "ERROR: could not read baseline.id from ${TARGET_DIR}/org-profile/org-profile.yaml." >&2
+    echo "Reinitialization keeps the organization baseline this repository already pins." >&2
+    echo "Restore that id (for example with: make baseline-sync), then rerun." >&2
+    exit 2
+  fi
+  echo "==> Organization baseline kept: ${RESOLVED_BASELINE_ID} (not refetched during reinitialization)"
 fi
 
 # ── Create repo ───────────────────────────────────────────────────────────────
@@ -1346,7 +1399,7 @@ elif [ -e "${TARGET_DIR}" ]; then
   echo "  will be updated. User-editable files that differ from the new template"
   echo "  (org-profile/, org-skills/, README.md, AGENTS.md) will be offered individually."
   echo "  Required package-policy entries may be reconciled."
-  read -r -p "Re-initialize? [y/N]: " confirm
+  read -r -p "Re-initialize? [y/N]: " confirm || confirm=""
   case "${confirm}" in
     [yY]*) REINIT=true ;;
     *) echo "Aborted."; exit 1 ;;
@@ -1485,6 +1538,7 @@ for helper in \
   render-packaged-help.py \
   render-packaged-readme.py \
   prune-packaged-session-banner.py \
+  compose-baseline.py \
   baseline-upstream-check.py \
   select-latest-release.py \
   check-org-hook-collisions.py \
@@ -1553,9 +1607,12 @@ if [ -n "${RESOLVED_BASELINE_DOCUMENT}" ]; then
     "${TARGET_DIR}/org-profile/baselines/${BASELINE_FILE_NAME}" \
     "org-profile/baselines/${BASELINE_FILE_NAME}"
   rm -f "${RESOLVED_BASELINE_DOCUMENT}"
-else
+elif [ "${BASELINE_SOURCE_KIND}" = disabled ]; then
   # Baseline declined: keep the template's vendored copy anyway, so the
-  # profile's file reference still resolves with the block disabled.
+  # profile's file reference still resolves with the block disabled. The
+  # organization modes are deliberately not here — their document is written by
+  # sync-org-baseline.py, and during reinitialization it must not be replaced by
+  # whatever generic baseline this template ships.
   for vendored_baseline in "${TEMPLATE_BASE}"/org-profile/baselines/*.md; do
     [ -f "${vendored_baseline}" ] || continue
     vendored_name="$(basename "${vendored_baseline}")"
@@ -1568,6 +1625,11 @@ else
 fi
 
 if [ "${DEMO_CONTENT}" = true ]; then
+  if [ ! -f "${TEMPLATE_BASE}/org-profile/requirements-example.yaml" ]; then
+    echo "ERROR: this template carries no org-profile/requirements-example.yaml." >&2
+    echo "Rerun without demo content, or use a template that ships the example." >&2
+    exit 2
+  fi
   refresh_user_file \
     "${TEMPLATE_BASE}/org-profile/requirements-example.yaml" \
     "${TARGET_DIR}/org-profile/requirements.yaml" \
@@ -1856,7 +1918,7 @@ for CI_FILE in \
   sed \
     -e "s/acme-appsec/${E_PLUGIN}/g" \
     -e "s/Acme Corp/${E_ORG_NAME}/g" \
-    -e "s/0\.1\.0/${E_PACKAGE_VERSION}/g" \
+    -e "/PACKAGE_VERSION/ s/0\.1\.0/${E_PACKAGE_VERSION}/g" \
     "${CI_FILE}" > "${CI_EDITED}"
   mv "${CI_EDITED}" "${CI_FILE}"
 done
