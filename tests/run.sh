@@ -1712,6 +1712,47 @@ printf 'Test Org\n\n\n\n\n%s\nn\n\n\n\nn\n' "$tgt" | (cd "$ROOT" && timeout 20 b
   >/dev/null 2>>"$COV"
 assert_rc "init: existing dir, abort" 1 "$?"
 
+d="$(newdir)"
+badarg_log="$d/bad-arg.log"
+(cd "$ROOT" && bash -x "$INIT" --bogus) </dev/null >"$badarg_log" 2>&1
+rc=$?
+cat "$badarg_log" >>"$COV"
+if [ "$rc" = 2 ] && grep -Fq 'ERROR: unknown argument: --bogus' "$badarg_log"; then
+  pass "init: unknown argument is rejected"
+else fail "init: unknown argument is rejected" "rc=$rc"; fi
+
+# --save-defaults remembers the organization identity (not the baseline token)
+# in a config file under $HOME, and a later run — with or without the flag —
+# offers those values as editable defaults instead of requiring them again.
+d="$(newdir)"
+home1="$d/home1"
+mkdir -p "$home1"
+tgt1="$d/out1"
+printf 'Test Org\n\n\n\n\n%s\nn\n\nn\nhttps://git.example.test/repo1\nn\n' "$tgt1" | \
+  (cd "$ROOT" && env HOME="$home1" timeout 20 bash -x "$INIT" --save-defaults) \
+  >/dev/null 2>>"$COV"
+rc=$?
+defaults_file="$home1/.config/appsec-advisor-init/defaults.env"
+if [ "$rc" = 0 ] && [ -f "$defaults_file" ] && \
+   grep -Fq 'DEFAULT_ORG_NAME=Test\ Org' "$defaults_file" && \
+   grep -Fq 'DEFAULT_STATUSLINE_ENABLED=false' "$defaults_file" && \
+   grep -Fq 'DEFAULT_INTERNAL_REPOSITORY_URL=https://git.example.test/repo1' "$defaults_file" && \
+   ! grep -q 'TOKEN' "$defaults_file"; then
+  pass "init: --save-defaults persists organization identity, not secrets"
+else fail "init: --save-defaults persists organization identity, not secrets" "rc=$rc"; fi
+
+tgt2="$d/out2"
+printf '\n\n\n\n\n%s\nn\n\n\n\nn\n' "$tgt2" | \
+  (cd "$ROOT" && env HOME="$home1" timeout 20 bash -x "$INIT") \
+  >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && \
+   grep -Fqx '  name: "Test Org"' "$tgt2/org-profile/org-profile.yaml" && \
+   grep -A2 '^banner:' "$tgt2/org-profile/org-profile.yaml" | grep -Fqx '  enabled: false' && \
+   grep -Fqx 'INTERNAL_REPOSITORY_URL ?= https://git.example.test/repo1' "$tgt2/Makefile"; then
+  pass "init: a later run without the flag reuses saved defaults"
+else fail "init: a later run without the flag reuses saved defaults" "rc=$rc"; fi
+
 # Clone fallback: run a copy with no sibling Makefile. Export tracked and new,
 # non-ignored working-tree files so the test covers changes before commit while
 # excluding local caches and generated output.

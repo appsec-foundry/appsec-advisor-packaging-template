@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Creates a fresh org packaging repo for appsec-advisor.
-# Usage: bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh)
-# Or locally: scripts/init-org-repo.sh
+# Usage: bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh) [--save-defaults]
+# Or locally: scripts/init-org-repo.sh [--save-defaults]
+# --save-defaults remembers the organization name, id, owner, repository URL and
+# statusline choice in ~/.config/appsec-advisor-init/defaults.env (or
+# $XDG_CONFIG_HOME/appsec-advisor-init/defaults.env) and offers them as editable
+# defaults on the next run, whether or not that run also passes the flag.
 if [ -z "${BASH_VERSION:-}" ]; then
   echo "ERROR: this initializer requires Bash; run it with: bash scripts/init-org-repo.sh" >&2
   exit 2
@@ -12,6 +16,19 @@ if [ "${BASH_VERSINFO[0]}" -lt 3 ] || \
   exit 2
 fi
 set -euo pipefail
+
+SAVE_DEFAULTS=false
+case "${1:-}" in
+  "") ;;
+  --save-defaults) SAVE_DEFAULTS=true ;;
+  *)
+    echo "ERROR: unknown argument: $1" >&2
+    echo "Usage: $0 [--save-defaults]" >&2
+    exit 2
+    ;;
+esac
+INIT_CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/appsec-advisor-init"
+INIT_CONFIG_FILE="${INIT_CONFIG_DIR}/defaults.env"
 
 TMPDIR_CLONE=""
 CANDIDATE_DIR=""
@@ -160,6 +177,38 @@ ask() {
     fi
     echo "  (invalid UTF-8 input — please enter the value again)" >&2
   done
+}
+
+# Populates DEFAULT_* with values saved by a previous --save-defaults run, or
+# empty/true fallbacks that preserve today's prompt defaults when there is
+# none. Never loads a baseline token or other secret.
+load_saved_defaults() {
+  DEFAULT_ORG_NAME=""
+  DEFAULT_ORG_ID=""
+  DEFAULT_OWNER=""
+  DEFAULT_INTERNAL_REPOSITORY_URL=""
+  DEFAULT_STATUSLINE_ENABLED="true"
+  if [ -r "${INIT_CONFIG_FILE}" ]; then
+    # shellcheck disable=SC1090
+    source "${INIT_CONFIG_FILE}"
+  fi
+}
+
+# Saves the values entered this run so the next run can offer them as
+# editable defaults. Deliberately excludes anything per-repo (target
+# directory, plugin name, package version), menu-driven (upstream channel,
+# baseline source) or secret (the baseline Git token).
+save_defaults() {
+  mkdir -p -- "${INIT_CONFIG_DIR}"
+  {
+    printf 'DEFAULT_ORG_NAME=%q\n' "${ORG_NAME}"
+    printf 'DEFAULT_ORG_ID=%q\n' "${ORG_ID}"
+    printf 'DEFAULT_OWNER=%q\n' "${OWNER}"
+    printf 'DEFAULT_INTERNAL_REPOSITORY_URL=%q\n' "${INTERNAL_REPOSITORY_URL}"
+    printf 'DEFAULT_STATUSLINE_ENABLED=%q\n' "${STATUSLINE_ENABLED}"
+  } > "${INIT_CONFIG_FILE}"
+  chmod 600 -- "${INIT_CONFIG_FILE}"
+  echo "Saved these as defaults for next time: ${INIT_CONFIG_FILE}" >&2
 }
 
 valid_package_version() {
@@ -500,9 +549,14 @@ PY
 }
 
 ask_optional_https_url() {
-  local prompt="$1" reply normalized
+  local prompt="$1" default="${2:-}" reply normalized
   while true; do
-    read -r -p "${prompt} (optional; HTTPS): " reply || reply=""
+    if [ -n "${default}" ]; then
+      read -r -p "${prompt} (optional; HTTPS) [${default}]: " reply || reply=""
+      reply="${reply:-${default}}"
+    else
+      read -r -p "${prompt} (optional; HTTPS): " reply || reply=""
+    fi
     if normalized=$(normalize_optional_https_url "${reply}"); then
       printf '%s\n' "${normalized}"
       return 0
@@ -791,6 +845,8 @@ check_prerequisites
 echo "Prerequisites OK: git, Python 3.10+, make, sed, mktemp"
 echo ""
 
+load_saved_defaults
+
 # ── Gather input ─────────────────────────────────────────────────────────────
 
 REINIT_MODE=false
@@ -898,8 +954,8 @@ if [ -n "${APPSEC_REINIT_TARGET:-}" ]; then
   fi
   OWNER_PREFIX="$(uppercase_ascii "${ORG_ID}")"
 else
-  ORG_NAME=$(ask "Organization name (e.g. Acme Corp)")
-  ORG_ID=$(initials "${ORG_NAME}")
+  ORG_NAME=$(ask "Organization name (e.g. Acme Corp)" "${DEFAULT_ORG_NAME}")
+  ORG_ID="${DEFAULT_ORG_ID:-$(initials "${ORG_NAME}")}"
   while true; do
     ORG_ID=$(ask "Organization id (short lowercase abbreviation, e.g. 'acme', 'hl' — used in plugin name)" "${ORG_ID}")
     if valid_organization_id "${ORG_ID}"; then
@@ -916,7 +972,7 @@ else
   done
   PACKAGE_VERSION=$(ask_package_version)
   OWNER_PREFIX="$(uppercase_ascii "${ORG_ID}")"
-  OWNER=$(ask "Team owner (e.g. AppSec Team)" "${OWNER_PREFIX} AppSec Team")
+  OWNER=$(ask "Team owner (e.g. AppSec Team)" "${DEFAULT_OWNER:-${OWNER_PREFIX} AppSec Team}")
   TARGET_DIR=$(ask "Target directory" "./${ORG_ID}-appsec-advisor")
 
   UPSTREAM_REF="$(select_upstream_ref)" || exit 2
@@ -964,13 +1020,23 @@ else
     disabled) BASELINE_ENABLED=false ;;
   esac
 
-  read -r -p "Show plugin and security status when Claude Code starts? [Y/n] (change later in org-profile and package-policy): " _statusline_reply || _statusline_reply=""
+  if [ "${DEFAULT_STATUSLINE_ENABLED}" = false ]; then
+    _statusline_bracket="y/N"
+  else
+    _statusline_bracket="Y/n"
+  fi
+  read -r -p "Show plugin and security status when Claude Code starts? [${_statusline_bracket}] (change later in org-profile and package-policy): " _statusline_reply || _statusline_reply=""
   case "${_statusline_reply}" in
+    "")    STATUSLINE_ENABLED="${DEFAULT_STATUSLINE_ENABLED}" ;;
     [nN]*) STATUSLINE_ENABLED=false ;;
     *)     STATUSLINE_ENABLED=true ;;
   esac
 
-  INTERNAL_REPOSITORY_URL=$(ask_optional_https_url "Internal packaging repository URL")
+  INTERNAL_REPOSITORY_URL=$(ask_optional_https_url "Internal packaging repository URL" "${DEFAULT_INTERNAL_REPOSITORY_URL}")
+
+  if [ "${SAVE_DEFAULTS}" = true ]; then
+    save_defaults
+  fi
 fi
 
 if python3 - "${TARGET_DIR}" <<'PY'
