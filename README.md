@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-5A67D8.svg)](https://docs.claude.com/en/docs/claude-code) [![codecov](https://codecov.io/gh/appsec-foundry/appsec-advisor-packaging-template/graph/badge.svg)](https://codecov.io/gh/appsec-foundry/appsec-advisor-packaging-template) [![Upstream](https://img.shields.io/badge/upstream-appsec--advisor-orange.svg)](https://github.com/appsec-foundry/appsec-advisor)
 
-This template creates an internal Claude Code plugin from [`appsec-advisor`](https://github.com/appsec-foundry/appsec-advisor) and your organization's configuration. The generated repository contains the profile, package policy, baseline, build scripts, and CI templates. The upstream plugin is fetched when the package is built.
+This template creates an internal Claude Code plugin from [`appsec-advisor`](https://github.com/appsec-foundry/appsec-advisor) and your organization's configuration. The generated repository contains the organization profile that controls analysis behavior, the package policy that limits what is shipped, a versioned set of secure-coding rules, build scripts, and CI templates. The upstream plugin is fetched when the package is built.
 
 ## Quick start
 
@@ -46,6 +46,8 @@ Start with these files:
 - `org-profile/context/organization.md` must be replaced with short, factual organization context.
 - `org-profile/package-policy.yaml` decides which skills, hooks, and MCP servers are included.
 - `Makefile` contains `PACKAGE_VERSION`, the upstream ref, plugin name, and the internal repository URL shown in packaged help.
+
+A preset bundles an analysis depth, its outputs, and guardrails. Requirements are organization controls that the optional audit commands evaluate. Skills are plugin workflows exposed as slash commands; hooks react to Claude Code events, while MCP servers make approved external tools available to the session.
 
 If requirements checks are used, set `requirements.source.requirements_yaml_url` to the approved catalog. Otherwise, remove that source from the profile.
 
@@ -151,13 +153,15 @@ Declare MCP servers only in the profile's `mcp:` block. Reference secrets with `
 
 ## Secure-coding baseline
 
-The initializer supports four baseline modes: generic AISCB, an organization-owned Git source, one organization-owned HTTPS document, or no baseline. In every enabled mode, the reviewed document is stored in the packaging repository and shipped with the plugin. `make package` never updates it implicitly from its source.
+A secure-coding baseline is a versioned document of rules that the plugin installs for Claude Code to load before it writes or changes code. It provides consistent security guardrails when implementation decisions are made, and its ID lets the package and the session verify that the intended revision is loaded. The baseline complements the plugin's threat models and requirement checks; it is not another scanner.
+
+The initializer supports four source modes: the generic [AI Secure Coding Baseline (AISCB)](https://github.com/appsec-foundry/aiscb), an organization-owned Git source, one organization-owned HTTPS document, or no baseline. In every enabled mode, the reviewed document is stored in the packaging repository and shipped with the plugin. `make package` never updates it implicitly from its source.
 
 The organization Git mode can also copy organization-owned skills. Those skills still need an explicit entry in `org-profile/package-policy.yaml` before they are shipped. Source configuration, synchronization, IDs, and overlays are documented in `org-profile/baselines/README.md` and the generated maintainer runbook.
 
 ## Keeping the package current
 
-The upstream core, this packaging template, and the baseline are independent. Updating one does not update the others. The following table maps each source to its read-only check and update command:
+The upstream `appsec-advisor` plugin (called the core here), this packaging template, and the baseline are independent. Updating one does not update the others. The following table maps each source to its read-only check and update command:
 
 | Source | Check | Update |
 |---|---|---|

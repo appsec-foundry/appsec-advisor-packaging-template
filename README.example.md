@@ -1,6 +1,6 @@
 # acme-appsec packaging
 
-This repository builds and releases the `acme-appsec` Claude Code security plugin maintained for Acme Corp by the Acme AppSec Team. It combines the upstream [`appsec-advisor`](https://github.com/appsec-foundry/appsec-advisor) plugin with our organization profile, secure-coding baseline, package policy, context, hooks, and organization-owned skills.
+This repository builds and releases the `acme-appsec` Claude Code security plugin maintained for Acme Corp by the Acme AppSec Team. It combines the upstream [`appsec-advisor`](https://github.com/appsec-foundry/appsec-advisor) plugin with our organization profile, secure-coding baseline, package policy, context, hooks, and organization-owned skills. The baseline is the versioned set of security rules the plugin installs for Claude Code to follow while writing or changing code; the package policy is the allowlist of features shipped to developers.
 
 <!-- INTERNAL_REPOSITORY_LINK -->
 
@@ -12,8 +12,10 @@ The initializer has already set the organization identity, package name, version
 
 - Replace `org-profile/context/organization.md` with factual organization context.
 - Configure requirements, presets, policy, banner, baseline, and guardrails in `org-profile/org-profile.yaml` as needed.
-- Run `make baseline-sync-check` to verify the configured AISCB, organization Git, or organization HTTPS source. Use `make baseline-sync` after reviewing source changes; a new ID requires `ACCEPT_ID=<id>`.
+- Run `make baseline-sync-check` to verify the configured [AISCB](https://github.com/appsec-foundry/aiscb), organization Git, or organization HTTPS source. Use `make baseline-sync` after reviewing source changes; a new ID requires `ACCEPT_ID=<id>`.
 - Add organization skills under `org-skills/`, and include or remove skills, hooks, and MCP servers through `org-profile/package-policy.yaml`.
+
+A preset bundles an analysis depth, its outputs, and guardrails. Requirements are organization controls that the optional audit commands evaluate. Skills are plugin workflows exposed as slash commands.
 
 To disable a hook, remove its id from `plugin_surface.hooks.include`. To add or replace behavior, declare an organization hook under a distinct `org-...` id and include that id. Reusing an upstream hook id fails validation.
 
@@ -95,7 +97,7 @@ After the plugin loads, start with:
 /acme-appsec:create-threat-model
 ```
 
-`install-baseline` installs the reviewed secure-coding rules shipped with the plugin, whether they come from AISCB or an organization source. The status line at the start of a session says whether those rules are loaded.
+`install-baseline` installs the reviewed secure-coding rules shipped with the plugin, whether they come from [AISCB](https://github.com/appsec-foundry/aiscb) or an organization source. The status line at the start of a session says whether those rules are loaded.
 
 Nothing updates the installed rules automatically. A package with a configured refresh URL can update them through `/acme-appsec:install-baseline --refresh`. Organization-owned source modes distribute baseline changes through a new plugin package instead.
 
