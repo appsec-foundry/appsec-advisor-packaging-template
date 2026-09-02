@@ -3,8 +3,8 @@
 # Usage: bash <(curl -fsSL https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/main/scripts/init-org-repo.sh) [--save-defaults]
 # Or locally: scripts/init-org-repo.sh [--save-defaults]
 # --save-defaults remembers the organization name, id, owner, repository URL and
-# statusline choice in ~/.config/appsec-advisor-init/defaults.env (or
-# $XDG_CONFIG_HOME/appsec-advisor-init/defaults.env) and offers them as editable
+# statusline choice in ~/.config/appsec-advisor-init/defaults.json (or
+# $XDG_CONFIG_HOME/appsec-advisor-init/defaults.json) and offers them as editable
 # defaults on the next run, whether or not that run also passes the flag.
 if [ -z "${BASH_VERSION:-}" ]; then
   echo "ERROR: this initializer requires Bash; run it with: bash scripts/init-org-repo.sh" >&2
@@ -18,6 +18,11 @@ fi
 set -euo pipefail
 
 SAVE_DEFAULTS=false
+if [ "$#" -gt 1 ]; then
+  echo "ERROR: unknown argument: $2" >&2
+  echo "Usage: $0 [--save-defaults]" >&2
+  exit 2
+fi
 case "${1:-}" in
   "") ;;
   --save-defaults) SAVE_DEFAULTS=true ;;
@@ -28,10 +33,12 @@ case "${1:-}" in
     ;;
 esac
 INIT_CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/appsec-advisor-init"
-INIT_CONFIG_FILE="${INIT_CONFIG_DIR}/defaults.env"
+INIT_CONFIG_FILE="${INIT_CONFIG_DIR}/defaults.json"
 
 TMPDIR_CLONE=""
 CANDIDATE_DIR=""
+INIT_CONFIG_TEMP=""
+ORG_BASELINE_ASKPASS_DIR=""
 ORG_BASELINE_ASKPASS=""
 ORG_BASELINE_TOKEN=""
 
@@ -42,8 +49,14 @@ cleanup() {
   if [ -n "${CANDIDATE_DIR}" ]; then
     rm -rf -- "${CANDIDATE_DIR}"
   fi
+  if [ -n "${INIT_CONFIG_TEMP}" ]; then
+    rm -f -- "${INIT_CONFIG_TEMP}"
+  fi
   if [ -n "${ORG_BASELINE_ASKPASS}" ]; then
     rm -f -- "${ORG_BASELINE_ASKPASS}"
+  fi
+  if [ -n "${ORG_BASELINE_ASKPASS_DIR}" ]; then
+    rmdir -- "${ORG_BASELINE_ASKPASS_DIR}" 2>/dev/null || true
   fi
 }
 trap cleanup EXIT
@@ -179,19 +192,64 @@ ask() {
   done
 }
 
-# Populates DEFAULT_* with values saved by a previous --save-defaults run, or
-# empty/true fallbacks that preserve today's prompt defaults when there is
-# none. Never loads a baseline token or other secret.
+# Populates DEFAULT_* from a strictly validated JSON document. The file is data,
+# not shell code: malformed or unexpected content is ignored rather than sourced.
 load_saved_defaults() {
+  local defaults_output
   DEFAULT_ORG_NAME=""
   DEFAULT_ORG_ID=""
   DEFAULT_OWNER=""
   DEFAULT_INTERNAL_REPOSITORY_URL=""
   DEFAULT_STATUSLINE_ENABLED="true"
-  if [ -r "${INIT_CONFIG_FILE}" ]; then
-    # shellcheck disable=SC1090
-    source "${INIT_CONFIG_FILE}"
+  if [ ! -r "${INIT_CONFIG_FILE}" ]; then
+    return 0
   fi
+  if ! defaults_output="$(python3 - "${INIT_CONFIG_FILE}" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+allowed = {
+    "version",
+    "org_name",
+    "org_id",
+    "owner",
+    "internal_repository_url",
+    "statusline_enabled",
+}
+try:
+    with open(path, encoding="utf-8") as handle:
+        data = json.load(handle)
+    if not isinstance(data, dict) or set(data) != allowed or data.get("version") != 1:
+        raise ValueError("unexpected schema")
+    values = [data[key] for key in (
+        "org_name", "org_id", "owner", "internal_repository_url"
+    )]
+    if not all(isinstance(value, str) and "\n" not in value and "\r" not in value for value in values):
+        raise ValueError("default text values must be single-line strings")
+    statusline = data["statusline_enabled"]
+    if not isinstance(statusline, bool):
+        raise ValueError("statusline_enabled must be boolean")
+except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
+    print(f"invalid saved defaults: {error}", file=sys.stderr)
+    raise SystemExit(2)
+for value in values:
+    print(value)
+print("true" if statusline else "false")
+PY
+)"; then
+    echo "WARN: ignoring invalid saved defaults: ${INIT_CONFIG_FILE}" >&2
+    return 0
+  fi
+  {
+    IFS= read -r DEFAULT_ORG_NAME
+    IFS= read -r DEFAULT_ORG_ID
+    IFS= read -r DEFAULT_OWNER
+    IFS= read -r DEFAULT_INTERNAL_REPOSITORY_URL
+    IFS= read -r DEFAULT_STATUSLINE_ENABLED
+  } <<EOF
+${defaults_output}
+EOF
 }
 
 # Saves the values entered this run so the next run can offer them as
@@ -200,14 +258,32 @@ load_saved_defaults() {
 # baseline source) or secret (the baseline Git token).
 save_defaults() {
   mkdir -p -- "${INIT_CONFIG_DIR}"
-  {
-    printf 'DEFAULT_ORG_NAME=%q\n' "${ORG_NAME}"
-    printf 'DEFAULT_ORG_ID=%q\n' "${ORG_ID}"
-    printf 'DEFAULT_OWNER=%q\n' "${OWNER}"
-    printf 'DEFAULT_INTERNAL_REPOSITORY_URL=%q\n' "${INTERNAL_REPOSITORY_URL}"
-    printf 'DEFAULT_STATUSLINE_ENABLED=%q\n' "${STATUSLINE_ENABLED}"
-  } > "${INIT_CONFIG_FILE}"
-  chmod 600 -- "${INIT_CONFIG_FILE}"
+  INIT_CONFIG_TEMP="$(mktemp "${INIT_CONFIG_FILE}.tmp.XXXXXX")"
+  chmod 600 -- "${INIT_CONFIG_TEMP}"
+  python3 - "${ORG_NAME}" "${ORG_ID}" "${OWNER}" \
+    "${INTERNAL_REPOSITORY_URL}" "${STATUSLINE_ENABLED}" > "${INIT_CONFIG_TEMP}" <<'PY'
+import json
+import sys
+
+org_name, org_id, owner, repository_url, statusline = sys.argv[1:]
+json.dump(
+    {
+        "version": 1,
+        "org_name": org_name,
+        "org_id": org_id,
+        "owner": owner,
+        "internal_repository_url": repository_url,
+        "statusline_enabled": statusline == "true",
+    },
+    sys.stdout,
+    ensure_ascii=False,
+    indent=2,
+    sort_keys=True,
+)
+print()
+PY
+  mv -f -- "${INIT_CONFIG_TEMP}" "${INIT_CONFIG_FILE}"
+  INIT_CONFIG_TEMP=""
   echo "Saved these as defaults for next time: ${INIT_CONFIG_FILE}" >&2
 }
 
@@ -403,17 +479,14 @@ ask_git_url() {
   done
 }
 
-# Runs "$@" with a token supplied to Git only via GIT_ASKPASS, never on the
-# command line or in a file: ORG_BASELINE_TOKEN never touches org-profile.yaml,
-# the Makefile, or any generated file.
-with_org_baseline_token() {
-  if [ -z "${ORG_BASELINE_TOKEN}" ]; then
-    "$@"
-    return $?
-  fi
-  if [ -z "${ORG_BASELINE_ASKPASS}" ]; then
-    ORG_BASELINE_ASKPASS="$(mktemp)"
-    chmod 700 "${ORG_BASELINE_ASKPASS}"
+# Creates one private helper in the parent shell so command substitutions and
+# subshells reuse it and the top-level EXIT trap can always remove it. The file
+# contains no credential; it reads the token from the child environment.
+prepare_org_baseline_askpass() {
+  if [ "${#ORG_BASELINE_TOKEN}" -gt 0 ] && [ -z "${ORG_BASELINE_ASKPASS}" ]; then
+    ORG_BASELINE_ASKPASS_DIR="$(mktemp -d)"
+    chmod 700 -- "${ORG_BASELINE_ASKPASS_DIR}"
+    ORG_BASELINE_ASKPASS="${ORG_BASELINE_ASKPASS_DIR}/askpass"
     cat > "${ORG_BASELINE_ASKPASS}" <<'EOF'
 #!/bin/sh
 case "$1" in
@@ -421,27 +494,83 @@ case "$1" in
   *) echo "${ORG_BASELINE_GIT_TOKEN}" ;;
 esac
 EOF
+    chmod 700 -- "${ORG_BASELINE_ASKPASS}"
   fi
-  GIT_ASKPASS="${ORG_BASELINE_ASKPASS}" GIT_TERMINAL_PROMPT=0 \
-    ORG_BASELINE_GIT_TOKEN="${ORG_BASELINE_TOKEN}" "$@"
+}
+
+# Runs "$@" with only the explicitly entered token available to Git. Resetting
+# credential.helper prevents stale configured credentials from taking priority
+# over GIT_ASKPASS. Xtrace stays off while the token is expanded into the child
+# environment, so diagnostic traces cannot disclose it.
+with_org_baseline_token() {
+  local status trace_was_enabled=false
+  if [ "${#ORG_BASELINE_TOKEN}" -eq 0 ]; then
+    "$@"
+    return $?
+  fi
+  if [ -z "${ORG_BASELINE_ASKPASS}" ]; then
+    echo "ERROR: organization baseline Askpass helper was not prepared." >&2
+    return 2
+  fi
+  case "$-" in
+    *x*) trace_was_enabled=true; set +x ;;
+  esac
+  if GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0= \
+     GIT_ASKPASS="${ORG_BASELINE_ASKPASS}" GIT_TERMINAL_PROMPT=0 \
+     ORG_BASELINE_GIT_TOKEN="${ORG_BASELINE_TOKEN}" "$@"; then
+    status=0
+  else
+    status=$?
+  fi
+  if [ "${trace_was_enabled}" = true ]; then
+    set -x
+  fi
+  return "${status}"
 }
 
 offer_store_org_baseline_token() {
-  if [ -z "$(git config --get credential.helper 2>/dev/null || true)" ]; then
-    echo "No Git credential helper is configured; the token above was used for this run only." >&2
-    echo "Configure one (for example: git config --global credential.helper store) to avoid re-entering it for 'make baseline-sync'." >&2
+  local approve_status credential_helpers host reply trace_was_enabled=false
+  if [ "${#ORG_BASELINE_TOKEN}" -eq 0 ]; then
     return 0
   fi
-  local reply host
-  read -r -p "Store this token in your Git credential helper for future 'make baseline-sync' runs? [y/N]: " reply || reply=""
-  case "${reply}" in
-    [yY]*)
-      host="${ORG_BASELINE_URL#https://}"
-      host="${host%%/*}"
-      printf 'protocol=https\nhost=%s\nusername=oauth2\npassword=%s\n' \
-        "${host}" "${ORG_BASELINE_TOKEN}" | git credential approve
+  credential_helpers="$(git config --get-all credential.helper 2>/dev/null || true)"
+  if [ -z "${credential_helpers}" ]; then
+    printf '%s\n' \
+      "No Git credential helper is configured; the token above was used for this run only." \
+      "Configure an OS-backed Git credential helper to store it securely for later runs." >&2
+    return 0
+  fi
+  case "${credential_helpers}" in
+    *store*)
+      printf '%s\n' \
+        "WARN: refusing to store the token with Git's plaintext 'store' credential helper." \
+        "Configure an OS-backed Git credential helper if the token should persist." >&2
+      return 0
       ;;
   esac
+  read -r -p "Store this token in the configured Git credential helper for later baseline-sync runs? [y/N]: " reply || reply=""
+  case "${reply}" in
+    [yY]*) ;;
+    *) return 0 ;;
+  esac
+  host="${ORG_BASELINE_URL#https://}"
+  host="${host%%/*}"
+  case "$-" in
+    *x*) trace_was_enabled=true; set +x ;;
+  esac
+  if printf 'protocol=https\nhost=%s\nusername=oauth2\npassword=%s\n' \
+    "${host}" "${ORG_BASELINE_TOKEN}" | git credential approve; then
+    approve_status=0
+  else
+    approve_status=$?
+  fi
+  if [ "${trace_was_enabled}" = true ]; then
+    set -x
+  fi
+  if [ "${approve_status}" -ne 0 ]; then
+    echo "WARN: the credential helper did not store the token; the initialized repository is still usable." >&2
+  fi
+  return 0
 }
 
 ask_required_https_url() {
@@ -1010,6 +1139,7 @@ else
         https://*)
           read -r -s -p "Personal access token for this Git host (leave empty to use existing Git credentials): " ORG_BASELINE_TOKEN
           echo "" >&2
+          prepare_org_baseline_askpass
           ;;
       esac
       ;;
@@ -1618,9 +1748,6 @@ elif [ "${BASELINE_SOURCE_KIND}" = organization-git ] && [ "${REINIT_MODE}" != t
       --git-url "${ORG_BASELINE_URL}" --git-ref "${ORG_BASELINE_REF}" \
       --doc "${ORG_BASELINE_DOC}" --write)
   fi
-  if [ -n "${ORG_BASELINE_TOKEN}" ]; then
-    offer_store_org_baseline_token
-  fi
 elif [ "${BASELINE_SOURCE_KIND}" = organization-https ] && [ "${REINIT_MODE}" != true ]; then
   (cd "${TARGET_DIR}" && python3 scripts/sync-org-baseline.py \
     --org-profile org-profile --org-skills org-skills \
@@ -1749,6 +1876,9 @@ if [ -n "${INTERNAL_REPOSITORY_URL}" ]; then
   else
     git remote add origin "${INTERNAL_REPOSITORY_URL}"
   fi
+fi
+if [ "${BASELINE_SOURCE_KIND}" = organization-git ] && [ "${REINIT_MODE}" != true ]; then
+  offer_store_org_baseline_token
 fi
 if [ "${REINIT}" = true ]; then
   echo "(reinitialization changes left uncommitted for review)"

@@ -86,6 +86,22 @@ if sub == "var" and rest == ["GIT_AUTHOR_IDENT"]:
     out("Test User <test@example.test> 0 +0000")
     sys.exit(0)
 
+if sub == "config" and rest == ["--get-all", "credential.helper"]:
+    helper = os.environ.get("GITSTUB_CREDENTIAL_HELPER", "")
+    if helper:
+        out(helper)
+        sys.exit(0)
+    sys.exit(1)
+
+if sub == "credential" and rest == ["approve"]:
+    # Consume the credential without recording it; the test marker proves that
+    # the configured helper path was reached without persisting the fake token.
+    sys.stdin.read()
+    marker = os.environ.get("GITSTUB_CREDENTIAL_APPROVE_MARKER", "")
+    if marker:
+        open(marker, "w", encoding="utf-8").close()
+    sys.exit(1 if os.environ.get("GITSTUB_CREDENTIAL_APPROVE_FAIL") == "1" else 0)
+
 if sub == "diff" and rest == ["--cached", "--quiet"]:
     sys.exit(1 if os.environ.get("GITSTUB_HAS_STAGED_CHANGES") == "1" else 0)
 

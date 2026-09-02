@@ -35,7 +35,7 @@ bash appsec-advisor-init.sh
 
 It creates and commits a local Git repository and can build the plugin. It does not push the repository or install the plugin.
 
-Add `--save-defaults` to the last line (`bash appsec-advisor-init.sh --save-defaults`) to remember the organization name, id, owner, statusline choice, and repository URL in `~/.config/appsec-advisor-init/defaults.env`. Later runs offer those as editable defaults, with or without the flag.
+Add `--save-defaults` to the last line (`bash appsec-advisor-init.sh --save-defaults`) to remember the organization name, id, owner, statusline choice, and repository URL in `~/.config/appsec-advisor-init/defaults.json`. Later runs offer those as editable defaults, with or without the flag.
 
 Alternatively, click **Use this template** on GitHub and replace `Acme Corp` and `acme-appsec` manually.
 

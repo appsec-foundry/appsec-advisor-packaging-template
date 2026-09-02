@@ -48,6 +48,7 @@ RESOLVE_POLICY_TEST="$HERE/test_resolve_package_policy.py"
 QUICKSTART_PIN_TEST="$HERE/test_check_quickstart_pin.py"
 COMPOSE_BASELINE_TEST="$HERE/test_compose_baseline.py"
 SYNC_ORG_BASELINE_TEST="$HERE/test_sync_org_baseline.py"
+COVERAGE_TEST="$HERE/test_coverage.py"
 
 # -B: importing guard.py must not leave __pycache__ in org-profile/hooks/,
 # which the packager would copy and the smoke test rejects. Preserve every
@@ -74,6 +75,7 @@ run_unit_test "$RESOLVE_POLICY_TEST"
 run_unit_test "$QUICKSTART_PIN_TEST"
 run_unit_test "$COMPOSE_BASELINE_TEST"
 run_unit_test "$SYNC_ORG_BASELINE_TEST"
+run_unit_test "$COVERAGE_TEST"
 
 COV="$(mktemp)"
 WORKROOT="$(mktemp -d)"
@@ -1039,19 +1041,52 @@ if [ "$rc" = 2 ] && [ ! -e "$bad_tgt" ] && \
 else fail "init: unsafe organization baseline source fails before target creation" "rc=$rc"; fi
 
 # A Git URL over HTTPS offers a personal-access-token prompt; the token must
-# reach Git only via a private GIT_ASKPASS helper, never a file in the repo.
+# reach Git only via a private GIT_ASKPASS helper, override a stale configured
+# helper, stay out of xtrace, and leave no temporary helper behind.
 d_token="$(newdir)"
 token_tgt="$d_token/out"
-printf 'Test Org\n\n\n\n\n%s\nn\n2\nhttps://git.example.test/baseline.git\n\ndist/secure-coding-baseline.md\nsecret-test-token-xyz\n\n\nn\n' \
+token_home="$d_token/home"
+token_tmp="$d_token/tmp"
+token_approved="$d_token/token-approved"
+mkdir -p "$token_home" "$token_tmp"
+"$REAL_GIT" config --file "$token_home/.gitconfig" credential.helper \
+  '!f() { printf "username=stale-user\npassword=stale-value\n"; }; f'
+printf 'Test Org\n\n\n\n\n%s\nn\n2\nhttps://git.example.test/baseline.git\n\ndist/secure-coding-baseline.md\nsecret-test-token-xyz\n\n\ny\nn\n' \
   "$token_tgt" | \
-  (cd "$ROOT" && env PYSTUB_ORG_BASELINE_ID=test-token-1.0.0 timeout 20 bash -x "$INIT") \
+  (cd "$ROOT" && env HOME="$token_home" TMPDIR="$token_tmp" \
+    PYSTUB_ORG_BASELINE_ID=test-token-1.0.0 PYSTUB_ASSERT_ASKPASS=1 \
+    PYSTUB_EXPECT_TOKEN=secret-test-token-xyz GITSTUB_CREDENTIAL_HELPER=manager \
+    GITSTUB_CREDENTIAL_APPROVE_MARKER="$token_approved" \
+    timeout 20 bash -x "$INIT") \
   >/dev/null 2>>"$COV"
 rc=$?
 if [ "$rc" = 0 ] && \
    grep -Fqx 'ORG_BASELINE_URL ?= https://git.example.test/baseline.git' "$token_tgt/Makefile" && \
-   ! grep -rq 'secret-test-token-xyz' "$token_tgt"; then
-  pass "init: a Git HTTPS token is used via GIT_ASKPASS and never written to the repo"
-else fail "init: a Git HTTPS token is used via GIT_ASKPASS and never written to the repo" "rc=$rc"; fi
+   ! grep -rq 'secret-test-token-xyz' "$token_tgt" && \
+   ! grep -Fq 'secret-test-token-xyz' "$COV" && \
+   [ -f "$token_approved" ] && \
+   [ -z "$(find "$token_tmp" -mindepth 1 -print -quit)" ]; then
+  pass "init: a Git HTTPS token exclusively uses GIT_ASKPASS without files or trace output"
+else fail "init: a Git HTTPS token exclusively uses GIT_ASKPASS without files or trace output" "rc=$rc"; fi
+
+# A configured plaintext helper is never offered the token, even when the
+# fetch itself succeeded with the explicitly entered credential.
+d_store="$(newdir)"
+store_tgt="$d_store/out"
+store_log="$d_store/store.log"
+printf 'Test Org\n\n\n\n\n%s\nn\n2\nhttps://git.example.test/baseline.git\n\ndist/secure-coding-baseline.md\nsecret-store-test-token\n\n\nn\n' \
+  "$store_tgt" | \
+  (cd "$ROOT" && env PYSTUB_ORG_BASELINE_ID=test-store-1.0.0 \
+    GITSTUB_CREDENTIAL_HELPER=store timeout 20 bash -x "$INIT") \
+  >"$store_log" 2>&1
+rc=$?
+cat "$store_log" >>"$COV"
+if [ "$rc" = 0 ] && \
+   grep -Fq "refusing to store the token with Git's plaintext 'store' credential helper" "$store_log" && \
+   ! grep -Fq 'secret-store-test-token' "$store_log" && \
+   ! grep -rq 'secret-store-test-token' "$store_tgt"; then
+  pass "init: plaintext Git credential storage is refused"
+else fail "init: plaintext Git credential storage is refused" "rc=$rc"; fi
 
 d_https="$(newdir)"
 https_tgt="$d_https/out"
@@ -1721,6 +1756,12 @@ if [ "$rc" = 2 ] && grep -Fq 'ERROR: unknown argument: --bogus' "$badarg_log"; t
   pass "init: unknown argument is rejected"
 else fail "init: unknown argument is rejected" "rc=$rc"; fi
 
+(cd "$ROOT" && bash -x "$INIT" --save-defaults --bogus) </dev/null >"$badarg_log" 2>&1
+rc=$?
+if [ "$rc" = 2 ] && grep -Fq 'ERROR: unknown argument: --bogus' "$badarg_log"; then
+  pass "init: extra arguments are rejected"
+else fail "init: extra arguments are rejected" "rc=$rc"; fi
+
 # --save-defaults remembers the organization identity (not the baseline token)
 # in a config file under $HOME, and a later run — with or without the flag —
 # offers those values as editable defaults instead of requiring them again.
@@ -1732,12 +1773,12 @@ printf 'Test Org\n\n\n\n\n%s\nn\n\nn\nhttps://git.example.test/repo1\nn\n' "$tgt
   (cd "$ROOT" && env HOME="$home1" timeout 20 bash -x "$INIT" --save-defaults) \
   >/dev/null 2>>"$COV"
 rc=$?
-defaults_file="$home1/.config/appsec-advisor-init/defaults.env"
+defaults_file="$home1/.config/appsec-advisor-init/defaults.json"
 if [ "$rc" = 0 ] && [ -f "$defaults_file" ] && \
-   grep -Fq 'DEFAULT_ORG_NAME=Test\ Org' "$defaults_file" && \
-   grep -Fq 'DEFAULT_STATUSLINE_ENABLED=false' "$defaults_file" && \
-   grep -Fq 'DEFAULT_INTERNAL_REPOSITORY_URL=https://git.example.test/repo1' "$defaults_file" && \
-   ! grep -q 'TOKEN' "$defaults_file"; then
+   grep -Fq '"org_name": "Test Org"' "$defaults_file" && \
+   grep -Fq '"statusline_enabled": false' "$defaults_file" && \
+   grep -Fq '"internal_repository_url": "https://git.example.test/repo1"' "$defaults_file" && \
+   ! grep -qi 'token' "$defaults_file" && [ "$(stat -c '%a' "$defaults_file")" = 600 ]; then
   pass "init: --save-defaults persists organization identity, not secrets"
 else fail "init: --save-defaults persists organization identity, not secrets" "rc=$rc"; fi
 
@@ -1752,6 +1793,25 @@ if [ "$rc" = 0 ] && \
    grep -Fqx 'INTERNAL_REPOSITORY_URL ?= https://git.example.test/repo1' "$tgt2/Makefile"; then
   pass "init: a later run without the flag reuses saved defaults"
 else fail "init: a later run without the flag reuses saved defaults" "rc=$rc"; fi
+
+# Saved defaults are parsed as data. A shell fragment or malformed document is
+# ignored and cannot execute before the initializer continues with safe prompts.
+home_bad="$d/home-bad"
+mkdir -p "$home_bad/.config/appsec-advisor-init"
+marker="$d/defaults-executed"
+printf 'touch %s\n' "$marker" >"$home_bad/.config/appsec-advisor-init/defaults.json"
+tgt_bad="$d/out-bad"
+bad_defaults_log="$d/bad-defaults.log"
+printf 'Safe Org\n\n\n\n\n%s\nn\n\n\n\nn\n' "$tgt_bad" | \
+  (cd "$ROOT" && env HOME="$home_bad" timeout 20 bash -x "$INIT") \
+  >"$bad_defaults_log" 2>&1
+rc=$?
+cat "$bad_defaults_log" >>"$COV"
+if [ "$rc" = 0 ] && [ ! -e "$marker" ] && \
+   grep -Fq 'WARN: ignoring invalid saved defaults' "$bad_defaults_log" && \
+   grep -Fqx '  name: "Safe Org"' "$tgt_bad/org-profile/org-profile.yaml"; then
+  pass "init: malformed saved defaults are ignored without executing content"
+else fail "init: malformed saved defaults are ignored without executing content" "rc=$rc"; fi
 
 # Clone fallback: run a copy with no sibling Makefile. Export tracked and new,
 # non-ignored working-tree files so the test covers changes before commit while

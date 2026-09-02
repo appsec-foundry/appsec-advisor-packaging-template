@@ -17,6 +17,7 @@ import os
 import sys
 import json
 import shutil
+import subprocess
 
 args = sys.argv[1:]
 script = args[0] if args else ""
@@ -46,8 +47,36 @@ if script.endswith("resolve-baseline-id.py"):
 
 if script.endswith("sync-org-baseline.py") and os.environ.get("PYSTUB_ORG_BASELINE_ID"):
     baseline_id = os.environ["PYSTUB_ORG_BASELINE_ID"]
+    if os.environ.get("PYSTUB_ASSERT_ASKPASS") == "1":
+        askpass = os.environ.get("GIT_ASKPASS", "")
+        expected_token = os.environ.get("PYSTUB_EXPECT_TOKEN", "")
+        config_reset = (
+            os.environ.get("GIT_CONFIG_COUNT") == "1"
+            and os.environ.get("GIT_CONFIG_KEY_0") == "credential.helper"
+            and os.environ.get("GIT_CONFIG_VALUE_0") == ""
+        )
+        if not askpass or not os.access(askpass, os.X_OK) or not config_reset:
+            print("Askpass contract or credential-helper reset is missing", file=sys.stderr)
+            sys.exit(8)
+        result = subprocess.run(
+            ["/usr/bin/git", "credential", "fill"],
+            input=b"protocol=https\nhost=git.example.test\n\n",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        credential = result.stdout.decode("utf-8", errors="replace")
+        if (
+            result.returncode != 0
+            or "username=oauth2\n" not in credential
+            or f"password={expected_token}\n" not in credential
+        ):
+            print("Git did not obtain the expected Askpass credential", file=sys.stderr)
+            sys.exit(8)
     if "--print-id" in args:
         print(baseline_id)
+        if "--skills-dir-optional" in args:
+            print("skills: missing")
         sys.exit(0)
     if "--write" in args:
         profile_dir = "org-profile"

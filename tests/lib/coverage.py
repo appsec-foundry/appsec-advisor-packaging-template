@@ -57,17 +57,40 @@ def _heredoc_line_set(lines: list[str]) -> set[int]:
     return inside
 
 
+def _xtrace_disabled_line_set(lines: list[str]) -> set[int]:
+    """Lines after an explicit ``set +x`` through the matching ``set -x``.
+
+    The command that disables tracing is still observable; subsequent commands,
+    including the command that re-enables tracing, cannot emit xtrace markers.
+    """
+    disabled: set[int] = set()
+    tracing_off = False
+    for idx, raw in enumerate(lines, start=1):
+        stripped = raw.strip()
+        if tracing_off:
+            disabled.add(idx)
+            if re.search(r"(^|[; ])set\s+-x([; ]|$)", stripped):
+                tracing_off = False
+            continue
+        if re.search(r"(^|[; ])set\s+\+x([; ]|$)", stripped) and not re.search(
+            r"set\s+-x", stripped
+        ):
+            tracing_off = True
+    return disabled
+
+
 def coverable_lines(path: str | Path) -> set[int]:
     """Lines that *could* produce an xtrace command for `path`."""
     text = Path(path).read_text().splitlines()
     heredoc = _heredoc_line_set(text)
+    xtrace_disabled = _xtrace_disabled_line_set(text)
     coverable: set[int] = set()
     prev_continues = False
     for idx, raw in enumerate(text, start=1):
         stripped = raw.strip()
         cont = prev_continues
         prev_continues = stripped.endswith("\\") or stripped.endswith("|")
-        if idx in heredoc:
+        if idx in heredoc or idx in xtrace_disabled:
             continue
         if not stripped or stripped.startswith("#"):
             continue
