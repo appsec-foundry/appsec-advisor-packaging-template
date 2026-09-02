@@ -15,9 +15,9 @@ variables:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
 default:
-  image: python:3.11-slim
+  image: python:3.11-slim@sha256:9534e5a8e315485d4061ed659af0fd78a284c015f9b73661b41d6bab25604534
   before_script:
-    - apt-get update -qq && apt-get install -y -qq --no-install-recommends git
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends git make
     - python -m pip install --quiet --require-hashes -r ci-requirements.lock
 
 # shellcheck the build glue. Non-blocking until the scripts are verified
@@ -77,7 +77,7 @@ package-arm64:
 # Tag releases require the project's Package Registry.
 release:
   stage: release
-  image: registry.gitlab.com/gitlab-org/cli:v1.58.0
+  image: registry.gitlab.com/gitlab-org/cli:v1.58.0@sha256:a1bc1b35decb0ceededbb22bb9a8c07eddc1279ab6e9342b32bc42e20333aa7a
   before_script: []
   needs:
     - job: package

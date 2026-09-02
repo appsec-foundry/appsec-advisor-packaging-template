@@ -830,6 +830,12 @@ else fail "policy: MCP servers use an explicit allowlist" "missing mcp_servers s
 
 if grep -Fq 'glab release create "${CI_COMMIT_TAG}"' \
      "$ROOT/ci-templates/gitlab-ci.yml" && \
+   grep -Fq 'python:3.11-slim@sha256:9534e5a8e315485d4061ed659af0fd78a284c015f9b73661b41d6bab25604534' \
+     "$ROOT/ci-templates/gitlab-ci.yml" && \
+   grep -Fq 'registry.gitlab.com/gitlab-org/cli:v1.58.0@sha256:a1bc1b35decb0ceededbb22bb9a8c07eddc1279ab6e9342b32bc42e20333aa7a' \
+     "$ROOT/ci-templates/gitlab-ci.yml" && \
+   grep -Fq -- '--no-install-recommends git make' \
+     "$ROOT/ci-templates/gitlab-ci.yml" && \
    grep -Fq -- '--use-package-registry' "$ROOT/ci-templates/gitlab-ci.yml" && \
    grep -Fq 'artifacts: true' "$ROOT/ci-templates/gitlab-ci.yml" && \
    grep -Fq 'gh release create "${GITHUB_REF_NAME}"' \

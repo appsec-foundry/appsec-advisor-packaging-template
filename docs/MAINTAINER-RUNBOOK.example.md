@@ -285,7 +285,8 @@ the organization has established a clean baseline.
 
 ### Automated tagged release
 
-From a clean `main` branch that exactly matches `origin/main`:
+Set `PACKAGE_VERSION` in the `Makefile`, commit and push the change, then run the
+matching release from a clean `main` branch that exactly matches `origin/main`:
 
 ```bash
 make release RELEASE_VERSION=1.2.0
