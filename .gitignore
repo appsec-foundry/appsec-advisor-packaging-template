@@ -4,6 +4,9 @@ dist/
 upstream/
 coverage.lcov
 
+# Downloaded by the README quick-start curl command when tested locally.
+/appsec-advisor-init.sh
+
 .env
 .venv/
 __pycache__/
