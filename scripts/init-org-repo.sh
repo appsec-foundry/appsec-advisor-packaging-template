@@ -15,6 +15,8 @@ set -euo pipefail
 
 TMPDIR_CLONE=""
 CANDIDATE_DIR=""
+ORG_BASELINE_ASKPASS=""
+ORG_BASELINE_TOKEN=""
 
 cleanup() {
   if [ -n "${TMPDIR_CLONE}" ]; then
@@ -22,6 +24,9 @@ cleanup() {
   fi
   if [ -n "${CANDIDATE_DIR}" ]; then
     rm -rf -- "${CANDIDATE_DIR}"
+  fi
+  if [ -n "${ORG_BASELINE_ASKPASS}" ]; then
+    rm -f -- "${ORG_BASELINE_ASKPASS}"
   fi
 }
 trap cleanup EXIT
@@ -347,6 +352,47 @@ ask_git_url() {
     fi
     echo "  (enter an HTTPS Git URL without credentials, or an SSH Git URL)" >&2
   done
+}
+
+# Runs "$@" with a token supplied to Git only via GIT_ASKPASS, never on the
+# command line or in a file: ORG_BASELINE_TOKEN never touches org-profile.yaml,
+# the Makefile, or any generated file.
+with_org_baseline_token() {
+  if [ -z "${ORG_BASELINE_TOKEN}" ]; then
+    "$@"
+    return $?
+  fi
+  if [ -z "${ORG_BASELINE_ASKPASS}" ]; then
+    ORG_BASELINE_ASKPASS="$(mktemp)"
+    chmod 700 "${ORG_BASELINE_ASKPASS}"
+    cat > "${ORG_BASELINE_ASKPASS}" <<'EOF'
+#!/bin/sh
+case "$1" in
+  Username*) echo "oauth2" ;;
+  *) echo "${ORG_BASELINE_GIT_TOKEN}" ;;
+esac
+EOF
+  fi
+  GIT_ASKPASS="${ORG_BASELINE_ASKPASS}" GIT_TERMINAL_PROMPT=0 \
+    ORG_BASELINE_GIT_TOKEN="${ORG_BASELINE_TOKEN}" "$@"
+}
+
+offer_store_org_baseline_token() {
+  if [ -z "$(git config --get credential.helper 2>/dev/null || true)" ]; then
+    echo "No Git credential helper is configured; the token above was used for this run only." >&2
+    echo "Configure one (for example: git config --global credential.helper store) to avoid re-entering it for 'make baseline-sync'." >&2
+    return 0
+  fi
+  local reply host
+  read -r -p "Store this token in your Git credential helper for future 'make baseline-sync' runs? [y/N]: " reply || reply=""
+  case "${reply}" in
+    [yY]*)
+      host="${ORG_BASELINE_URL#https://}"
+      host="${host%%/*}"
+      printf 'protocol=https\nhost=%s\nusername=oauth2\npassword=%s\n' \
+        "${host}" "${ORG_BASELINE_TOKEN}" | git credential approve
+      ;;
+  esac
 }
 
 ask_required_https_url() {
@@ -887,6 +933,7 @@ else
   ORG_BASELINE_SOURCE=""
   ORG_BASELINE_DOC=""
   ORG_BASELINE_SKILLS_DIR=""
+  ORG_BASELINE_TOKEN=""
   case "${BASELINE_SOURCE_KIND}" in
     aiscb) BASELINE_ENABLED=true ;;
     organization-git)
@@ -902,18 +949,13 @@ else
         if valid_relative_source_path "${ORG_BASELINE_DOC}"; then break; fi
         echo "  (enter a relative path without '.' or '..' components)" >&2
       done
-      while true; do
-        read -r -p "Skill-pack directory inside that repository (optional): " _skills_reply || _skills_reply=""
-        if [ -z "${_skills_reply}" ]; then
-          ORG_BASELINE_SKILLS_DIR=""
-          break
-        fi
-        if valid_relative_source_path "${_skills_reply}"; then
-          ORG_BASELINE_SKILLS_DIR="${_skills_reply}"
-          break
-        fi
-        echo "  (enter a relative path without '.' or '..' components, or leave empty)" >&2
-      done
+      ORG_BASELINE_SKILLS_DIR=".claude/skills"
+      case "${ORG_BASELINE_URL}" in
+        https://*)
+          read -r -s -p "Personal access token for this Git host (leave empty to use existing Git credentials): " ORG_BASELINE_TOKEN
+          echo "" >&2
+          ;;
+      esac
       ;;
     organization-https)
       BASELINE_ENABLED=true
@@ -1061,21 +1103,22 @@ PY
   }
   echo "==> Organization baseline: ${RESOLVED_BASELINE_ID} from ${ORG_BASELINE_SOURCE}"
 elif [ "${BASELINE_SOURCE_KIND}" = organization-git ] && [ "${REINIT_MODE}" != true ]; then
-  if [ -n "${ORG_BASELINE_SKILLS_DIR}" ]; then
-    RESOLVED_BASELINE_ID="$(python3 "${TEMPLATE_BASE}/scripts/sync-org-baseline.py" \
-      --git-url "${ORG_BASELINE_URL}" --git-ref "${ORG_BASELINE_REF}" \
-      --doc "${ORG_BASELINE_DOC}" --skills-dir "${ORG_BASELINE_SKILLS_DIR}" \
-      --print-id)" || {
-        echo "ERROR: could not fetch and validate the organization baseline Git source." >&2
-        exit 2
-      }
+  ORG_BASELINE_FETCH_OUTPUT="$(with_org_baseline_token python3 "${TEMPLATE_BASE}/scripts/sync-org-baseline.py" \
+    --git-url "${ORG_BASELINE_URL}" --git-ref "${ORG_BASELINE_REF}" \
+    --doc "${ORG_BASELINE_DOC}" --skills-dir "${ORG_BASELINE_SKILLS_DIR}" \
+    --skills-dir-optional --print-id)" || {
+      echo "ERROR: could not fetch and validate the organization baseline Git source." >&2
+      exit 2
+    }
+  RESOLVED_BASELINE_ID="${ORG_BASELINE_FETCH_OUTPUT%%$'\n'*}"
+  ORG_BASELINE_SKILLS_STATUS="${ORG_BASELINE_FETCH_OUTPUT#*$'\n'}"
+  if [ "${ORG_BASELINE_SKILLS_STATUS}" = "skills: found" ]; then
+    read -r -p "Found a skill pack at ${ORG_BASELINE_SKILLS_DIR} in that repository — sync it into org-skills? [Y/n]: " _sync_skills_reply || _sync_skills_reply=""
+    case "${_sync_skills_reply}" in
+      [nN]*) ORG_BASELINE_SKILLS_DIR="" ;;
+    esac
   else
-    RESOLVED_BASELINE_ID="$(python3 "${TEMPLATE_BASE}/scripts/sync-org-baseline.py" \
-      --git-url "${ORG_BASELINE_URL}" --git-ref "${ORG_BASELINE_REF}" \
-      --doc "${ORG_BASELINE_DOC}" --print-id)" || {
-        echo "ERROR: could not fetch and validate the organization baseline Git source." >&2
-        exit 2
-      }
+    ORG_BASELINE_SKILLS_DIR=""
   fi
   echo "==> Organization baseline: ${RESOLVED_BASELINE_ID} from ${ORG_BASELINE_URL} (${ORG_BASELINE_REF})"
 elif [ "${BASELINE_SOURCE_KIND}" = organization-https ] && [ "${REINIT_MODE}" != true ]; then
@@ -1499,15 +1542,18 @@ if [ "${BASELINE_SOURCE_KIND}" = organization ] && [ "${REINIT_MODE}" != true ];
   fi
 elif [ "${BASELINE_SOURCE_KIND}" = organization-git ] && [ "${REINIT_MODE}" != true ]; then
   if [ -n "${ORG_BASELINE_SKILLS_DIR}" ]; then
-    (cd "${TARGET_DIR}" && python3 scripts/sync-org-baseline.py \
+    (cd "${TARGET_DIR}" && with_org_baseline_token python3 scripts/sync-org-baseline.py \
       --org-profile org-profile --org-skills org-skills \
       --git-url "${ORG_BASELINE_URL}" --git-ref "${ORG_BASELINE_REF}" \
       --doc "${ORG_BASELINE_DOC}" --skills-dir "${ORG_BASELINE_SKILLS_DIR}" --write)
   else
-    (cd "${TARGET_DIR}" && python3 scripts/sync-org-baseline.py \
+    (cd "${TARGET_DIR}" && with_org_baseline_token python3 scripts/sync-org-baseline.py \
       --org-profile org-profile --org-skills org-skills \
       --git-url "${ORG_BASELINE_URL}" --git-ref "${ORG_BASELINE_REF}" \
       --doc "${ORG_BASELINE_DOC}" --write)
+  fi
+  if [ -n "${ORG_BASELINE_TOKEN}" ]; then
+    offer_store_org_baseline_token
   fi
 elif [ "${BASELINE_SOURCE_KIND}" = organization-https ] && [ "${REINIT_MODE}" != true ]; then
   (cd "${TARGET_DIR}" && python3 scripts/sync-org-baseline.py \

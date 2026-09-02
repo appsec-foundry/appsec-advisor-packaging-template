@@ -291,7 +291,7 @@ def _git_blob(git_dir: Path, object_id: str, maximum: int) -> bytes:
 
 
 def _materialize_git_source(
-    root: Path, url: str, ref: str, doc: str, skills_dir: str | None
+    root: Path, url: str, ref: str, doc: str, skills_dir: str | None, *, skills_optional: bool = False
 ) -> ResolvedSource:
     url = _validate_git_url(url)
     if not _valid_git_ref(ref):
@@ -333,23 +333,27 @@ def _materialize_git_source(
             raise SyncError(f"org skill tree exceeds {MAX_SKILL_FILES} files")
         prefix = skills_relative.as_posix() + "/"
         if not entries:
-            raise SyncError(f"skills directory not found in Git source: {skills_dir}")
-        total_size = 0
-        for mode, object_type, object_id, entry_path in entries:
-            if not entry_path.startswith(prefix):
-                raise SyncError("Git skills path escaped its configured directory")
-            relative = _relative_path(entry_path, "Git skill file")
-            if object_type != "blob" or mode not in ("100644", "100755"):
-                raise SyncError(f"Git skills may contain only regular files: {entry_path}")
-            data = _git_blob(git_dir, object_id, MAX_SKILL_FILE_BYTES)
-            total_size += len(data)
-            if total_size > MAX_SKILL_TOTAL_BYTES:
-                raise SyncError(
-                    f"org skill tree exceeds {MAX_SKILL_TOTAL_BYTES} total bytes"
+            if skills_optional:
+                skills_relative = None
+            else:
+                raise SyncError(f"skills directory not found in Git source: {skills_dir}")
+        else:
+            total_size = 0
+            for mode, object_type, object_id, entry_path in entries:
+                if not entry_path.startswith(prefix):
+                    raise SyncError("Git skills path escaped its configured directory")
+                relative = _relative_path(entry_path, "Git skill file")
+                if object_type != "blob" or mode not in ("100644", "100755"):
+                    raise SyncError(f"Git skills may contain only regular files: {entry_path}")
+                data = _git_blob(git_dir, object_id, MAX_SKILL_FILE_BYTES)
+                total_size += len(data)
+                if total_size > MAX_SKILL_TOTAL_BYTES:
+                    raise SyncError(
+                        f"org skill tree exceeds {MAX_SKILL_TOTAL_BYTES} total bytes"
+                    )
+                _atomic_write(
+                    source_root / relative, data, 0o755 if mode == "100755" else 0o644
                 )
-            _atomic_write(
-                source_root / relative, data, 0o755 if mode == "100755" else 0o644
-            )
 
     return ResolvedSource(
         checkout=source_root,
@@ -379,7 +383,8 @@ def _resolved_source(args: argparse.Namespace) -> Iterator[ResolvedSource]:
             if not args.doc:
                 raise SyncError("--doc is required with --git-url")
             yield _materialize_git_source(
-                root, args.git_url, args.git_ref, args.doc, args.skills_dir
+                root, args.git_url, args.git_ref, args.doc, args.skills_dir,
+                skills_optional=args.skills_dir_optional,
             )
             return
         if args.https_url is not None:
@@ -787,6 +792,11 @@ def _parser() -> argparse.ArgumentParser:
         "--skills-dir", help="optional skill-pack directory relative to --checkout"
     )
     parser.add_argument(
+        "--skills-dir-optional",
+        action="store_true",
+        help="with --git-url, treat --skills-dir missing from the Git source as no skill pack instead of an error",
+    )
+    parser.add_argument(
         "--manage-skills",
         action="store_true",
         help="treat an omitted skills directory as an empty managed skill set",
@@ -805,6 +815,12 @@ def _parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = _parser().parse_args()
+    if args.skills_dir_optional and not args.git_url:
+        print("ERROR: --skills-dir-optional is only supported with --git-url", file=sys.stderr)
+        return 2
+    if args.skills_dir_optional and not args.skills_dir:
+        print("ERROR: --skills-dir-optional requires --skills-dir", file=sys.stderr)
+        return 2
     try:
         with _resolved_source(args) as resolved:
             source_root = Path(resolved.checkout)
@@ -826,6 +842,8 @@ def main() -> int:
                     _tree_digest(item)
             if args.print_id:
                 print(published_id)
+                if args.skills_dir_optional:
+                    print("skills: found" if resolved.skills_dir else "skills: missing")
                 return 0
 
             resolved_args = argparse.Namespace(**vars(args))

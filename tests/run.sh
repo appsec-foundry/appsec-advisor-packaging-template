@@ -911,14 +911,14 @@ else fail "init: a declined baseline is not resolved" "rc=$rc"; fi
 # generic runtime URL, and leaves skills excluded until explicitly allowlisted.
 d="$(newdir)"
 org_baseline_src="$d/org-baseline"
-mkdir -p "$org_baseline_src/dist/skills/acme-secure-review"
+mkdir -p "$org_baseline_src/dist" "$org_baseline_src/.claude/skills/acme-secure-review"
 "$REAL_GIT" -C "$org_baseline_src" init -q -b main
 "$REAL_GIT" -C "$org_baseline_src" config user.name Test
 "$REAL_GIT" -C "$org_baseline_src" config user.email test@example.test
 printf '%s\n' '# Test organization baseline' '' 'baseline-id: test-sec-1.0.0' '' 'Rule.' \
   >"$org_baseline_src/dist/secure-coding-baseline.md"
 printf '%s\n' '---' 'name: acme-secure-review' 'description: Test organization skill.' '---' \
-  >"$org_baseline_src/dist/skills/acme-secure-review/SKILL.md"
+  >"$org_baseline_src/.claude/skills/acme-secure-review/SKILL.md"
 "$REAL_GIT" -C "$org_baseline_src" add .
 "$REAL_GIT" -C "$org_baseline_src" commit -q -m initial
 org_baseline_remote="$d/org-baseline.git"
@@ -935,7 +935,7 @@ printf '%s\n' '#!/usr/bin/env bash' \
 chmod +x "$org_git_bin/git"
 tgt="$d/out"
 org_init_log="$d/org-init.log"
-printf 'Test Org\n\n\n\n\n%s\nn\n2\ngit@example.test:baseline.git\n\ndist/secure-coding-baseline.md\ndist/skills\n\n\nn\n' \
+printf 'Test Org\n\n\n\n\n%s\nn\n2\ngit@example.test:baseline.git\n\ndist/secure-coding-baseline.md\n\n\n\nn\n' \
   "$tgt" | \
   (cd "$ROOT" && env PATH="$org_git_bin:$PATH" GIT_SSH_COMMAND="$org_fake_ssh" GIT_SSH_VARIANT=ssh \
     ORG_BASELINE_TEST_REMOTE="$org_baseline_remote" timeout 20 bash -x "$INIT") \
@@ -954,7 +954,7 @@ if [ "$rc" = 0 ] && [ "$org_check_rc" = 0 ] && [ "$org_help_rc" = 0 ] && \
    grep -Fqx 'ORG_BASELINE_REF ?= main' "$tgt/Makefile" && \
    grep -Fqx 'ORG_BASELINE_SOURCE ?=' "$tgt/Makefile" && \
    grep -Fqx 'ORG_BASELINE_DOC ?= dist/secure-coding-baseline.md' "$tgt/Makefile" && \
-   grep -Fqx 'ORG_BASELINE_SKILLS_DIR ?= dist/skills' "$tgt/Makefile" && \
+   grep -Fqx 'ORG_BASELINE_SKILLS_DIR ?= .claude/skills' "$tgt/Makefile" && \
    grep -Fqx '  id: test-sec-1.0.0' "$tgt/org-profile/org-profile.yaml" && \
    ! grep -A8 '^baseline:' "$tgt/org-profile/org-profile.yaml" | grep -Fq '  url:' && \
    cmp -s "$org_baseline_src/dist/secure-coding-baseline.md" \
@@ -971,7 +971,7 @@ if [ "$rc" = 0 ] && [ "$org_check_rc" = 0 ] && [ "$org_help_rc" = 0 ] && \
 else fail "init: organization Git baseline and optional skills are fetched and initialized" "init_rc=$rc check_rc=$org_check_rc help_rc=$org_help_rc"; fi
 
 git_no_skills_tgt="$d/git-no-skills-out"
-printf 'Test Org\n\n\n\n\n%s\nn\n2\ngit@example.test:baseline.git\n\ndist/secure-coding-baseline.md\n\n\n\nn\n' \
+printf 'Test Org\n\n\n\n\n%s\nn\n2\ngit@example.test:baseline.git\n\ndist/secure-coding-baseline.md\n\n\nn\nn\n' \
   "$git_no_skills_tgt" | \
   (cd "$ROOT" && env PATH="$org_git_bin:$PATH" GIT_SSH_COMMAND="$org_fake_ssh" \
     GIT_SSH_VARIANT=ssh ORG_BASELINE_TEST_REMOTE="$org_baseline_remote" \
@@ -981,13 +981,13 @@ if [ "$rc" = 0 ] && \
    grep -Fqx 'BASELINE_SOURCE_KIND ?= organization-git' "$git_no_skills_tgt/Makefile" && \
    grep -Fqx 'ORG_BASELINE_SKILLS_DIR ?=' "$git_no_skills_tgt/Makefile" && \
    [ ! -e "$git_no_skills_tgt/org-skills/acme-secure-review" ]; then
-  pass "init: organization Git baseline can omit skills"
-else fail "init: organization Git baseline can omit skills" "rc=$rc"; fi
+  pass "init: a found skill pack is declined and left unsynced"
+else fail "init: a found skill pack is declined and left unsynced" "rc=$rc"; fi
 
 printf '%s\n' '# Test organization baseline' '' 'baseline-id: test-sec-1.0.0' '' 'Updated rule.' \
   >"$org_baseline_src/dist/secure-coding-baseline.md"
 printf '%s\n' '---' 'name: acme-secure-review' 'description: Updated organization skill.' '---' \
-  >"$org_baseline_src/dist/skills/acme-secure-review/SKILL.md"
+  >"$org_baseline_src/.claude/skills/acme-secure-review/SKILL.md"
 "$REAL_GIT" -C "$org_baseline_src" add .
 "$REAL_GIT" -C "$org_baseline_src" commit -q -m update
 "$REAL_GIT" -C "$org_baseline_src" push -q "$org_baseline_remote" main
@@ -1016,14 +1016,14 @@ if [ "$org_reinit_rc" = 0 ] && \
    grep -Fqx 'ORG_BASELINE_URL ?= git@example.test:baseline.git' "$tgt/Makefile" && \
    grep -Fqx 'ORG_BASELINE_REF ?= main' "$tgt/Makefile" && \
    grep -Fqx 'ORG_BASELINE_DOC ?= dist/secure-coding-baseline.md' "$tgt/Makefile" && \
-   grep -Fqx 'ORG_BASELINE_SKILLS_DIR ?= dist/skills' "$tgt/Makefile"; then
+   grep -Fqx 'ORG_BASELINE_SKILLS_DIR ?= .claude/skills' "$tgt/Makefile"; then
   pass "reinit: organization baseline source settings are preserved"
 else fail "reinit: organization baseline source settings are preserved" "rc=$org_reinit_rc"; fi
 
-# Invalid URLs, refs, and source-relative paths are retried; a missing selected
-# skill tree then fails before the target directory is created.
+# Invalid URLs, refs, and source-relative paths are retried; a doc path that is
+# safe but does not exist in the source then fails before target creation.
 bad_tgt="$d/bad-out"
-printf 'Test Org\n\n\n\n\n%s\nn\n2\nfile:///unsafe\ngit@example.test:baseline.git\nbad..ref\nmain\n../escape.md\ndist/secure-coding-baseline.md\ndist/missing-skills\n' \
+printf 'Test Org\n\n\n\n\n%s\nn\n2\nfile:///unsafe\ngit@example.test:baseline.git\nbad..ref\nmain\n../escape.md\ndist/does-not-exist.md\n' \
   "$bad_tgt" | \
   (cd "$ROOT" && env PATH="$org_git_bin:$PATH" GIT_SSH_COMMAND="$org_fake_ssh" GIT_SSH_VARIANT=ssh \
     ORG_BASELINE_TEST_REMOTE="$org_baseline_remote" timeout 20 bash -x "$INIT") \
@@ -1034,9 +1034,24 @@ if [ "$rc" = 2 ] && [ ! -e "$bad_tgt" ] && \
    grep -Fq 'enter an HTTPS Git URL without credentials, or an SSH Git URL' "$d/org-invalid.err" && \
    grep -Fq 'enter a safe branch, tag, or commit' "$d/org-invalid.err" && \
    grep -Fq "enter a relative path without '.' or '..' components" "$d/org-invalid.err" && \
-   grep -Fq 'skills directory not found in Git source' "$d/org-invalid.err"; then
+   grep -Fq 'baseline document not found as one Git blob' "$d/org-invalid.err"; then
   pass "init: unsafe organization baseline source fails before target creation"
 else fail "init: unsafe organization baseline source fails before target creation" "rc=$rc"; fi
+
+# A Git URL over HTTPS offers a personal-access-token prompt; the token must
+# reach Git only via a private GIT_ASKPASS helper, never a file in the repo.
+d_token="$(newdir)"
+token_tgt="$d_token/out"
+printf 'Test Org\n\n\n\n\n%s\nn\n2\nhttps://git.example.test/baseline.git\n\ndist/secure-coding-baseline.md\nsecret-test-token-xyz\n\n\nn\n' \
+  "$token_tgt" | \
+  (cd "$ROOT" && env PYSTUB_ORG_BASELINE_ID=test-token-1.0.0 timeout 20 bash -x "$INIT") \
+  >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && \
+   grep -Fqx 'ORG_BASELINE_URL ?= https://git.example.test/baseline.git' "$token_tgt/Makefile" && \
+   ! grep -rq 'secret-test-token-xyz' "$token_tgt"; then
+  pass "init: a Git HTTPS token is used via GIT_ASKPASS and never written to the repo"
+else fail "init: a Git HTTPS token is used via GIT_ASKPASS and never written to the repo" "rc=$rc"; fi
 
 d_https="$(newdir)"
 https_tgt="$d_https/out"
