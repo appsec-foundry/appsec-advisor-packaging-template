@@ -992,6 +992,38 @@ if [ "$rc" = 0 ] && \
   pass "init: a found skill pack is declined and left unsynced"
 else fail "init: a found skill pack is declined and left unsynced" "rc=$rc"; fi
 
+# The baseline source is validated before the target directory is touched, so
+# an abort would discard every answer already given. A wrong document path is
+# asked again with the previous answers as defaults instead.
+retry_tgt="$d/retry-out"
+printf 'Test Org\n\n\n\n\n%s\nn\n2\ngit@example.test:baseline.git\n\ndist/wrong.md\n\n\n\n\n\ndist/secure-coding-baseline.md\n\nn\n' \
+  "$retry_tgt" | \
+  (cd "$ROOT" && env PATH="$org_git_bin:$PATH" GIT_SSH_COMMAND="$org_fake_ssh" \
+    GIT_SSH_VARIANT=ssh ORG_BASELINE_TEST_REMOTE="$org_baseline_remote" \
+    timeout 20 bash -x "$INIT") >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 0 ] && \
+   grep -Fqx 'ORG_BASELINE_URL ?= git@example.test:baseline.git' "$retry_tgt/Makefile" && \
+   grep -Fqx 'ORG_BASELINE_REF ?= main' "$retry_tgt/Makefile" && \
+   grep -Fqx 'ORG_BASELINE_DOC ?= dist/secure-coding-baseline.md' "$retry_tgt/Makefile" && \
+   grep -Fqx '  id: test-sec-1.0.0' "$retry_tgt/org-profile/org-profile.yaml"; then
+  pass "init: a failed organization baseline fetch is corrected, not discarded"
+else fail "init: a failed organization baseline fetch is corrected, not discarded" "rc=$rc"; fi
+
+# `ask` exits its own command substitution only, so input that runs out at the
+# retry prompt has to end the run rather than re-ask an empty answer forever.
+# The timeout turns a returning loop into a failure instead of a hung suite.
+exhausted_tgt="$d/retry-exhausted"
+printf 'Test Org\n\n\n\n\n%s\nn\n2\ngit@example.test:baseline.git\n\ndist/wrong.md\n\n\n' \
+  "$exhausted_tgt" | \
+  (cd "$ROOT" && env PATH="$org_git_bin:$PATH" GIT_SSH_COMMAND="$org_fake_ssh" \
+    GIT_SSH_VARIANT=ssh ORG_BASELINE_TEST_REMOTE="$org_baseline_remote" \
+    timeout 20 bash -x "$INIT") >/dev/null 2>>"$COV"
+rc=$?
+if [ "$rc" = 2 ] && [ ! -e "$exhausted_tgt" ]; then
+  pass "init: exhausted input at the retry prompt ends the run"
+else fail "init: exhausted input at the retry prompt ends the run" "rc=$rc"; fi
+
 printf '%s\n' '# Test organization baseline' '' 'baseline-id: test-sec-1.0.0' '' 'Updated rule.' \
   >"$org_baseline_src/dist/secure-coding-baseline.md"
 printf '%s\n' '---' 'name: acme-secure-review' 'description: Updated organization skill.' '---' \

@@ -166,8 +166,12 @@ update using the exact commit reported by the check.
 The initializer offers generic AISCB, a composed organization baseline from a
 Git URL/ref, one composed HTTPS document, or disabled. It validates the source
 before touching the target, vendors the exact bytes, and persists the source
-settings. Git mode also copies optional skill packs; both organization modes
-remove the generic runtime URL. Reinitialization preserves the selection.
+settings. Because nothing is written until that validation passes, a source
+that cannot be fetched or declares no `baseline-id:` re-asks its settings with
+the previous answers as defaults instead of ending the run; declining the retry
+ends it without touching anything. Git mode also copies optional skill packs;
+both organization modes remove the generic runtime URL. Reinitialization
+preserves the selection.
 
 ## Agent guidance
 

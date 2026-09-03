@@ -202,6 +202,11 @@ generic runtime URL, record source provenance in the sync state, and leave only
 reviewed copies in the packaging repository. Disabled mode leaves the profile
 baseline off. Reinit preserves the selected mode and source settings.
 
+Both organization modes validate before the target directory exists, so a
+failing fetch has nothing to persist. Rather than discard the answers already
+given, the initializer asks the source settings again with them as defaults;
+declining ends the run without writing anything.
+
 The baseline moves on two tracks, and mixing them up is the usual mistake.
 Edits under an unchanged id reach a developer with `install-baseline --refresh`,
 fetched from the configured source, without a package release. A new id needs

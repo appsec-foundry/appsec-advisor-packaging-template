@@ -324,10 +324,14 @@ if prerelease and any(
 PY
 }
 
+# `ask` ends the run on exhausted input, but its `exit` only leaves the command
+# substitution it was called in, and `set -e` does not see that status either
+# once the wrapper is itself substituted. Every wrapper that re-asks therefore
+# propagates it by hand; without that it spins on an empty answer forever.
 ask_package_version() {
   local version
   while true; do
-    version="$(ask "Plugin package version (shown in the banner)" "0.1.0")"
+    version="$(ask "Plugin package version (shown in the banner)" "0.1.0")" || return 2
     if valid_package_version "${version}"; then
       printf '%s\n' "${version}"
       return 0
@@ -501,7 +505,7 @@ PY
 ask_git_url() {
   local reply normalized
   while true; do
-    reply="$(ask "Organization baseline Git URL")"
+    reply="$(ask "Organization baseline Git URL" "${1:-}")" || return 2
     if normalized=$(normalize_git_url "${reply}"); then
       printf '%s\n' "${normalized}"
       return 0
@@ -607,13 +611,60 @@ offer_store_org_baseline_token() {
 ask_required_https_url() {
   local reply normalized
   while true; do
-    reply="$(ask "Organization baseline HTTPS document URL")"
+    reply="$(ask "Organization baseline HTTPS document URL" "${1:-}")" || return 2
     if normalized=$(normalize_baseline_https_url "${reply}"); then
       printf '%s\n' "${normalized}"
       return 0
     fi
     echo "  (enter one HTTPS document URL without credentials, query, fragment, whitespace, or shell metacharacters)" >&2
   done
+}
+
+# The settings an organization baseline source needs, asked with the values
+# already entered as defaults. Called once while collecting answers and again
+# after a failed fetch, so a wrong path, ref, or URL is corrected in place.
+ask_org_baseline_settings() {
+  case "$1" in
+    organization-git)
+      ORG_BASELINE_URL="$(ask_git_url "${ORG_BASELINE_URL}")" || exit 2
+      while true; do
+        ORG_BASELINE_REF="$(ask "Git ref to follow" "${ORG_BASELINE_REF:-main}")" || exit 2
+        if valid_git_ref "${ORG_BASELINE_REF}"; then break; fi
+        echo "  (enter a safe branch, tag, or commit, for example main or v1.2.0)" >&2
+      done
+      while true; do
+        ORG_BASELINE_DOC="$(ask "Composed baseline document inside that repository" "${ORG_BASELINE_DOC:-dist/secure-coding-baseline.md}")" || exit 2
+        if valid_relative_source_path "${ORG_BASELINE_DOC}"; then break; fi
+        echo "  (enter a relative path without '.' or '..' components)" >&2
+      done
+      ORG_BASELINE_SKILLS_DIR=".claude/skills"
+      case "${ORG_BASELINE_URL}" in
+        https://*)
+          read -r -s -p "Personal access token for this Git host (leave empty to use existing Git credentials): " ORG_BASELINE_TOKEN || ORG_BASELINE_TOKEN=""
+          echo "" >&2
+          prepare_org_baseline_askpass
+          ;;
+      esac
+      ;;
+    organization-https)
+      ORG_BASELINE_URL="$(ask_required_https_url "${ORG_BASELINE_URL}")" || exit 2
+      ;;
+  esac
+}
+
+# A source that cannot be fetched or does not declare a baseline id is almost
+# always a wrong path, ref, or URL. Nothing has been written to the target yet,
+# so ask the questions again instead of discarding the whole session; declining
+# keeps the previous behaviour of ending the run without touching anything.
+retry_org_baseline_settings() {
+  local reply
+  echo "ERROR: could not fetch and validate the organization baseline $1 source." >&2
+  echo "       Decline to end the run and start over with a different baseline source." >&2
+  read -r -p "Correct the organization baseline settings and try again? [Y/n]: " reply || return 1
+  case "${reply}" in
+    [nN]*) return 1 ;;
+  esac
+  ask_org_baseline_settings "${BASELINE_SOURCE_KIND}"
 }
 
 select_upstream_ref() {
@@ -1152,31 +1203,9 @@ else
   ORG_BASELINE_TOKEN=""
   case "${BASELINE_SOURCE_KIND}" in
     aiscb) BASELINE_ENABLED=true ;;
-    organization-git)
+    organization-git|organization-https)
       BASELINE_ENABLED=true
-      ORG_BASELINE_URL="$(ask_git_url)"
-      while true; do
-        ORG_BASELINE_REF="$(ask "Git ref to follow" "main")"
-        if valid_git_ref "${ORG_BASELINE_REF}"; then break; fi
-        echo "  (enter a safe branch, tag, or commit, for example main or v1.2.0)" >&2
-      done
-      while true; do
-        ORG_BASELINE_DOC="$(ask "Composed baseline document inside that repository" "dist/secure-coding-baseline.md")"
-        if valid_relative_source_path "${ORG_BASELINE_DOC}"; then break; fi
-        echo "  (enter a relative path without '.' or '..' components)" >&2
-      done
-      ORG_BASELINE_SKILLS_DIR=".claude/skills"
-      case "${ORG_BASELINE_URL}" in
-        https://*)
-          read -r -s -p "Personal access token for this Git host (leave empty to use existing Git credentials): " ORG_BASELINE_TOKEN || ORG_BASELINE_TOKEN=""
-          echo "" >&2
-          prepare_org_baseline_askpass
-          ;;
-      esac
-      ;;
-    organization-https)
-      BASELINE_ENABLED=true
-      ORG_BASELINE_URL="$(ask_required_https_url)"
+      ask_org_baseline_settings "${BASELINE_SOURCE_KIND}"
       ;;
     disabled) BASELINE_ENABLED=false ;;
   esac
@@ -1339,13 +1368,12 @@ PY
   }
   echo "==> Organization baseline: ${RESOLVED_BASELINE_ID} from ${ORG_BASELINE_SOURCE}"
 elif [ "${BASELINE_SOURCE_KIND}" = organization-git ] && [ "${REINIT_MODE}" != true ]; then
-  ORG_BASELINE_FETCH_OUTPUT="$(with_org_baseline_token python3 "${TEMPLATE_BASE}/scripts/sync-org-baseline.py" \
+  while ! ORG_BASELINE_FETCH_OUTPUT="$(with_org_baseline_token python3 "${TEMPLATE_BASE}/scripts/sync-org-baseline.py" \
     --git-url "${ORG_BASELINE_URL}" --git-ref "${ORG_BASELINE_REF}" \
     --doc "${ORG_BASELINE_DOC}" --skills-dir "${ORG_BASELINE_SKILLS_DIR}" \
-    --skills-dir-optional --print-id)" || {
-      echo "ERROR: could not fetch and validate the organization baseline Git source." >&2
-      exit 2
-    }
+    --skills-dir-optional --print-id)"; do
+    retry_org_baseline_settings Git || exit 2
+  done
   RESOLVED_BASELINE_ID="${ORG_BASELINE_FETCH_OUTPUT%%$'\n'*}"
   ORG_BASELINE_SKILLS_STATUS="${ORG_BASELINE_FETCH_OUTPUT#*$'\n'}"
   if [ "${ORG_BASELINE_SKILLS_STATUS}" = "skills: found" ]; then
@@ -1358,11 +1386,10 @@ elif [ "${BASELINE_SOURCE_KIND}" = organization-git ] && [ "${REINIT_MODE}" != t
   fi
   echo "==> Organization baseline: ${RESOLVED_BASELINE_ID} from ${ORG_BASELINE_URL} (${ORG_BASELINE_REF})"
 elif [ "${BASELINE_SOURCE_KIND}" = organization-https ] && [ "${REINIT_MODE}" != true ]; then
-  RESOLVED_BASELINE_ID="$(python3 "${TEMPLATE_BASE}/scripts/sync-org-baseline.py" \
-    --https-url "${ORG_BASELINE_URL}" --print-id)" || {
-      echo "ERROR: could not fetch and validate the organization baseline HTTPS document." >&2
-      exit 2
-    }
+  while ! RESOLVED_BASELINE_ID="$(python3 "${TEMPLATE_BASE}/scripts/sync-org-baseline.py" \
+    --https-url "${ORG_BASELINE_URL}" --print-id)"; do
+    retry_org_baseline_settings HTTPS || exit 2
+  done
   echo "==> Organization baseline: ${RESOLVED_BASELINE_ID} from ${ORG_BASELINE_URL}"
 elif [ "${REINIT_MODE}" = true ] && [ "${BASELINE_ENABLED}" = true ]; then
   # An organization baseline is not refetched during reinitialization: it stays
