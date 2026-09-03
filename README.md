@@ -18,8 +18,8 @@ Run the complete block below. It downloads the initializer from an exact Git com
 curl --proto '=https' \
   --fail --silent --show-error \
   --output appsec-advisor-init.sh \
-  https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/f1a69457cd70c6390374b71535a9b6de8078db1e/scripts/init-org-repo.sh &&
-echo '01484de824d85791144dc42a5dfc58a79b200a81185d8a8ae1bc21b5c4294e5a  appsec-advisor-init.sh' |
+  https://raw.githubusercontent.com/appsec-foundry/appsec-advisor-packaging-template/230fc49ae3aa306b1a3ed320b2ab3c94b405abc2/scripts/init-org-repo.sh &&
+echo 'bf66e16cd084f969d02c56c0afa808c87ed832a600972c9a2014efac9ba81935  appsec-advisor-init.sh' |
   if command -v sha256sum >/dev/null 2>&1; then
     sha256sum --check
   else
