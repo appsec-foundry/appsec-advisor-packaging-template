@@ -22,7 +22,7 @@ export PS4='@@COV:${BASH_SOURCE}:${LINENO}@@ '
 # Existing initializer scenarios focus on organization settings and run without
 # network access. Pin their upstream explicitly; dedicated cases below exercise
 # the new interactive stable/dev selection and release resolution.
-export APPSEC_ADVISOR_REF=v0.6.0-beta.1
+export APPSEC_ADVISOR_REF=v0.6.0-beta.4
 
 FETCH="$ROOT/scripts/fetch-upstream.sh"
 PKG="$ROOT/scripts/package-local.sh"
@@ -90,7 +90,7 @@ fail() { FAIL=$((FAIL + 1)); printf '  FAIL  %s  (%s)\n' "$1" "$2"; }
 assert_rc() { if [ "$2" = "$3" ]; then pass "$1"; else fail "$1" "rc=$3 want $2"; fi; }
 newdir() { mktemp -d "$WORKROOT/d.XXXXXX"; }
 mkfake() { # a minimal appsec-advisor checkout
-  mkdir -p "$1/.claude-plugin" "$1/scripts" "$1/skills"
+  mkdir -p "$1/.claude-plugin" "$1/scripts/validators" "$1/skills"
   mkdir -p "$(dirname "$1")/org-profile"
   cp "$ROOT/org-profile/org-profile.yaml" "$(dirname "$1")/org-profile/org-profile.yaml"
   printf '%s\n' '{"name":"appsec-advisor","version":"0.6.0-beta.1"}' \
@@ -109,7 +109,7 @@ mkfake() { # a minimal appsec-advisor checkout
   printf '%s\n' \
     'import json' \
     'from pathlib import Path' \
-    'PLUGIN_ROOT = Path(__file__).resolve().parent.parent' \
+    'PLUGIN_ROOT = Path(__file__).resolve().parents[2]' \
     'def _read_plugin_version() -> str:' \
     '    meta = PLUGIN_ROOT / ".claude-plugin" / "plugin.json"' \
     '    if not meta.exists():' \
@@ -118,7 +118,7 @@ mkfake() { # a minimal appsec-advisor checkout
     '        return json.loads(meta.read_text()).get("version", "0.0.0")' \
     '    except (json.JSONDecodeError, OSError):' \
     '        return "0.0.0"' \
-    >"$1/scripts/validate_org_profile.py"
+    >"$1/scripts/validators/validate_org_profile.py"
 }
 
 # ── fetch-upstream.sh ────────────────────────────────────────────────────────

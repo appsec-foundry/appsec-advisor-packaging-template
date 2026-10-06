@@ -275,7 +275,7 @@ python3 "${SCRIPT_DIR}/finalize-package-version.py" \
 
 # Prove that runtime profile resolution still checks compatibility against the
 # upstream core after the visible manifest version has changed.
-python3 "build/${INTERNAL_NAME}/scripts/validate_org_profile.py" \
+python3 "build/${INTERNAL_NAME}/scripts/validators/validate_org_profile.py" \
   "build/${INTERNAL_NAME}/org-profile/org-profile.yaml"
 
 # The package-specific help is derived only after the upstream packager has

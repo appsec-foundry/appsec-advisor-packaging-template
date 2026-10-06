@@ -49,8 +49,8 @@ Almost everything runs through `org-profile.yaml`:
 | `hooks` | Your own Claude Code hooks |
 | `mcp` | Your own MCP servers, for example an internal SAST endpoint |
 
-These blocks require at least **`v0.6.0-beta.1`**, the release the `main`
-branch pins. Against an older upstream ref, validation rejects them:
+These blocks require at least **`v0.6.0-beta.1`**; `main` pins
+`v0.6.0-beta.4`. Against an older upstream ref, validation rejects them:
 
 | Block | What it does |
 |---|---|
@@ -175,7 +175,7 @@ make baseline-sync-check              # read-only: check configured baseline byt
 make baseline-sync                    # sync from AISCB, org Git, or org HTTPS (ACCEPT_ID=<id> for a new id)
 make check-updates                    # check appsec-advisor and baseline updates, including vendored-copy drift
 make package                          # fetch upstream + build the package + smoke-test it
-APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package # pin a specific release
+APPSEC_ADVISOR_REF=v0.6.0-beta.4 make package # pin a specific release
 make validate                         # validate org-profile.yaml only
 make local-marketplace                # build + generate a local marketplace catalog under build/
 make install-local                    # register that catalog and install the plugin at local scope
@@ -270,14 +270,14 @@ Der Initializer bietet zwei Upstream-Kanäle an. **Stable** ist der Standard:
 der höchste verfügbare `v*`-Tag wird einmal aufgelöst und konkret im erzeugten
 `Makefile` gepinnt. **Development** schreibt `APPSEC_ADVISOR_REF=dev` und folgt
 damit bei jedem Build dem aktuellen Branch-Head. Das Template-Repository selbst
-pinnt aktuell `v0.6.0-beta.1`; `make reinit` erhält sowohl diesen Upstream-Ref
+pinnt aktuell `v0.6.0-beta.4`; `make reinit` erhält sowohl diesen Upstream-Ref
 als auch den exakten Packaging-Template-Pin eines erzeugten Repositories, statt
 die Kanalauswahl erneut auszuführen.
 
 ```bash
-make package                              # upstream v0.6.0-beta.1 (default)
+make package                              # upstream v0.6.0-beta.4 (default)
 APPSEC_ADVISOR_REF=latest make package    # one-off build from the highest valid SemVer v* tag
-APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package # pin a specific release (reproducible)
+APPSEC_ADVISOR_REF=v0.6.0-beta.4 make package # pin a specific release (reproducible)
 APPSEC_ADVISOR_REF=dev make package       # follow the upstream dev branch
 APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 ```
@@ -318,7 +318,7 @@ organization's central Marketplace.
 | Variable | Default | Meaning |
 |---|---|---|
 | `APPSEC_ADVISOR_URL` | upstream GitHub | Upstream repository or an internal fork |
-| `APPSEC_ADVISOR_REF` | `v0.6.0-beta.1` | Pinned upstream release |
+| `APPSEC_ADVISOR_REF` | `v0.6.0-beta.4` | Pinned upstream release |
 | `INTERNAL_NAME` | `acme-appsec` | Plugin name and command namespace |
 | `PACKAGE_VERSION` | `0.1.0` | Organization-owned plugin release; a `v*` packaging tag overrides it in CI |
 | `VERSION` | empty | Optional one-off override of `PACKAGE_VERSION` |

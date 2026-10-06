@@ -3,7 +3,7 @@
 ## Branch-Modell
 
 Aktuell verwendet das Packaging-Repository ausschließlich `main`. Die
-`Makefile` pinnt `appsec-advisor` standardmäßig auf `v0.6.0-beta.1`.
+`Makefile` pinnt `appsec-advisor` standardmäßig auf `v0.6.0-beta.4`.
 Ein langfristiger Entwicklungsbranch kann später bei Bedarf ergänzt werden.
 
 ## Lokale Entwicklung

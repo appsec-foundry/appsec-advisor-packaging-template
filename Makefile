@@ -4,7 +4,7 @@ APPSEC_ADVISOR_URL ?= https://github.com/appsec-foundry/appsec-advisor.git
 # variable as unset so generated repositories still use their persisted choice.
 APPSEC_ADVISOR_REF ?=
 ifeq ($(strip $(APPSEC_ADVISOR_REF)),)
-APPSEC_ADVISOR_REF := v0.6.0-beta.1
+APPSEC_ADVISOR_REF := v0.6.0-beta.4
 endif
 APPSEC_ADVISOR_DEST ?= upstream/appsec-advisor
 APPSEC_ADVISOR_SOURCE ?= $(APPSEC_ADVISOR_DEST)
@@ -134,7 +134,7 @@ rebuild: clean package ## clean then package
 
 validate: $(FETCH_TARGET) ## Validate org-profile.yaml against the upstream schema
 	@echo "==> Validating org-profile.yaml against $(APPSEC_ADVISOR_REF)"
-	@python3 "$(APPSEC_ADVISOR_SOURCE)/scripts/validate_org_profile.py" org-profile/org-profile.yaml
+	@python3 "$(APPSEC_ADVISOR_SOURCE)/scripts/validators/validate_org_profile.py" org-profile/org-profile.yaml
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/check-org-hook-collisions.py --source "$(APPSEC_ADVISOR_SOURCE)" --profile org-profile/org-profile.yaml
 
 fetch-upstream: ## Clone/checkout upstream appsec-advisor at APPSEC_ADVISOR_REF
@@ -227,9 +227,9 @@ check-updates: $(FETCH_TARGET) ## Check appsec-advisor and secure-coding baselin
 # Public baseline targets dispatch to the source kind persisted by the
 # initializer. All source kinds have the same exit contract and ACCEPT_ID
 # acknowledgement; callers and CI do not need source-specific commands.
-BASELINE_SYNC := "$(APPSEC_ADVISOR_SOURCE)/scripts/sync_baseline.py"
+BASELINE_SYNC := "$(APPSEC_ADVISOR_SOURCE)/scripts/baseline/sync_baseline.py"
 BASELINE_SYNC_MISSING := \
-	echo "ERROR: the selected upstream ($(APPSEC_ADVISOR_REF)) has no sync_baseline.py --profile" >&2; \
+	echo "ERROR: the selected upstream ($(APPSEC_ADVISOR_REF)) has no baseline/sync_baseline.py --profile" >&2; \
 	echo "Pin APPSEC_ADVISOR_REF to a ref that carries it — a release tag or a branch such as dev." >&2; \
 	exit 2
 

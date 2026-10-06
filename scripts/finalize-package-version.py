@@ -70,7 +70,7 @@ def finalize(
     core_committed_at: str = "",
 ) -> None:
     manifest_path = plugin_root / ".claude-plugin" / "plugin.json"
-    validator_path = plugin_root / "scripts" / "validate_org_profile.py"
+    validator_path = plugin_root / "scripts" / "validators" / "validate_org_profile.py"
 
     core_ref = core_ref.strip()
     core_commit = core_commit.strip()
@@ -118,6 +118,9 @@ def finalize(
             manifest[key] = value
         else:
             manifest.pop(key, None)
+    # Upstream stamps the wall-clock build time; dropping it keeps a rebuild
+    # from the same commit byte-identical (the commit date identifies the code).
+    manifest.pop("appsec_advisor_packaged_at", None)
     # Change the reader first. If writing the manifest then fails, it safely
     # falls back to the still-current `version` field.
     _write_text_atomic(

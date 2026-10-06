@@ -20,7 +20,7 @@ SPEC.loader.exec_module(MODULE)
 VALIDATOR = '''import json
 from pathlib import Path
 
-PLUGIN_ROOT = Path(__file__).resolve().parent.parent
+PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _read_plugin_version() -> str:
@@ -36,12 +36,12 @@ def _read_plugin_version() -> str:
 
 def plugin_tree(root: Path, validator: str = VALIDATOR) -> None:
     (root / ".claude-plugin").mkdir(parents=True)
-    (root / "scripts").mkdir()
+    (root / "scripts" / "validators").mkdir(parents=True)
     (root / ".claude-plugin" / "plugin.json").write_text(
         json.dumps({"name": "pruf-appsec", "version": "0.6.0-beta.1"}),
         encoding="utf-8",
     )
-    (root / "scripts" / "validate_org_profile.py").write_text(validator, encoding="utf-8")
+    (root / "scripts" / "validators" / "validate_org_profile.py").write_text(validator, encoding="utf-8")
 
 
 def load_validator(path: Path):
@@ -61,7 +61,7 @@ def test_visible_and_core_versions_are_separate() -> None:
         manifest = json.loads((root / ".claude-plugin" / "plugin.json").read_text())
         assert manifest["version"] == "3.4.0-internal.2"
         assert manifest["appsec_advisor_core_version"] == "0.6.0-beta.1"
-        validator = load_validator(root / "scripts" / "validate_org_profile.py")
+        validator = load_validator(root / "scripts" / "validators" / "validate_org_profile.py")
         assert validator._read_plugin_version() == "0.6.0-beta.1"
 
 
@@ -85,7 +85,7 @@ def test_core_version_mismatch_fails_before_file_changes() -> None:
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
         plugin_tree(root)
-        validator_before = (root / "scripts" / "validate_org_profile.py").read_text()
+        validator_before = (root / "scripts" / "validators" / "validate_org_profile.py").read_text()
 
         try:
             MODULE.finalize(root, "3.4.0", "0.7.0")
@@ -96,7 +96,7 @@ def test_core_version_mismatch_fails_before_file_changes() -> None:
 
         manifest = json.loads((root / ".claude-plugin" / "plugin.json").read_text())
         assert manifest["version"] == "0.6.0-beta.1"
-        assert (root / "scripts" / "validate_org_profile.py").read_text() == validator_before
+        assert (root / "scripts" / "validators" / "validate_org_profile.py").read_text() == validator_before
 
 
 def test_missing_manifest_has_contextual_error() -> None:
@@ -124,6 +124,19 @@ def test_branch_build_records_ref_and_commit() -> None:
         assert manifest["appsec_advisor_core_committed_at"] == "2026-08-23T19:09:53+02:00"
 
 
+def test_wall_clock_build_stamp_is_dropped() -> None:
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        plugin_tree(root)
+        manifest_path = root / ".claude-plugin" / "plugin.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["appsec_advisor_packaged_at"] = "2026-10-06T12:00:00Z"
+        manifest_path.write_text(json.dumps(manifest))
+        MODULE.finalize(root, "1.2.0", "0.6.0-beta.4")
+
+        assert "appsec_advisor_packaged_at" not in json.loads(manifest_path.read_text())
+
+
 def test_missing_revision_leaves_no_placeholder_keys() -> None:
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
@@ -147,7 +160,7 @@ def test_unusable_revision_fails_before_file_changes() -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             plugin_tree(root)
-            validator_before = (root / "scripts" / "validate_org_profile.py").read_text()
+            validator_before = (root / "scripts" / "validators" / "validate_org_profile.py").read_text()
 
             try:
                 MODULE.finalize(root, "1.2.0", "0.6.0-beta.1", ref, commit, committed_at)
@@ -160,7 +173,7 @@ def test_unusable_revision_fails_before_file_changes() -> None:
 
             manifest = json.loads((root / ".claude-plugin" / "plugin.json").read_text())
             assert manifest["version"] == "0.6.0-beta.1"
-            assert (root / "scripts" / "validate_org_profile.py").read_text() == validator_before
+            assert (root / "scripts" / "validators" / "validate_org_profile.py").read_text() == validator_before
 
 
 if __name__ == "__main__":

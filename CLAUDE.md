@@ -52,7 +52,7 @@ claude --plugin-dir build/<INTERNAL_NAME>
 
 Build overrides (env vars, also CI repo variables): `APPSEC_ADVISOR_URL`
 (upstream repo or fork), `APPSEC_ADVISOR_REF` (defaults to the pinned release
-tag `v0.6.0-beta.1`; `latest` resolves to the newest `v*` tag),
+tag `v0.6.0-beta.4`; `latest` resolves to the newest `v*` tag),
 `APPSEC_ADVISOR_SOURCE` (use an existing local checkout, skips fetch),
 `ORG_SKILLS_DIR` (defaults to `org-skills`), `INTERNAL_NAME`,
 `INTERNAL_REPOSITORY_URL`, `PACKAGE_VERSION`, and the backward-compatible
@@ -99,7 +99,7 @@ To read it from an installed plugin:
 `APPSEC_ADVISOR_REF` is the single knob for "what do I build from". It accepts a `v*` tag, the literal `latest`, **or any branch name** — `fetch-upstream.sh` checks tags and heads, and a branch ref is re-fetched to its current tip on every run (a `--depth 1` detached checkout = effectively a pull).
 
 The packaging repository currently uses only `main`, which pins
-`APPSEC_ADVISOR_REF=v0.6.0-beta.1`. Raise that pin in the `Makefile` when
+`APPSEC_ADVISOR_REF=v0.6.0-beta.4`. Raise that pin in the `Makefile` when
 upstream tags a new release.
 
 A branch is a supported pin, not a lesser one. A release tag is the
@@ -110,9 +110,9 @@ recommendation because it makes a build reproducible, but pinning `dev` or
 --profile`, reporting what is missing instead of failing when it does not.
 
 ```bash
-make package                              # upstream v0.6.0-beta.1 (default)
+make package                              # upstream v0.6.0-beta.4 (default)
 APPSEC_ADVISOR_REF=latest make package    # follow the newest v* tag instead
-APPSEC_ADVISOR_REF=v0.6.0-beta.1 make package # pin a specific release (reproducible builds)
+APPSEC_ADVISOR_REF=v0.6.0-beta.4 make package # pin a specific release (reproducible builds)
 APPSEC_ADVISOR_REF=dev make package       # follow the upstream dev branch
 APPSEC_ADVISOR_REF=main    make package   # follow the default branch
 ```
