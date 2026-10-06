@@ -148,7 +148,7 @@ presets:
       attack_walkthroughs: disabled
     guardrails:
       max_wall_time: 1h
-      max_cost_usd: 20
+      soft_budget_usd: 20
       max_resumes: 2
       tracing: true
       # Headless/CI severity gate: non-zero exit when a run adds threats at or
@@ -177,7 +177,7 @@ presets:
       generate_pentest_verification_tasks: true
     guardrails:
       max_wall_time: 3h
-      max_cost_usd: 80
+      soft_budget_usd: 80
       max_resumes: 4
       tracing: true
       verbose_report: true
